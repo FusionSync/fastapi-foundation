@@ -1,0 +1,68 @@
+# Core Storage
+
+## 职责
+
+Storage 模块负责文件存储抽象，屏蔽本地文件系统、MinIO 和 S3 的差异。
+
+## 目录建议
+
+```text
+src/core/storage/
+  provider.py
+  local.py
+  s3.py
+  paths.py
+```
+
+## 存储对象
+
+系统需要管理：
+
+- 用户上传文件
+- 导入文件
+- 导出文件
+- 图片和附件
+- 任务中间产物
+- 系统生成文件
+
+## Storage Provider 接口
+
+```text
+put_file
+get_file
+open_read
+open_write
+delete_file
+generate_download_url
+```
+
+业务 app 不直接访问磁盘路径或 S3 SDK。
+
+## Key 设计
+
+对象 key 必须包含租户上下文和资源上下文：
+
+```text
+tenants/{tenant_id}/files/{file_id}/original.bin
+tenants/{tenant_id}/resources/{resource_type}/{resource_id}/{file_id}.bin
+```
+
+## 本地与云端
+
+```text
+local:
+  ./data/files
+
+private:
+  MinIO 或内网对象存储
+
+cloud:
+  S3 兼容对象存储
+```
+
+## 安全要求
+
+- 下载接口必须经过权限校验。
+- 私有文件不直接暴露公共 URL。
+- 临时下载 URL 必须有过期时间。
+- 文件记录必须落库，不能只依赖对象存储列表。
