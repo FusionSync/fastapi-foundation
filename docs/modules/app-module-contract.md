@@ -12,7 +12,7 @@ src/apps/example_domain/
   models.py
   schemas.py
   router.py
-  service.py
+  services.py
   repository.py
   permissions.py
   events.py
@@ -61,3 +61,4 @@ core -> no app imports
 - 每个 app 必须声明自己的权限点。
 - 每个 app 的数据模型必须明确是否租户隔离。
 - 每个 app 的外部接口必须遵守 API conventions。
+- 每个 app 必须使用标准文件名：`schemas.py`、`models.py`、`router.py`、`services.py`。

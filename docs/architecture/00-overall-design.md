@@ -17,8 +17,11 @@
 - 平台能力和业务能力都作为 app 注册，不直接耦合框架启动逻辑。
 - 所有配置集中在 `core.config`，业务 app 不直接读取环境变量。
 - 所有租户数据必须带 `tenant_id`，所有业务查询默认在租户上下文中执行。
+- 请求进入 route 时必须初始化 ContextVar 请求上下文，后续 service、审计、日志、权限从上下文读取 request/user/tenant 信息。
+- 所有业务 app 必须遵守标准目录结构：`schemas.py`、`models.py`、`router.py`、`services.py`。
 - 业务 app 通过公开 service、事件或接口协作，不直接访问对方内部实现。
 - 框架能力必须可替换：认证 provider、存储 provider、任务 provider、权限 provider 都不能写死。
+- JSON API 统一使用 HTTP 200 返回，业务成功和失败通过响应体 `code` 区分。
 
 ## 3. 分层架构
 
@@ -33,7 +36,7 @@
   由具体项目按 app contract 扩展，例如 CRM、合同、知识库、订单、审批等
 
 核心框架层
-  配置、App Factory、ORM、认证抽象、权限抽象、存储抽象、任务抽象、日志、异常
+  配置、App Factory、Context、Base Classes、ORM、认证抽象、权限抽象、缓存、锁、幂等、限流、配额、存储抽象、HTTP 客户端、任务抽象、调度抽象、序列化、消息、日志、异常
 
 基础设施层
   PostgreSQL/SQLite、Redis、MinIO/S3、本地文件系统、外部认证服务、消息队列
@@ -45,14 +48,30 @@
 src/
   core/
     app/
+    base/
     config/
+    context/
     db/
     auth/
+    security/
     tenancy/
     permissions/
+    cache/
+    locks/
+    idempotency/
+    rate_limit/
+    quotas/
     storage/
+    http_clients/
     tasks/
+    scheduler/
     events/
+    exceptions/
+    serialization/
+    messages/
+    admin/
+    cli/
+    testing/
     apps/
     logging/
     observability/
@@ -66,6 +85,11 @@ src/
 
   apps/
     example_domain/
+      schemas.py
+      models.py
+      router.py
+      services.py
+      module.py
 
 server/
   main.py
@@ -181,18 +205,45 @@ GET  /api/v1/audit-logs
 
 业务 app 自己声明资源路径，但必须遵守统一响应、错误码、分页和权限依赖规范。
 
+JSON API 响应统一封装。单对象响应使用 `data`，列表响应使用 `list` 和 `pagination`：
+
+```json
+{
+  "code": "OK",
+  "message": "success",
+  "data": {},
+  "list": null,
+  "pagination": null,
+  "request_id": "req_xxx"
+}
+```
+
+业务失败也返回 HTTP 200：
+
+```json
+{
+  "code": "PERMISSION_DENIED",
+  "message": "无权限访问该资源",
+  "data": null,
+  "list": null,
+  "pagination": null,
+  "details": {},
+  "request_id": "req_xxx"
+}
+```
+
 ## 11. 迭代路线
 
 第一阶段：
 
-- 搭建 core 框架、配置、App 注册、ORM、基础认证。
+- 搭建 core 框架、配置、App 注册、Context、统一响应、ORM、基础认证。
 - 建立租户、用户、成员、文件、审计基础模型。
 - 提供模块开发规范和一个 example app。
 
 第二阶段：
 
-- 接入 Casbin 权限。
-- 实现任务队列、事件总线、存储 provider。
+- 接入 Casbin 权限、安全模块、缓存、锁、限流。
+- 实现 CLI、测试基座、幂等、配额、HTTP 客户端、任务队列、调度器、事件总线、存储 provider。
 - 加入 SQLAdmin 或自研内部管理后台。
 
 第三阶段：
