@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.apps import AppModule, AppRegistry, TaskHandlerSpec
 from core.base.models import BaseModel
 from core.db import unit_of_work
+from core.exceptions import AppError
 from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskRun, TaskRunRepository
 
 
@@ -145,6 +146,107 @@ async def test_sync_task_provider_retries_failed_run_and_dead_letters_after_max_
     assert retried_run.error_message == "RuntimeError: still failing task-3"
 
 
+@pytest.mark.asyncio
+async def test_sync_task_provider_replays_duplicate_idempotency_key_without_reexecution(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    calls: list[str] = []
+
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        calls.append(envelope.task_id)
+        return {"value": str(envelope.payload["value"])}
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        first_result = await SyncTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).submit(
+            TaskEnvelope(
+                task_id="task-duplicate-1",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "ok"},
+                idempotency_key="example.refresh:tenant-a:duplicate",
+                request_id="req-1",
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        replayed_result = await SyncTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).submit(
+            TaskEnvelope(
+                task_id="task-duplicate-2",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "ok"},
+                idempotency_key="example.refresh:tenant-a:duplicate",
+                request_id="req-2",
+            )
+        )
+
+    assert first_result.ok is True
+    assert replayed_result.ok is True
+    assert replayed_result.task_id == "task-duplicate-1"
+    assert replayed_result.result_payload == {"value": "ok"}
+    assert replayed_result.metadata["idempotency"] == "replayed"
+    assert calls == ["task-duplicate-1"]
+    assert await _task_run_count(session_factory) == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_task_provider_rejects_idempotency_key_payload_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        return {"value": str(envelope.payload["value"])}
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await SyncTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).submit(
+            TaskEnvelope(
+                task_id="task-conflict-1",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "first"},
+                idempotency_key="example.refresh:tenant-a:conflict",
+                request_id="req-1",
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        with pytest.raises(AppError) as exc_info:
+            await SyncTaskProvider(
+                task_registry,
+                task_repository=TaskRunRepository(uow.session),
+            ).submit(
+                TaskEnvelope(
+                    task_id="task-conflict-2",
+                    task_type="example.refresh",
+                    tenant_id="tenant-a",
+                    payload={"value": "second"},
+                    idempotency_key="example.refresh:tenant-a:conflict",
+                    request_id="req-2",
+                )
+            )
+
+    assert exc_info.value.code == "TASK_IDEMPOTENCY_KEY_CONFLICT"
+    assert await _task_run_count(session_factory) == 1
+
+
 def _task_registry(
     monkeypatch: pytest.MonkeyPatch,
     **handlers,
@@ -175,3 +277,9 @@ async def _task_run(
     async with session_factory() as session:
         result = await session.execute(select(TaskRun).where(TaskRun.id == task_id))
         return result.scalars().one()
+
+
+async def _task_run_count(session_factory: async_sessionmaker[AsyncSession]) -> int:
+    async with session_factory() as session:
+        result = await session.execute(select(TaskRun))
+        return len(result.scalars().all())

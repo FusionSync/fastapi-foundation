@@ -10,7 +10,7 @@ from core.tasks.registry import TaskEnvelope, TaskRegistry
 from core.tasks.repository import TaskRunRepository
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 
-TaskStatus = Literal["succeeded", "failed", "dead_letter"]
+TaskStatus = Literal["running", "succeeded", "failed", "dead_letter"]
 TaskHandler = Callable[[TaskEnvelope], Awaitable[dict[str, Any] | None] | dict[str, Any] | None]
 
 
@@ -65,11 +65,18 @@ class SyncTaskProvider:
         registered = self.task_registry.get(envelope.task_type)
         task_run = None
         if self.task_repository is not None:
-            task_run = await self.task_repository.start(
+            start_result = await self.task_repository.start_once(
                 envelope,
                 queue=registered.spec.queue,
                 max_attempts=self.max_attempts,
             )
+            task_run = start_result.task_run
+            if start_result.outcome != "started":
+                return _task_result_from_run(
+                    task_run,
+                    queue=registered.spec.queue,
+                    idempotency=start_result.outcome,
+                )
         return await self._execute(
             envelope,
             handler=registered.handler,
@@ -138,3 +145,25 @@ class SyncTaskProvider:
             result_payload=result,
             metadata={"provider": "sync", "queue": queue},
         )
+
+
+def _task_result_from_run(
+    task_run: TaskRun,
+    *,
+    queue: str,
+    idempotency: str,
+) -> TaskResult:
+    return TaskResult(
+        task_id=task_run.id,
+        task_type=task_run.task_type,
+        status=_task_status(task_run.status),
+        result_payload=task_run.result_payload,
+        error_message=task_run.error_message,
+        metadata={"provider": "sync", "queue": queue, "idempotency": idempotency},
+    )
+
+
+def _task_status(status: str) -> TaskStatus:
+    if status in {"running", "succeeded", "failed", "dead_letter"}:
+        return status  # type: ignore[return-value]
+    raise ValueError(f"Unknown task run status: {status!r}")

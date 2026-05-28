@@ -69,6 +69,7 @@ finished_at
 - API 层只提交任务，不直接执行长耗时逻辑。
 - 任务必须可重试。
 - 任务必须声明幂等键或业务唯一键，避免 API 重试重复提交。
+- 同一 tenant 下同一 `idempotency_key` 只能创建一个 `TaskRun`；重复提交相同 task_type 和 payload 时返回已有 TaskRun 的结果，不再次执行 handler；同 key 但 task_type/payload 不一致时返回 `TASK_IDEMPOTENCY_KEY_CONFLICT`。
 - 任务输出必须落库或落文件。
 - 任务日志关联 request_id、tenant_id 和 task_id。
 - worker 执行前必须检查 tenant lifecycle gate；`suspended/deleting` 租户按行为矩阵拒绝或跳过任务。
@@ -86,6 +87,7 @@ finished_at
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。
 - `TaskRun` 定义统一任务运行记录，保存 input、result、error、queue、request_id、attempt_count、started_at、finished_at。
 - `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed/dead_letter` 状态，不注入时保持原有纯运行时模式。
+- `TaskRunRepository.start_once()` 使用 insert-first + 唯一约束处理 task idempotency；`SyncTaskProvider.submit()` 遇到 duplicate 时返回已有运行记录，不重新执行 handler。
 - `SyncTaskProvider.retry()` 可基于已落库 `TaskRun` 重新执行同一个 `TaskEnvelope`，并复用 tenant lifecycle gate。
 - `core tasks failed list` 输出 `failed/dead_letter` 任务；`core tasks failed retry --task-id <id> --yes` 显式重试注册过的任务处理器。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过 `SyncTaskProvider` 或未来队列 provider，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
