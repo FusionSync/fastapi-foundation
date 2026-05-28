@@ -1,31 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.audit import AuditRecorder
 from core.exceptions import AppError
 from core.permissions.models import ProjectedPolicy
-
-
-class AuditRecorder(Protocol):
-    async def record(
-        self,
-        *,
-        action: str,
-        resource_type: str,
-        result: str,
-        tenant_id: str | None = None,
-        actor_id: str | None = None,
-        resource_id: str | None = None,
-        reason: str | None = None,
-        policy_version: int | None = None,
-        request_id: str | None = None,
-        payload: dict[str, Any] | None = None,
-    ) -> object:
-        raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)

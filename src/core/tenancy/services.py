@@ -4,6 +4,7 @@ import inspect
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.audit import AuditRecorder
 from core.outbox import OutboxRepository
 from core.tenancy.events import (
     TENANT_ARCHIVED_EVENT,
@@ -24,10 +25,12 @@ class TenantLifecycleService:
         outbox: OutboxRepository,
         *,
         session_revocation_hook: SessionRevocationHook | None = None,
+        audit: AuditRecorder | None = None,
     ) -> None:
         self.session = session
         self.outbox = outbox
         self.session_revocation_hook = session_revocation_hook
+        self.audit = audit
 
     async def provision_tenant(
         self,
@@ -144,7 +147,8 @@ class TenantLifecycleService:
         reason: str,
         revoke_sessions: bool,
     ) -> None:
-        validate_tenant_transition(_status(tenant), target)
+        from_status = _status(tenant)
+        validate_tenant_transition(from_status, target)
         tenant.status = target
         if revoke_sessions:
             await self._revoke_sessions(tenant.id, reason)
@@ -156,6 +160,23 @@ class TenantLifecycleService:
             request_id=request_id,
             extra={"reason": reason},
         )
+        if self.audit is not None:
+            await self.audit.record(
+                action=event_type,
+                resource_type="tenant",
+                resource_id=tenant.id,
+                result="success",
+                tenant_id=tenant.id,
+                actor_id=actor_id,
+                reason=reason,
+                request_id=request_id,
+                payload={
+                    "from_status": from_status,
+                    "to_status": target,
+                    "event_type": event_type,
+                    "revoke_sessions": revoke_sessions,
+                },
+            )
 
     async def _revoke_sessions(self, tenant_id: str, reason: str) -> None:
         if self.session_revocation_hook is None:

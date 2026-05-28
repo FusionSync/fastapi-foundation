@@ -260,3 +260,4 @@ Rules:
 - Security-critical audit cannot be best-effort.
 - Audit payloads must be redacted before storage.
 - Production audit should support tamper-evidence through hash chain or external WORM/SIEM integration.
+- Role grants, user disabling, tenant lifecycle transitions, and authorization denials must be able to write audit records in the same transaction as the state change.

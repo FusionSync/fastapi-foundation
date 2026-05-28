@@ -5,13 +5,15 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.audit import AuditRecorder
 from core.exceptions import AppError
 from platform_apps.accounts.models import ExternalIdentity, User, UserSession
 
 
 class AccountsService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, audit: AuditRecorder | None = None) -> None:
         self.session = session
+        self.audit = audit
 
     async def create_user(
         self,
@@ -73,12 +75,33 @@ class AccountsService:
         await self.session.flush()
         return session
 
-    async def disable_user(self, user_id: str, *, reason: str) -> User:
+    async def disable_user(
+        self,
+        user_id: str,
+        *,
+        reason: str,
+        actor_id: str | None = None,
+        request_id: str | None = None,
+    ) -> User:
         user = await self._get_user(user_id)
         if user.status != "disabled":
             user.status = "disabled"
             user.token_version += 1
-        await self.revoke_user_sessions(user_id, reason)
+        revoked_sessions = await self.revoke_user_sessions(user_id, reason)
+        if self.audit is not None:
+            await self.audit.record(
+                action="user.disabled",
+                resource_type="user",
+                resource_id=user.id,
+                result="success",
+                actor_id=actor_id,
+                reason=reason,
+                request_id=request_id,
+                payload={
+                    "revoked_sessions": revoked_sessions,
+                    "token_version": user.token_version,
+                },
+            )
         await self.session.flush()
         return user
 

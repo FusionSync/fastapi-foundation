@@ -140,6 +140,7 @@ AuthorizationService
 
 RoleGrantService
   写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
+  可注入 AuditService 写 role.granted 强一致审计
 ```
 
 第一版的 `ProjectedPolicy` 是 Casbin policy 的可替换投影层。后续接入真实 Casbin adapter 时，事实源仍然是 `RoleGrant`，不能让业务代码直接写 Casbin policy。

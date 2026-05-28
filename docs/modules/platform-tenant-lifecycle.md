@@ -101,4 +101,4 @@ TenantLifecycleService
   finish_delete_tenant()
 ```
 
-暂停和删除流程会调用 session revocation hook，并写入租户生命周期 outbox event。API 层、任务执行、文件下载和后台清理应统一调用 lifecycle gate，而不是各自判断 `status` 字段。
+暂停和删除流程会调用 session revocation hook，并写入租户生命周期 outbox event。`TenantLifecycleService` 可注入 `AuditService`，在同一事务写租户状态流转审计，记录 from/to 状态、事件类型和是否撤销 session。API 层、任务执行、文件下载和后台清理应统一调用 lifecycle gate，而不是各自判断 `status` 字段。
