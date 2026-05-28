@@ -74,6 +74,7 @@ migration_apply_total
 tenant_isolation_guard_failures_total
 rate_limit_hits_total
 quota_exceeded_total
+external_http_requests_total
 ```
 
 `GET /metrics` 先暴露这些名称的 Prometheus contract，后续接入真实采集时必须沿用这些名称，避免看板和告警反复迁移。

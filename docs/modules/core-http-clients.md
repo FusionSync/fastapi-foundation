@@ -37,3 +37,17 @@ src/core/http_clients/
 - 每个外部服务要有命名 client 和独立配置。
 - 默认必须设置 timeout，禁止无限等待。
 - 外部调用失败必须带服务名、请求 ID 和脱敏后的错误详情。
+
+## 当前实现
+
+已落地 `CoreHttpClient`、`HttpClientConfig`、`RetryConfig`、`ExternalServiceAppError` 和 transport 抽象：
+
+- `HttpClientConfig` 要求 `service_name`、`base_url` 和正数 `timeout_seconds`，默认 timeout 为 5 秒。
+- `CoreHttpClient` 自动注入 `User-Agent`、`X-Request-ID` 和 `X-Trace-ID`。
+- `RetryConfig` 支持按状态码重试和 transport 异常重试，默认只尝试一次。
+- HTTP 4xx/5xx 或 transport 异常会转换为 `EXTERNAL_SERVICE_ERROR`，HTTP status 为 502。
+- 错误 details 包含 service、method、url、request_id、upstream status 或 error type，并通过 `redact_sensitive_data()` 脱敏 request/response body。
+- `MockHttpTransport` 可记录请求并按脚本返回响应或异常，方便 app contract/integration 测试。
+- 指标契约已预留 `external_http_requests_total`。
+
+第一版没有直接绑定 `httpx`，而是先固定 core 侧 transport 协议。后续接真实 `HttpxTransport` 时，业务 app 不需要改变调用方式。

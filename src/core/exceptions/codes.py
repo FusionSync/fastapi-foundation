@@ -26,6 +26,7 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
     "PERMISSION_DENIED": ErrorCodeSpec("PERMISSION_DENIED", 403, "无权限访问该资源"),
     "NOT_FOUND": ErrorCodeSpec("NOT_FOUND", 404, "资源不存在"),
     "CONFLICT": ErrorCodeSpec("CONFLICT", 409, "资源冲突"),
+    "EXTERNAL_SERVICE_ERROR": ErrorCodeSpec("EXTERNAL_SERVICE_ERROR", 502, "外部服务错误"),
     "IDEMPOTENCY_KEY_CONFLICT": ErrorCodeSpec("IDEMPOTENCY_KEY_CONFLICT", 409, "幂等键冲突"),
     "IDEMPOTENCY_IN_PROGRESS": ErrorCodeSpec("IDEMPOTENCY_IN_PROGRESS", 409, "请求正在处理中"),
     "LOCK_NOT_ACQUIRED": ErrorCodeSpec("LOCK_NOT_ACQUIRED", 409, "资源正在处理中"),
