@@ -50,7 +50,18 @@ class FileService:
         data: bytes,
         file_type: str,
         expected_checksum: str | None = None,
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
     ) -> FileObject:
+        await self._require_file_permission(
+            action="upload",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=owner_id,
+            request_id=request_id,
+        )
         self._validate_upload(
             tenant_id=tenant_id,
             owner_type=owner_type,
@@ -106,21 +117,14 @@ class FileService:
             owner_type=owner_type,
             owner_id=owner_id,
         )
-        if authorization is not None:
-            if user_id is None or not user_id.strip():
-                raise AppError(
-                    "VALIDATION_ERROR",
-                    "user_id is required when file authorization is enabled",
-                    status_code=400,
-                )
-            await authorization.require(
-                user_id=user_id,
-                tenant_id=tenant_id,
-                resource="file",
-                action="download",
-                resource_id=file_object.id,
-                request_id=request_id,
-            )
+        await self._require_file_permission(
+            action="download",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=file_object.id,
+            request_id=request_id,
+        )
         data = await self.storage.get_file(file_object.object_key)
         return FileDownload(
             file_id=file_object.id,
@@ -138,6 +142,9 @@ class FileService:
         tenant_id: str,
         owner_type: str,
         owner_id: str,
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
     ) -> None:
         file_object = await self._load_available_file(file_id)
         self._assert_file_access(
@@ -145,6 +152,14 @@ class FileService:
             tenant_id=tenant_id,
             owner_type=owner_type,
             owner_id=owner_id,
+        )
+        await self._require_file_permission(
+            action="delete",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=file_object.id,
+            request_id=request_id,
         )
         file_object.status = "deleted"
         file_object.deleted_at = datetime.now(UTC)
@@ -177,6 +192,39 @@ class FileService:
                 "file owner scope is not allowed",
                 status_code=403,
             )
+
+    async def _require_file_permission(
+        self,
+        *,
+        action: str,
+        tenant_id: str,
+        user_id: str | None,
+        authorization: AuthorizationService | None,
+        resource_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
+        if authorization is None:
+            raise AppError(
+                "PERMISSION_DENIED",
+                "File permission authorization is required",
+                status_code=403,
+                details={"action": action, "resource": "file"},
+            )
+        if user_id is None or not user_id.strip():
+            raise AppError(
+                "VALIDATION_ERROR",
+                "user_id is required for file authorization",
+                status_code=400,
+                details={"action": action, "resource": "file"},
+            )
+        await authorization.require(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            resource="file",
+            action=action,
+            resource_id=resource_id,
+            request_id=request_id,
+        )
 
     def _validate_upload(
         self,

@@ -26,6 +26,52 @@ async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
         await engine.dispose()
 
 
+def _grant_file_permissions(
+    session: AsyncSession,
+    *,
+    user_id: str = "user-1",
+    tenant_id: str = "tenant-a",
+    actions: tuple[str, ...] = ("upload", "download", "delete"),
+) -> None:
+    for action in actions:
+        session.add(
+            ProjectedPolicy(
+                tenant_id=tenant_id,
+                subject=f"user:{user_id}",
+                resource="file",
+                action=action,
+                effect="allow",
+                role_grant_id=f"grant-{user_id}-{action}",
+                policy_version=1,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_requires_file_permission_authorization(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        with pytest.raises(AppError) as denied:
+            await FileService(uow.session, storage).upload_bytes(
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                file_name="proposal.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=b"docx-bytes",
+                file_type="upload",
+            )
+
+    assert denied.value.code == "PERMISSION_DENIED"
+    assert denied.value.details == {"action": "upload", "resource": "file"}
+    assert list(tmp_path.rglob("*")) == []
+
+
 @pytest.mark.asyncio
 async def test_upload_writes_storage_and_metadata(
     session_factory: async_sessionmaker[AsyncSession],
@@ -35,6 +81,7 @@ async def test_upload_writes_storage_and_metadata(
 
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
         file_object = await FileService(uow.session, storage).upload_bytes(
             tenant_id="tenant-a",
             owner_type="bid",
@@ -43,6 +90,8 @@ async def test_upload_writes_storage_and_metadata(
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             data=b"docx-bytes",
             file_type="upload",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
         )
 
     assert file_object.tenant_id == "tenant-a"
@@ -68,6 +117,7 @@ async def test_upload_rejects_file_before_storage_when_security_policy_fails(
 
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
         with pytest.raises(AppError) as rejected:
             await FileService(
                 uow.session,
@@ -81,6 +131,8 @@ async def test_upload_rejects_file_before_storage_when_security_policy_fails(
                 content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 data=b"docx-bytes",
                 file_type="upload",
+                user_id="user-1",
+                authorization=AuthorizationService(uow.session),
             )
 
     assert rejected.value.code == "UPLOAD_REJECTED"
@@ -98,6 +150,7 @@ async def test_download_enforces_tenant_owner_and_lifecycle_gate(
     storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload", "download"))
         file_object = await FileService(uow.session, storage).upload_bytes(
             tenant_id="tenant-a",
             owner_type="bid",
@@ -106,6 +159,8 @@ async def test_download_enforces_tenant_owner_and_lifecycle_gate(
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             data=b"docx-bytes",
             file_type="upload",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
         )
 
     async with unit_of_work(session_factory) as uow:
@@ -116,6 +171,8 @@ async def test_download_enforces_tenant_owner_and_lifecycle_gate(
             owner_type="bid",
             owner_id="bid-1",
             tenant_status="active",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
         )
 
     assert download.file_name == "proposal.docx"
@@ -168,6 +225,7 @@ async def test_delete_marks_metadata_and_removes_storage_object(
     storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload", "delete"))
         file_object = await FileService(uow.session, storage).upload_bytes(
             tenant_id="tenant-a",
             owner_type="bid",
@@ -176,6 +234,8 @@ async def test_delete_marks_metadata_and_removes_storage_object(
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             data=b"docx-bytes",
             file_type="upload",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
         )
 
     async with unit_of_work(session_factory) as uow:
@@ -185,6 +245,8 @@ async def test_delete_marks_metadata_and_removes_storage_object(
             tenant_id="tenant-a",
             owner_type="bid",
             owner_id="bid-1",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
         )
 
     async with session_factory() as session:
@@ -214,6 +276,7 @@ async def test_download_can_require_projected_file_permission_and_audit_denials(
     storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload", "download"))
         file_object = await FileService(uow.session, storage).upload_bytes(
             tenant_id="tenant-a",
             owner_type="bid",
@@ -222,17 +285,8 @@ async def test_download_can_require_projected_file_permission_and_audit_denials(
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             data=b"docx-bytes",
             file_type="upload",
-        )
-        uow.session.add(
-            ProjectedPolicy(
-                tenant_id="tenant-a",
-                subject="user:user-1",
-                resource="file",
-                action="download",
-                effect="allow",
-                role_grant_id="grant-1",
-                policy_version=1,
-            )
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
         )
 
     async with unit_of_work(session_factory) as uow:
