@@ -2,11 +2,11 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection 和 RoleGrant 事实源收敛已落地。
+- Status: `connected`
+- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection、policy cache invalidation、reconciliation CLI 和 RoleGrant 事实源收敛已落地。
 - Next:
-  - [ ] 完成 policy cache invalidation 和 reconciliation CLI 闭环。
-  - [ ] 接资源实例级授权 adapter 和 Casbin/等价策略后端。
+  - [ ] 接资源实例级授权 adapter。
+  - [ ] 接 Casbin/等价策略后端和分布式 policy cache。
 
 ## 职责
 
@@ -166,6 +166,7 @@ RoleGrantService
   授予时写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   撤销时删除 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   撤销时同步删除该 grant 已有 ProjectedPolicy，避免 outbox projector 消费前旧投影继续授权
+  撤销时可注入 PermissionCache，在同步删除旧投影后立即失效授权缓存
   授予和撤销都必须传入允许的 AuthorizationDecision，且 actor_id 必须与 decision.user_id 一致
   可注入 AuditService 写 role.granted / role.revoked 强一致审计
 ```

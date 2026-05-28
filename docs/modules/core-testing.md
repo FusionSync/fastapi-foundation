@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、tenant isolation、security、outbox、migration、task/scheduler、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 按 Foundation Roadmap 拆分大功能 checkpoint suites。
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。

@@ -2,8 +2,8 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、projection cache、outbox-backed role grant events 和审计字段要求已落地。
+- Status: `connected`
+- Done: permission registry、authorization decision、platform/tenant scope 校验、projection cache invalidation、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
 - Next:
   - [ ] 接 route dependency，让业务 mutation 默认拿到 `AuthorizationDecision`。
   - [ ] 补资源 owner adapter 和跨租户平台权限统一 gate。
@@ -107,6 +107,8 @@ core permissions reconcile --database-url sqlite+aiosqlite:///./data/local.db --
 - 不传 `--database-url` 时运行 metadata mode，用于部署前检查权限目录是否可收集。
 - 传 `--database-url` 时运行 projection mode，调用 `PolicyProjector.reconcile()` 检测 RoleGrant/RoleTemplate 与 ProjectedPolicy 的 drift。
 - projection mode 只有显式传 `--repair` 时才会修复 missing/stale policy，并提交事务。
+
+RoleGrant 投影变更会失效 `PermissionCache`：投影 handler 更新或删除 ProjectedPolicy 后立即 invalidate；角色撤销会在 outbox handler 消费前同步删除已有 ProjectedPolicy 并失效缓存，避免撤销窗口继续使用旧授权结果。
 
 ## 角色建议
 
