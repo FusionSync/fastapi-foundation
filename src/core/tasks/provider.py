@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from core.tasks.registry import TaskEnvelope, TaskRegistry
+from core.tasks.repository import TaskRunRepository
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 
 TaskStatus = Literal["succeeded", "failed"]
@@ -36,8 +37,14 @@ class TaskResult:
 
 
 class SyncTaskProvider:
-    def __init__(self, task_registry: TaskRegistry) -> None:
+    def __init__(
+        self,
+        task_registry: TaskRegistry,
+        *,
+        task_repository: TaskRunRepository | None = None,
+    ) -> None:
         self.task_registry = task_registry
+        self.task_repository = task_repository
 
     async def submit(
         self,
@@ -51,17 +58,34 @@ class SyncTaskProvider:
             operation="task",
         )
         registered = self.task_registry.get(envelope.task_type)
+        task_run = None
+        if self.task_repository is not None:
+            task_run = await self.task_repository.start(
+                envelope,
+                queue=registered.spec.queue,
+            )
         try:
             result = registered.handler(envelope)
             if inspect.isawaitable(result):
                 result = await result
         except Exception as exc:
+            error_message = f"{type(exc).__name__}: {exc}"
+            if task_run is not None and self.task_repository is not None:
+                await self.task_repository.mark_failed(
+                    task_run,
+                    error_message=error_message,
+                )
             return TaskResult(
                 task_id=envelope.task_id,
                 task_type=envelope.task_type,
                 status="failed",
-                error_message=f"{type(exc).__name__}: {exc}",
+                error_message=error_message,
                 metadata={"provider": "sync", "queue": registered.spec.queue},
+            )
+        if task_run is not None and self.task_repository is not None:
+            await self.task_repository.mark_succeeded(
+                task_run,
+                result_payload=result,
             )
         return TaskResult(
             task_id=envelope.task_id,
