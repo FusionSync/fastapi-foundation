@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
@@ -136,6 +137,48 @@ async def test_audit_hash_chain_is_partitioned_by_tenant(
     assert tenant_a_first.hash == audit_logs["tenant-a-first"].hash
     assert tenant_b_first.hash == audit_logs["tenant-b-first"].hash
     assert tenant_a_second.hash == audit_logs["tenant-a-second"].hash
+
+
+@pytest.mark.asyncio
+async def test_audit_record_serializes_writes_until_transaction_ends(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    second_started = asyncio.Event()
+
+    async with unit_of_work(session_factory) as first_uow:
+        assert first_uow.session is not None
+        first = await AuditService(first_uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant.first",
+            resource_type="tenant",
+            resource_id="tenant-first",
+            result="success",
+        )
+
+        async def write_second() -> AuditLog:
+            async with unit_of_work(session_factory) as second_uow:
+                assert second_uow.session is not None
+                second_started.set()
+                return await AuditService(second_uow.session).record(
+                    tenant_id="tenant-a",
+                    action="tenant.second",
+                    resource_type="tenant",
+                    resource_id="tenant-second",
+                    result="success",
+                )
+
+        second_task = asyncio.create_task(write_second())
+        await second_started.wait()
+        await asyncio.sleep(0)
+
+        assert second_task.done() is False
+
+    second = await second_task
+    audit_logs = {log.resource_id: log for log in await _audit_logs(session_factory)}
+
+    assert audit_logs["tenant-first"].hash == first.hash
+    assert audit_logs["tenant-second"].hash == second.hash
+    assert audit_logs["tenant-second"].hash_prev == first.hash
 
 
 @pytest.mark.asyncio

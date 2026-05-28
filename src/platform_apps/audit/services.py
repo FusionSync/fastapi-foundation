@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.context import get_current_context
@@ -14,6 +15,10 @@ from core.security import redact_sensitive_data
 from platform_apps.audit.models import AuditLog
 
 AuditResult = Literal["success", "failure", "denied"]
+_AUDIT_CHAIN_LOCKS: dict[str, asyncio.Lock] = {}
+_AUDIT_CHAIN_LOCKS_GUARD = asyncio.Lock()
+_SESSION_AUDIT_CHAIN_LOCKS = "audit_chain_locks"
+_SESSION_AUDIT_CHAIN_RELEASE_REGISTERED = "audit_chain_release_registered"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +55,7 @@ class AuditService:
         self._validate_required(action=action, resource_type=resource_type, result=result)
         context = get_current_context()
         resolved_tenant_id = tenant_id or (context.tenant_id if context else None)
+        await _acquire_audit_chain_lock(self.session, resolved_tenant_id)
         previous_hash = await self._latest_hash(resolved_tenant_id)
         redacted_payload = redact_sensitive_data(payload or {})
         audit_log = AuditLog(
@@ -116,6 +122,40 @@ class AuditService:
             raise AppError("VALIDATION_ERROR", "audit resource_type is required", status_code=400)
         if result not in {"success", "failure", "denied"}:
             raise AppError("VALIDATION_ERROR", "audit result is invalid", status_code=400)
+
+
+async def _acquire_audit_chain_lock(session: AsyncSession, tenant_id: str | None) -> None:
+    key = _audit_chain_lock_key(tenant_id)
+    held_locks = session.sync_session.info.setdefault(_SESSION_AUDIT_CHAIN_LOCKS, {})
+    if key in held_locks:
+        return
+
+    async with _AUDIT_CHAIN_LOCKS_GUARD:
+        lock = _AUDIT_CHAIN_LOCKS.setdefault(key, asyncio.Lock())
+    await lock.acquire()
+    held_locks[key] = lock
+    _register_audit_chain_lock_release(session)
+
+
+def _register_audit_chain_lock_release(session: AsyncSession) -> None:
+    sync_session = session.sync_session
+    if sync_session.info.get(_SESSION_AUDIT_CHAIN_RELEASE_REGISTERED):
+        return
+
+    def release_locks_after_transaction_end(session_, transaction) -> None:
+        if transaction.parent is not None:
+            return
+        held_locks = session_.info.pop(_SESSION_AUDIT_CHAIN_LOCKS, {})
+        for lock in held_locks.values():
+            if lock.locked():
+                lock.release()
+
+    sync_session.info[_SESSION_AUDIT_CHAIN_RELEASE_REGISTERED] = True
+    event.listen(sync_session, "after_transaction_end", release_locks_after_transaction_end)
+
+
+def _audit_chain_lock_key(tenant_id: str | None) -> str:
+    return f"tenant:{tenant_id}" if tenant_id is not None else "platform"
 
 
 def _verify_hash_chain(audit_logs: list[AuditLog]) -> list[str]:
