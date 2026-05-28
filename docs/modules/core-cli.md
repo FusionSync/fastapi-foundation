@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、permissions、migrate plan/preflight/dry-run/apply/status/drift-check、显式 Alembic apply、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once、worker run-once/run、tasks、operations/smoke 等命令骨架已接入。
+- Done: `check-app`、`list-apps`、permissions、migrate plan/preflight/dry-run/apply/status/drift-check、显式 Alembic apply、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、operations/smoke 等命令骨架已接入。
 - Next:
-  - [ ] 补 server/migrate 角色启动命令和 scheduler 后台 loop。
+  - [ ] 补 server/migrate 角色启动命令。
   - [ ] 统一 CLI exit code、JSON error envelope 和发布脚本契约。
 
 ## 职责
@@ -54,6 +54,7 @@ tasks failed retry
 `outbox dispatch-once` 必须通过 `--installed-app` 或 settings 加载 AppModule 后构建 `EventRegistry`，领取 pending/failed outbox event，投递到已注册 handler，并输出 claimed/published/failed/dead_lettered JSON。
 `outbox-dispatcher --run` 是运行角色入口；不传 `--max-iterations` 时持续循环，传入后用于本地 smoke/CI 做有限轮验证；传 `--instance-id` 时写入进程 heartbeat。
 `scheduler --run-once` 通过 `--installed-app` 加载 schedule/task handler，触发指定 `--schedule-id`，写入 `TaskRun` 和 `ScheduleTriggerLog`，用于 local profile、运维手动触发和 CI smoke。
+`scheduler --run` 扫描 AppModule cron schedule definition，按 tenant 和当前分钟 planned slot 触发 due schedule；`--max-iterations` 用于 local/CI 有限轮验证，不传则常驻轮询；同一进程内同一 planned slot 只尝试一次，传 `--instance-id` 时写入进程 heartbeat。
 `worker --run-once` 通过 `--installed-app` 加载 task handler，按 `--queue` 领取一个 pending `TaskRun` 并执行，输出 claimed 和 task_result；它是 local/CI 有限轮验证入口，不是后台常驻 worker loop。
 `worker --run` 使用同一执行契约循环领取 pending `TaskRun`；`--max-iterations` 用于 CI/运维有限轮验证，不传则持续运行，空队列时按 `--idle-sleep-seconds` 休眠；传 `--instance-id` 时写入进程 heartbeat。
 `tasks failed retry` 必须传 `--yes`，并通过 `--installed-app` 或 settings 加载 AppModule 后执行已注册任务处理器。

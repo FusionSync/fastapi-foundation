@@ -33,6 +33,10 @@ class ScheduleRegistry:
     def schedule_ids(self) -> set[str]:
         return set(self._schedules)
 
+    @property
+    def registered_schedules(self) -> tuple[RegisteredSchedule, ...]:
+        return tuple(self._schedules.values())
+
     def register(
         self,
         app_label: str,

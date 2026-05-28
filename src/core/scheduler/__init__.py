@@ -13,10 +13,12 @@ from core.scheduler.repository import (
     ScheduleTriggerHistoryResult,
     ScheduleTriggerRepository,
 )
+from core.scheduler.runtime import SchedulerRunResult, run_scheduler_loop
 
 __all__ = [
     "ManualScheduleProvider",
     "RegisteredSchedule",
+    "SchedulerRunResult",
     "ScheduleRegistry",
     "ScheduleTriggerHistoryOutcome",
     "ScheduleTriggerHistoryResult",
@@ -27,4 +29,5 @@ __all__ = [
     "ScheduleTriggerResult",
     "LockedScheduleProvider",
     "TaskSubmitter",
+    "run_scheduler_loop",
 ]

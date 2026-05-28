@@ -175,6 +175,113 @@ def test_scheduler_role_can_run_registered_schedule_once(
     assert asyncio.run(_row_count(database_url, ScheduleTriggerLog)) == 1
 
 
+def test_scheduler_role_can_run_due_cron_schedules_loop(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _install_scheduler_app(monkeypatch)
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_create_schema(database_url))
+
+    exit_code = main(
+        [
+            "scheduler",
+            "--run",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_scheduler_app",
+            "--tenant-id",
+            "tenant-a",
+            "--now",
+            "2026-05-28T01:00:00+00:00",
+            "--payload-json",
+            '{"value":"loop"}',
+            "--max-iterations",
+            "1",
+            "--idle-sleep-seconds",
+            "0",
+            "--instance-id",
+            "scheduler-1",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    heartbeat = asyncio.run(_heartbeat(database_url, "scheduler", "scheduler-1"))
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "scheduler"
+    assert payload["role"] == "scheduler"
+    assert payload["instance_id"] == "scheduler-1"
+    assert payload["iterations"] == 1
+    assert payload["checked"] == 1
+    assert payload["triggered"] == 1
+    assert payload["failed"] == 0
+    assert payload["schedule_results"][0]["schedule_id"] == "example.refresh.daily"
+    assert payload["schedule_results"][0]["task_result"]["status"] == "succeeded"
+    assert payload["schedule_results"][0]["task_result"]["result_payload"] == {
+        "request_id": "scheduler-run:example.refresh.daily:2026-05-28T01:00:00+00:00",
+        "tenant_id": "tenant-a",
+        "value": "loop",
+    }
+    assert heartbeat is not None
+    assert heartbeat.status == "healthy"
+    assert heartbeat.details == {
+        "tenant_id": "tenant-a",
+        "iterations": 1,
+        "checked": 1,
+        "triggered": 1,
+        "failed": 0,
+    }
+    assert asyncio.run(_row_count(database_url, TaskRun)) == 1
+    assert asyncio.run(_row_count(database_url, ScheduleTriggerLog)) == 1
+
+
+def test_scheduler_role_skips_duplicate_cron_slot_within_loop(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _install_scheduler_app(monkeypatch)
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_create_schema(database_url))
+
+    exit_code = main(
+        [
+            "scheduler",
+            "--run",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_scheduler_app",
+            "--tenant-id",
+            "tenant-a",
+            "--now",
+            "2026-05-28T01:00:00+00:00",
+            "--payload-json",
+            '{"value":"loop"}',
+            "--max-iterations",
+            "2",
+            "--idle-sleep-seconds",
+            "0",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["iterations"] == 2
+    assert payload["checked"] == 2
+    assert payload["triggered"] == 1
+    assert payload["failed"] == 0
+    assert len(payload["schedule_results"]) == 1
+    assert asyncio.run(_row_count(database_url, TaskRun)) == 1
+    assert asyncio.run(_row_count(database_url, ScheduleTriggerLog)) == 1
+
+
 def test_worker_role_can_run_one_pending_task(
     tmp_path: Path,
     monkeypatch,

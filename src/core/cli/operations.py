@@ -26,6 +26,7 @@ from core.scheduler import (
     ScheduleRegistry,
     ScheduleTriggerRepository,
     ScheduleTriggerRequest,
+    run_scheduler_loop,
 )
 from core.tasks import SyncTaskProvider, TaskRegistry, TaskRunRepository, run_task_worker_loop
 
@@ -64,15 +65,21 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--max-iterations", type=int)
             role_parser.add_argument("--idle-sleep-seconds", type=float, default=1.0)
         if role == "scheduler":
+            role_parser.add_argument("--run", action="store_true")
             role_parser.add_argument("--run-once", action="store_true")
             role_parser.add_argument("--database-url")
             role_parser.add_argument("--installed-app", action="append", default=[])
             role_parser.add_argument("--schedule-id")
             role_parser.add_argument("--tenant-id")
             role_parser.add_argument("--request-id", default="scheduler-run-once")
+            role_parser.add_argument("--request-id-prefix", default="scheduler-run")
             role_parser.add_argument("--planned-at")
+            role_parser.add_argument("--now")
             role_parser.add_argument("--payload-json", default="{}")
             role_parser.add_argument("--tenant-status", default="active")
+            role_parser.add_argument("--instance-id")
+            role_parser.add_argument("--max-iterations", type=int)
+            role_parser.add_argument("--idle-sleep-seconds", type=float, default=1.0)
             role_parser.add_argument("--lock-ttl-seconds", type=int, default=60)
         if role == "outbox-dispatcher":
             role_parser.add_argument("--run", action="store_true")
@@ -116,6 +123,8 @@ def _handle_process_role(args: argparse.Namespace) -> int:
         return _handle_worker_run(args)
     if role == "scheduler" and args.run_once:
         return _handle_scheduler_run_once(args)
+    if role == "scheduler" and args.run:
+        return _handle_scheduler_run(args)
     if role == "outbox-dispatcher" and args.run:
         return _handle_outbox_dispatcher_run(args)
     result = check_process_health(role)
@@ -234,6 +243,54 @@ def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
     }
     print_payload(payload, as_json=args.as_json)
     return 0 if bool(payload.get("ok")) else 1
+
+
+def _handle_scheduler_run(args: argparse.Namespace) -> int:
+    if not args.tenant_id:
+        print_payload(
+            {
+                "ok": False,
+                "command": args.role,
+                "role": "scheduler",
+                "error": "scheduler --run requires --tenant-id",
+            },
+            as_json=args.as_json,
+        )
+        return 1
+    try:
+        result = asyncio.run(
+            run_scheduler_loop(
+                database_url=_database_url(args.database_url),
+                module_paths=installed_apps(args.installed_app),
+                tenant_id=args.tenant_id,
+                tenant_status=args.tenant_status,
+                request_id_prefix=args.request_id_prefix,
+                payload=_parse_payload_json(args.payload_json),
+                now=_parse_datetime(args.now),
+                instance_id=args.instance_id,
+                max_iterations=args.max_iterations,
+                idle_sleep_seconds=args.idle_sleep_seconds,
+                lock_ttl_seconds=args.lock_ttl_seconds,
+            )
+        )
+    except Exception as exc:
+        print_payload(
+            {
+                "ok": False,
+                "command": args.role,
+                "role": "scheduler",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+            as_json=args.as_json,
+        )
+        return 1
+    payload = {
+        **result.to_dict(),
+        "command": args.role,
+        "role": "scheduler",
+    }
+    print_payload(payload, as_json=args.as_json)
+    return 0 if result.ok else 1
 
 
 def _handle_outbox_dispatcher_run(args: argparse.Namespace) -> int:
