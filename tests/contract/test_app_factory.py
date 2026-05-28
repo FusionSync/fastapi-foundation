@@ -235,6 +235,39 @@ def test_create_app_rejects_tenant_scoped_model_constraint_violation(
         create_app(Settings(installed_apps=["runtime_apps.bad_tenant_model.module"]))
 
 
+def test_create_app_uses_profile_provider_runtime_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(
+        tmp_path,
+        "cloud_capability_runtime",
+        required_capabilities=[
+            "profile.cloud",
+            "provider.database.sqlite",
+            "provider.auth.local_jwt",
+        ],
+    )
+
+    app = create_app(
+        Settings(
+            app={"env": "cloud"},
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            security={"jwt_secret": "not-default"},
+            installed_apps=["runtime_apps.cloud_capability_runtime.module"],
+        )
+    )
+
+    runtime_capabilities = set(app.state.app_registry.diagnostics.runtime_capabilities)
+    assert {
+        "profile.cloud",
+        "provider.database.sqlite",
+        "provider.auth.local_jwt",
+    } <= runtime_capabilities
+
+
 def test_create_app_assembles_runtime_registries_and_imports_models(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -452,6 +485,7 @@ def _write_runtime_app(
     lifecycle_hooks: bool = False,
     invalid_lifecycle_signature: bool = False,
     failing_startup_hook: bool = False,
+    required_capabilities: list[str] | None = None,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -587,6 +621,9 @@ def _write_runtime_app(
     _write(migrations_dir / "__init__.py", "")
     _write(migrations_dir / "manifest.py", "MIGRATIONS = []\n")
     permissions_expr = "PERMISSIONS" if declare_permissions else "[]"
+    required_capabilities_arg = ""
+    if required_capabilities:
+        required_capabilities_arg = f"    required_capabilities={required_capabilities!r},\n"
     _write(
         app_dir / "module.py",
         "from runtime_apps.{name}.permissions import PERMISSIONS\n"
@@ -599,6 +636,7 @@ def _write_runtime_app(
         "    models=['runtime_apps.{name}.models'],\n"
         "    migrations=MigrationSpec(path='runtime_apps.{name}.migrations'),\n"
         f"    permissions={permissions_expr},\n"
+        f"{required_capabilities_arg}"
         f"{lifecycle_arg}"
         ")\n".format(name=name),
     )

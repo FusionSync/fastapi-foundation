@@ -10,9 +10,11 @@ from core.apps import (
     LifecycleHookSpec,
     ScheduleSpec,
     TaskHandlerSpec,
+    resolve_runtime_capabilities,
     validate_app_module,
 )
 from core.base import create_router
+from core.config import Settings
 from core.permissions import PermissionSpec
 
 
@@ -261,6 +263,39 @@ def test_registry_diagnostics_include_capability_metadata(monkeypatch: pytest.Mo
         ],
         "errors": [],
     }
+
+
+def test_runtime_capabilities_are_derived_from_profile_and_providers() -> None:
+    capabilities = resolve_runtime_capabilities(
+        Settings(
+            app={"env": "cloud"},
+            database={"url": "postgresql+asyncpg://app:secret@db.example.com:5432/wps_bid"},
+            security={"jwt_secret": "not-default", "jwt_secret_ref": "APP_JWT_SECRET"},
+            observability={"service_role": "worker", "metrics_enabled": True},
+        )
+    )
+
+    assert {
+        "profile.cloud",
+        "role.worker",
+        "provider.database.postgresql",
+        "provider.auth.external_secret",
+        "observability.metrics",
+    } <= capabilities
+    assert "profile.local" not in capabilities
+    assert "provider.database.sqlite" not in capabilities
+
+
+def test_runtime_capabilities_do_not_treat_placeholder_secret_as_local_provider() -> None:
+    capabilities = resolve_runtime_capabilities(
+        Settings(
+            app={"env": "private"},
+            security={"jwt_secret_ref": "APP_JWT_SECRET"},
+        )
+    )
+
+    assert "provider.auth.external_secret" in capabilities
+    assert "provider.auth.local_jwt" not in capabilities
 
 
 def test_circular_dependency_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

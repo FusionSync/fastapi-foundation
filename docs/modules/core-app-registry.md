@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、core version/capability gate 和 CLI/readiness 共用装载诊断已接入。
-- Next:
-  - [ ] 将 capability 列表与真实外部 provider/部署 profile 的启用状态绑定。
+- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、core version/capability gate、Settings 派生 runtime capability，以及 CLI/readiness 共用装载诊断已接入。
+- Next: _none_
 
 ## 职责
 
@@ -104,8 +103,21 @@ apps.example_domain.module
 - 迁移、权限、事件、任务和调度注册应复用这个顺序，避免各模块重复实现依赖治理。
 - AppRegistry 必须在依赖排序后执行 core version/capability gate；不兼容 app 不进入 runtime 装配。
 - AppRegistry 必须维护 `diagnostics`，包含 module path、label、version、load_order、runtime capabilities、缺失 capability 和错误列表，供 `list-apps` 与 `/readyz` 复用。
+- runtime capabilities 必须由当前 `Settings` 派生，而不是手写静态列表：基础框架能力包含 admin、events、lifecycle、migrations、outbox、permissions、scheduler、tasks 和 tenancy；profile/role 能力来自 `APP__ENV` 与 `OBSERVABILITY__SERVICE_ROLE`；provider 能力来自 `DATABASE__URL`、`SECURITY__JWT_SECRET` / `SECURITY__JWT_SECRET_REF` 和 `OBSERVABILITY__METRICS_ENABLED`。
 - `create_app()` 必须把 `PermissionRegistry`、`MigrationRegistry`、`EventRegistry`、`TaskRegistry`、`ScheduleRegistry` 和 `AdminRegistry` 从同一个 `AppRegistry` 装配到 `app.state`。
 - 同一运行时只能有一个 app 声明 `auth_session_store`；如需替换认证事实来源，使用新的账号 app 或显式传入 `request_security_pipeline`。
+
+## Runtime Capability 命名
+
+当前框架保留稳定基础能力名，例如 `tasks`、`scheduler`、`outbox`、`permissions` 和 `migrations`。与部署或 provider 绑定的能力使用可诊断前缀：
+
+- `profile.local`、`profile.private`、`profile.cloud`
+- `role.server`、`role.worker`、`role.scheduler`、`role.outbox-dispatcher`、`role.migrate`
+- `provider.database.sqlite`、`provider.database.postgresql`
+- `provider.auth.local_jwt`、`provider.auth.external_secret`
+- `observability.metrics`
+
+业务 app 需要特定部署形态或外部 provider 时，应在 `required_capabilities` 中声明这些能力；启动期 AppRegistry 会在 diagnostics 中输出当前 runtime capability 列表和每个 app 缺失的 capability。
 
 ## 设计要求
 

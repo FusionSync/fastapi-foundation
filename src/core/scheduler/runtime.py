@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps import AppRegistry, ScheduleSpec
+from core.apps import AppRegistry, ScheduleSpec, resolve_runtime_capabilities
+from core.config import get_settings
 from core.db import unit_of_work
 from core.locks import MemoryLockProvider
 from core.operations import ProcessHeartbeatRepository
@@ -60,7 +61,14 @@ async def run_scheduler_loop(
     idle_sleep_seconds: float = 1.0,
     lock_ttl_seconds: int = 60,
 ) -> SchedulerRunResult:
-    app_registry = AppRegistry(module_paths).load()
+    app_registry = AppRegistry(
+        module_paths,
+        runtime_capabilities=resolve_runtime_capabilities(
+            get_settings(),
+            database_url=database_url,
+            service_role="scheduler",
+        ),
+    ).load()
     task_registry = TaskRegistry.from_app_registry(app_registry)
     schedule_registry = ScheduleRegistry.from_app_registry(
         app_registry,

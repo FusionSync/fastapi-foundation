@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from core.apps.registry import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.config import Settings, check_profile_drift, render_deployment_artifacts
 from core.config.profiles import expected_profile_env, render_profile_template
 from core.config.settings import DeploymentMode
@@ -83,6 +83,7 @@ def run_release_checkpoint(
     migrate_result = _run_migrate_checkpoint(
         installed_apps=installed_apps or [],
         backup_ready=backup_result.ok,
+        settings=settings,
     )
     smoke_result = run_deployment_smoke(profile, settings=settings)
 
@@ -176,9 +177,16 @@ def _run_migrate_checkpoint(
     *,
     installed_apps: list[str],
     backup_ready: bool,
+    settings: Settings,
 ) -> dict[str, object]:
     try:
-        app_registry = AppRegistry(installed_apps).load()
+        app_registry = AppRegistry(
+            installed_apps,
+            runtime_capabilities=resolve_runtime_capabilities(
+                settings,
+                service_role="migrate",
+            ),
+        ).load()
         migration_registry = MigrationRegistry.from_app_registry(app_registry)
     except Exception as exc:
         return {

@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import uuid
 
-from core.apps.registry import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.cli.common import (
     CLI_CONFIRMATION_REQUIRED,
     CLI_USAGE_ERROR,
@@ -13,6 +13,7 @@ from core.cli.common import (
     installed_apps,
     print_payload,
 )
+from core.config import get_settings
 from core.locks import MemoryLockProvider
 from core.migrations import (
     AlembicMigrationExecutor,
@@ -72,7 +73,7 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
 
 def _handle_migrate(args: argparse.Namespace) -> int:
     try:
-        app_registry = AppRegistry(installed_apps(args.installed_app)).load()
+        app_registry = _load_migration_app_registry(args)
         migration_registry = MigrationRegistry.from_app_registry(app_registry)
     except Exception as exc:
         print_payload(
@@ -124,7 +125,7 @@ def _handle_migrate(args: argparse.Namespace) -> int:
 
 def _handle_migrate_run(args: argparse.Namespace) -> int:
     try:
-        app_registry = AppRegistry(installed_apps(args.installed_app)).load()
+        app_registry = _load_migration_app_registry(args)
         migration_registry = MigrationRegistry.from_app_registry(app_registry)
     except Exception as exc:
         print_payload(
@@ -221,6 +222,17 @@ def _apply_migrations(
         "ok": not migration_registry.errors and apply_result.ok,
         "registry_errors": migration_registry.errors,
     }
+
+
+def _load_migration_app_registry(args: argparse.Namespace) -> AppRegistry:
+    return AppRegistry(
+        installed_apps(args.installed_app),
+        runtime_capabilities=resolve_runtime_capabilities(
+            get_settings(),
+            database_url=getattr(args, "database_url", None),
+            service_role="migrate",
+        ),
+    ).load()
 
 
 def _handle_migrate_drift_check(args: argparse.Namespace) -> int:

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
+from core.config import get_settings
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.operations import ProcessHeartbeatRepository
@@ -69,7 +70,16 @@ async def run_outbox_dispatch_loop(
     max_iterations: int | None = None,
     idle_sleep_seconds: float = 1.0,
 ) -> OutboxDispatchRunResult:
-    registry = EventRegistry.from_app_registry(AppRegistry(module_paths).load())
+    registry = EventRegistry.from_app_registry(
+        AppRegistry(
+            module_paths,
+            runtime_capabilities=resolve_runtime_capabilities(
+                get_settings(),
+                database_url=database_url,
+                service_role="outbox-dispatcher",
+            ),
+        ).load()
+    )
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     iterations = 0

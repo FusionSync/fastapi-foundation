@@ -6,24 +6,11 @@ from dataclasses import dataclass, field
 
 from fastapi import APIRouter
 
+from core.apps.capabilities import DEFAULT_RUNTIME_CAPABILITIES
 from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
 
 CORE_FRAMEWORK_VERSION = "0.1.0"
-DEFAULT_RUNTIME_CAPABILITIES = frozenset(
-    {
-        "admin",
-        "auth",
-        "events",
-        "lifecycle",
-        "migrations",
-        "outbox",
-        "permissions",
-        "scheduler",
-        "tasks",
-        "tenancy",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)

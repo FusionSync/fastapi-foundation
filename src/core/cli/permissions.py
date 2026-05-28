@@ -5,7 +5,7 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps.registry import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.cli.common import (
     CLI_RUNTIME_ERROR,
     error_payload,
@@ -13,6 +13,7 @@ from core.cli.common import (
     installed_apps,
     print_payload,
 )
+from core.config import get_settings
 from core.db import unit_of_work
 from core.permissions import PermissionRegistry, PolicyProjector
 
@@ -42,7 +43,13 @@ def _handle_permissions(args: argparse.Namespace) -> int:
         return 0 if bool(payload.get("ok")) else 1
 
     try:
-        app_registry = AppRegistry(installed_apps(args.installed_app)).load()
+        app_registry = AppRegistry(
+            installed_apps(args.installed_app),
+            runtime_capabilities=resolve_runtime_capabilities(
+                get_settings(),
+                service_role="server",
+            ),
+        ).load()
         permission_registry = PermissionRegistry.from_app_registry(app_registry)
     except Exception as exc:
         print_payload(

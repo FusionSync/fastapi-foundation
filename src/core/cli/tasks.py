@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.cli.common import (
     CLI_CONFIRMATION_REQUIRED,
     CLI_RUNTIME_ERROR,
@@ -173,7 +173,14 @@ async def _retry_failed_task(
     task_id: str,
     app_modules: list[str],
 ) -> dict[str, object]:
-    app_registry = AppRegistry(app_modules).load()
+    app_registry = AppRegistry(
+        app_modules,
+        runtime_capabilities=resolve_runtime_capabilities(
+            get_settings(),
+            database_url=database_url,
+            service_role="worker",
+        ),
+    ).load()
     task_registry = TaskRegistry.from_app_registry(app_registry)
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)

@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.app import create_app
-from core.apps import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.cli.common import (
     CLI_RUNTIME_ERROR,
     CLI_USAGE_ERROR,
@@ -207,6 +207,7 @@ def _handle_serve_run(args: argparse.Namespace) -> int:
     settings = _runtime_settings(
         installed_app_paths=installed_apps(args.installed_app),
         database_url=args.database_url,
+        service_role="server",
     )
     try:
         app = create_app(settings)
@@ -422,7 +423,14 @@ async def _run_worker_once(
     queue: str,
     tenant_status: str,
 ) -> dict[str, object]:
-    app_registry = AppRegistry(app_modules).load()
+    app_registry = AppRegistry(
+        app_modules,
+        runtime_capabilities=resolve_runtime_capabilities(
+            get_settings(),
+            database_url=database_url,
+            service_role="worker",
+        ),
+    ).load()
     task_registry = TaskRegistry.from_app_registry(app_registry)
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -469,7 +477,14 @@ async def _run_scheduler_once(
     tenant_status: str,
     lock_ttl_seconds: int,
 ) -> dict[str, object]:
-    app_registry = AppRegistry(app_modules).load()
+    app_registry = AppRegistry(
+        app_modules,
+        runtime_capabilities=resolve_runtime_capabilities(
+            get_settings(),
+            database_url=database_url,
+            service_role="scheduler",
+        ),
+    ).load()
     task_registry = TaskRegistry.from_app_registry(app_registry)
     schedule_registry = ScheduleRegistry.from_app_registry(
         app_registry,
@@ -518,11 +533,20 @@ def _database_url(value: str | None) -> str:
     return value or get_settings().database.url
 
 
-def _runtime_settings(*, installed_app_paths: list[str], database_url: str | None):
+def _runtime_settings(
+    *,
+    installed_app_paths: list[str],
+    database_url: str | None,
+    service_role: str | None = None,
+):
     settings = get_settings()
     updates: dict[str, object] = {"installed_apps": installed_app_paths}
     if database_url is not None:
         updates["database"] = settings.database.model_copy(update={"url": database_url})
+    if service_role is not None:
+        updates["observability"] = settings.observability.model_copy(
+            update={"service_role": service_role}
+        )
     return settings.model_copy(update=updates)
 
 

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from core.admin import AdminRegistry
 from core.app.diagnostics import build_startup_diagnostics, merge_provider_readiness
 from core.app.lifecycle import run_lifecycle_hooks
-from core.apps import AppRegistry
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.apps.conformance import AppCheckResult, check_apps
 from core.auth.jwt_provider import LocalJwtConfig, LocalJwtProvider
 from core.auth.request_security import DatabaseRequestSecurityPipeline, SessionStoreFactory
@@ -157,7 +157,10 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
 
 def _register_app_modules(app: FastAPI, settings: Settings) -> AppRegistry:
     _validate_installed_apps(settings.installed_apps)
-    registry = AppRegistry(settings.installed_apps).load()
+    registry = AppRegistry(
+        settings.installed_apps,
+        runtime_capabilities=resolve_runtime_capabilities(settings),
+    ).load()
     imported_models = _import_app_models(registry)
     app.state.app_registry = registry
     app.state.app_model_modules = imported_models

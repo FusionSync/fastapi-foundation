@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from core.apps import resolve_runtime_capabilities
 from core.apps.conformance import check_app, check_apps
 from core.apps.registry import AppRegistry
 from core.cli.common import (
@@ -11,6 +12,7 @@ from core.cli.common import (
     installed_apps,
     print_payload,
 )
+from core.config import get_settings
 
 
 def register_app_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -53,8 +55,12 @@ def _handle_check_app(args: argparse.Namespace) -> int:
 
 def _handle_list_apps(args: argparse.Namespace) -> int:
     module_paths = installed_apps(args.installed_app)
+    settings = get_settings()
     try:
-        registry = AppRegistry(module_paths).load()
+        registry = AppRegistry(
+            module_paths,
+            runtime_capabilities=resolve_runtime_capabilities(settings),
+        ).load()
     except Exception as exc:
         print_payload(
             exception_error_payload(exc, command="list-apps", apps=[]),
