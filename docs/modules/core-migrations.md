@@ -194,5 +194,7 @@ core migrate drift-check
 - `core migrate dry-run` 已输出 `MigrationApplyResult` 兼容结构：`applied=false`、`mode=metadata-dry-run`，并复用 preflight gate。
 - `core migrate apply` 已接入门禁：必须传 `--yes`，并在 apply 前运行 preflight；destructive 或 `requires_backup_restore` migration 必须额外传 `--backup-ready`。
 - 当前 `apply` 没有真实 Alembic executor，因此即使 preflight 通过也返回 `ok=false`、`applied=false`、`mode=metadata-apply-disabled`。它只回显将执行的 migration plan，并明确拒绝把 metadata/no-op 标记为已应用。
+- `apply_migrations()` 提供真实 executor 的受控执行契约：调用方必须注入 `MigrationExecutor` 和 `LockProvider`，执行前获取 `migrations:apply` 锁，执行后释放锁。
+- executor 只能执行 preflight plan 中声明的 `alembic_revision`；runner 会校验 executor 返回的 `applied_revisions` 与计划完全一致，否则返回 `ok=false`、`applied=false`、`migration executor revision mismatch`。
 
 后续接真实 Alembic runner 时，必须复用同一个 `MigrationApplyResult` 输出结构和 preflight gate，不能绕过 manifest 治理；只有真实执行数据库变更并验证 revision 状态后才能返回 `applied=true`。dry-run 只允许验证将执行的 revision，不允许改变数据库状态。
