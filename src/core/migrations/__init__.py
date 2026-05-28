@@ -1,3 +1,4 @@
+from core.migrations.alembic_runner import AlembicMigrationExecutor
 from core.migrations.drift import DriftReport, check_drift
 from core.migrations.manifest import MigrationManifest
 from core.migrations.planner import MigrationPlan, plan_migrations
@@ -14,6 +15,7 @@ from core.migrations.runner import (
 
 __all__ = [
     "DriftReport",
+    "AlembicMigrationExecutor",
     "MigrationApplyResult",
     "MigrationExecutor",
     "MigrationExecutorResult",

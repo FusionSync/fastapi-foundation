@@ -132,11 +132,11 @@ local profile 可以使用 sync task provider；private/cloud profile 后续接 
 2. migration plan
 3. migration preflight
 4. backup readiness check
-5. apply expand migration
+5. apply expand migration with explicit Alembic config
 6. deploy compatible code
 7. run smoke checks
 8. run backfill or async repair
-9. apply contract migration when safe
+9. apply contract migration with explicit approval/backup readiness when safe
 ```
 
 破坏性 schema 变更必须走 expand-contract，除非作为维护窗口的一次性变更被明确批准。

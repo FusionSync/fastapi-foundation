@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import uuid
 
 from core.apps.registry import AppRegistry
 from core.cli.common import installed_apps, print_payload
+from core.locks import MemoryLockProvider
 from core.migrations import (
+    AlembicMigrationExecutor,
     MigrationManifest,
     MigrationRegistry,
     apply_migration_metadata,
+    apply_migrations,
     check_drift,
     dry_run_migration_metadata,
     plan_migrations,
@@ -31,6 +36,11 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
     apply_parser.add_argument("--json", action="store_true", dest="as_json")
     apply_parser.add_argument("--backup-ready", action="store_true")
     apply_parser.add_argument("--yes", action="store_true")
+    apply_parser.add_argument("--alembic-config")
+    apply_parser.add_argument("--database-url")
+    apply_parser.add_argument("--script-location")
+    apply_parser.add_argument("--lock-owner")
+    apply_parser.add_argument("--lock-ttl-seconds", type=int, default=300)
     apply_parser.set_defaults(handler=_handle_migrate)
 
     drift_parser = migrate_subparsers.add_parser("drift-check")
@@ -101,11 +111,36 @@ def _apply_migrations(
             "ok": False,
             "error": "migrate apply requires --yes",
         }
+    if migration_registry.errors:
+        return {
+            "ok": False,
+            "applied": False,
+            "mode": "registry",
+            "migrations": [],
+            "errors": migration_registry.errors,
+            "warnings": [],
+            "registry_errors": migration_registry.errors,
+        }
     result = run_preflight(
         migration_registry.manifests,
         backup_ready=args.backup_ready,
     )
-    apply_result = apply_migration_metadata(result)
+    if args.alembic_config:
+        apply_result = asyncio.run(
+            apply_migrations(
+                result,
+                executor=AlembicMigrationExecutor(
+                    config_path=args.alembic_config,
+                    database_url=args.database_url,
+                    script_location=args.script_location,
+                ),
+                lock_provider=MemoryLockProvider(),
+                owner_token=args.lock_owner or f"migrate-cli:{uuid.uuid4()}",
+                lock_ttl_seconds=args.lock_ttl_seconds,
+            )
+        )
+    else:
+        apply_result = apply_migration_metadata(result)
     return {
         **apply_result.to_dict(),
         "ok": not migration_registry.errors and apply_result.ok,

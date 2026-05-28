@@ -25,6 +25,7 @@ core check-app
 - `core check-app --all --json`
 - `core migrate plan --json`
 - `core migrate preflight --json`
+- `core migrate apply --alembic-config <path> --database-url <url> --yes --json`
 - 备份可用性检查。
 - 确认 outbox dead letter 和 task failed 数量在可接受范围内。
 
