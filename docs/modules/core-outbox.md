@@ -1,5 +1,13 @@
 # Core Transactional Outbox
 
+## Progress
+
+- Status: `connected`
+- Done: outbox model、repository、同事务写入、条件领取、有限重试、dead-letter replay 和 lease 完成校验已落地。
+- Next:
+  - [ ] 将 event publish 默认落到 outbox，并接 worker/outbox-dispatcher 运行角色。
+  - [ ] 接跨进程锁、handler schema/version 和幂等 side-effect 指南。
+
 ## 为什么需要 Outbox
 
 普通事件发布有两个典型风险：

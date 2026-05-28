@@ -1,5 +1,13 @@
 # Core Config
 
+## Progress
+
+- Status: `connected`
+- Done: settings、profile 校验、secret provider、脱敏诊断和启动期安全检查已落地。
+- Next:
+  - [ ] 增加配置 diff/drift 检查。
+  - [ ] 为 local/private/cloud 输出可验证的部署配置模板。
+
 ## 职责
 
 Config 模块是全局配置入口，负责从环境变量、`.env` 和部署 profile 中加载配置，并向 core 和 apps 提供统一 settings 对象。

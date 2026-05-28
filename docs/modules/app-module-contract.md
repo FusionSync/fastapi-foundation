@@ -1,5 +1,13 @@
 # App Module Contract
 
+## Progress
+
+- Status: `connected`
+- Done: typed `AppModule`、依赖图、标准文件、router security、response envelope、public_api 边界和 tenant model conformance 已接入启动检查。
+- Next:
+  - [ ] 在 events/tasks/scheduler runtime 全部闭环后补 handler 签名 conformance。
+  - [ ] 将 admin、migration metadata 的错误诊断细化到 app contract 输出。
+
 ## 目标
 
 App Module Contract 定义业务 app 和 platform app 如何接入框架。任何业务能力都必须遵守这个契约，避免直接修改 core 启动逻辑。

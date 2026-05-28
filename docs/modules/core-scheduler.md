@@ -1,5 +1,13 @@
 # Core Scheduler
 
+## Progress
+
+- Status: `partial`
+- Done: schedule registry、provider、trigger log repository 和锁保护的触发路径已落地。
+- Next:
+  - [ ] 接 cron 持久化配置和 scheduler 运行角色命令。
+  - [ ] 将调度任务与 TaskRun、tenant lifecycle 和 audit gate 串通。
+
 ## 职责
 
 Scheduler 模块负责“何时触发任务”。它不负责具体任务怎么执行，具体执行交给 Tasks 模块。

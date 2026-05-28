@@ -1,5 +1,13 @@
 # Core Rate Limit
 
+## Progress
+
+- Status: `partial`
+- Done: rate-limit provider、规则和基础 contract tests 已落地。
+- Next:
+  - [ ] 接 request middleware。
+  - [ ] 增加 Redis/sliding-window provider 和标准 `Retry-After` 输出。
+
 ## 职责
 
 Rate Limit 模块负责 API 限流、租户配额和防滥用控制。

@@ -1,5 +1,13 @@
 # Core Serialization
 
+## Progress
+
+- Status: `connected`
+- Done: `to_jsonable()`、`ok()`、`ok_list()`、`fail()`、Envelope/ListEnvelope 和复杂类型序列化规则已落地。
+- Next:
+  - [ ] 补复杂类型 golden examples 和 OpenAPI schema regression。
+  - [ ] 明确 streaming/binary response 与 envelope 的例外边界。
+
 ## 职责
 
 Serialization 模块负责统一 JSON 编码、模型导出、响应封装和特殊类型序列化。

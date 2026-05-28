@@ -1,5 +1,13 @@
 # Core Base Classes
 
+## Progress
+
+- Status: `connected`
+- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository 和 route security policy 已被上层 gate 使用。
+- Next:
+  - [ ] 用 conformance 或 lint 强制业务 repository 继承约定。
+  - [ ] 补分页、过滤、排序 helper 的可复用基类。
+
 ## 职责
 
 Base Classes 模块提供所有 app 必须使用的通用基类和基础工具，保证模型、schema、router 和 service 的行为一致。

@@ -1,5 +1,13 @@
 # App Development Guide
 
+## Progress
+
+- Status: `partial`
+- Done: 标准 app 目录、module 注册、分层边界、事务约束和测试要求已写入开发规范。
+- Next:
+  - [ ] 提供一个可复制的业务 app bootstrap 模板，默认通过 app conformance。
+  - [ ] 给业务 app 作者补充按大功能 checkpoint 推进的提交流程。
+
 ## 新增业务 app 流程
 
 1. 在 `src/apps/{app_name}` 创建目录。

@@ -1,5 +1,13 @@
 # Platform App: Audit
 
+## Progress
+
+- Status: `partial`
+- Done: audit model、AuditService、result/reason/session/policy fields、hash chain 和进程内链路锁已落地。
+- Next:
+  - [ ] 接 WORM/SIEM export。
+  - [ ] 为 private/cloud 多 worker 部署补分布式 hash chain 串行化。
+
 ## 职责
 
 Audit 负责记录关键操作、授权失败、文件访问、任务执行和业务资源变更。

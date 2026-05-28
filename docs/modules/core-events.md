@@ -1,5 +1,13 @@
 # Core Events
 
+## Progress
+
+- Status: `partial`
+- Done: event handler spec 和 `EventRegistry` 已能从 app registry 汇总处理器。
+- Next:
+  - [ ] 接 outbox-backed publish/dispatch。
+  - [ ] 定义事件 schema/version 兼容策略和 handler retry 语义。
+
 ## 职责
 
 Events 模块提供应用内事件总线，用于解耦业务动作和附加行为。需要可靠投递的事件必须走事务性 Outbox。

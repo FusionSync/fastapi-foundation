@@ -1,5 +1,13 @@
 # Core API Conventions
 
+## Progress
+
+- Status: `connected`
+- Done: response envelope、标准/兼容 HTTP status、错误码 registry、headers 和 OpenAPI response_model gate 已落地。
+- Next:
+  - [ ] 补分页、过滤和排序的统一 schema contract。
+  - [ ] 将非 JSON/binary response 的例外路径纳入 conformance 白名单。
+
 ## 职责
 
 API Conventions 定义全项目统一的路由、响应、错误、分页、过滤和版本规范。

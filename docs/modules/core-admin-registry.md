@@ -1,5 +1,13 @@
 # Core Admin Registry
 
+## Progress
+
+- Status: `partial`
+- Done: `AdminModelSpec` 和 `AdminRegistry.from_app_registry()` 已能从 app metadata 汇总后台注册信息。
+- Next:
+  - [ ] 接入真实 admin UI/route protection。
+  - [ ] 为 app 声明的 admin 权限补 contract tests。
+
 ## 职责
 
 Admin Registry 负责管理后台能力的注册，让 platform app 和 business app 可以各自声明自己的 admin view。

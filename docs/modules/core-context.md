@@ -1,5 +1,13 @@
 # Core Context
 
+## Progress
+
+- Status: `connected`
+- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播和 try/finally reset 已落地。
+- Next:
+  - [ ] 定义 background task、outbox handler 和 scheduler job 的 context handoff。
+  - [ ] 将 context 字段接入结构化日志和审计默认字段。
+
 ## 职责
 
 Context 模块基于 `contextvars` 维护请求上下文，让 router、service、审计、日志、权限和事件处理能够读取同一份当前请求信息。

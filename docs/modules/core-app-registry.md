@@ -1,5 +1,13 @@
 # Core App Registry
 
+## Progress
+
+- Status: `connected`
+- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查已接入。
+- Next:
+  - [ ] 增加 app 版本兼容和可选 capability gate。
+  - [ ] 输出更完整的模块装载诊断，供 CLI 和 readiness 共用。
+
 ## 职责
 
 App Registry 负责加载、校验和注册所有 app module。它是 core 和业务 app 之间的唯一装配边界。

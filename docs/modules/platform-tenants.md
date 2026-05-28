@@ -1,5 +1,13 @@
 # Platform App: Tenants
 
+## Progress
+
+- Status: `partial`
+- Done: tenant/member public app、module metadata、permissions 和与 core tenancy model 的复用关系已落地。
+- Next:
+  - [ ] 补 invitation flow。
+  - [ ] 将成员接受邀请后的初始角色交给 RoleGrant/permission projection 处理。
+
 ## 职责
 
 Tenants 负责组织、成员、邀请、角色绑定和租户配置。

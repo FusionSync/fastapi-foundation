@@ -1,5 +1,13 @@
 # Core Idempotency
 
+## Progress
+
+- Status: `connected`
+- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim 和状态流转 store 已落地。
+- Next:
+  - [ ] 补 response replay/cache 语义。
+  - [ ] 增加过期清理策略和冲突诊断命令。
+
 ## 职责
 
 Idempotency 模块负责处理重复提交和客户端重试，保证同一个幂等请求不会重复创建资源或重复触发任务。

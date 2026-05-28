@@ -1,5 +1,13 @@
 # Core Cache
 
+## Progress
+
+- Status: `partial`
+- Done: cache provider 抽象、内存实现和 key 约定已落地。
+- Next:
+  - [ ] 接 Redis provider。
+  - [ ] 定义权限、租户生命周期和 outbox 事件驱动的缓存失效规则。
+
 ## 职责
 
 Cache 模块提供统一缓存抽象，屏蔽内存缓存和 Redis 的差异。

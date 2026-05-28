@@ -1,5 +1,13 @@
 # Platform App: Accounts
 
+## Progress
+
+- Status: `partial`
+- Done: local user/password credential、session fact、auth session store、permissions 和基础 account integration tests 已落地。
+- Next:
+  - [ ] 补用户资料、password reset、外部身份绑定和 session 管理 API。
+  - [ ] 将账号安全事件接入 audit/outbox 和 token refresh 流程。
+
 ## 职责
 
 Accounts 负责用户、登录、本地账号、外部身份绑定和当前用户资料。

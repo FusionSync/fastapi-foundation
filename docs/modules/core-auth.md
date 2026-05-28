@@ -1,5 +1,13 @@
 # Core Auth
 
+## Progress
+
+- Status: `partial`
+- Done: `CurrentUser`、local JWT provider、session validator、request security pipeline 和 app 声明式 `auth_session_store` 已接入。
+- Next:
+  - [ ] 接 Logto/Keycloak 等外部 provider adapter。
+  - [ ] 补 token refresh、session revocation API 和安全审计联动。
+
 ## 职责
 
 Auth 模块负责认证抽象、当前用户解析、token 校验和认证 provider 适配。

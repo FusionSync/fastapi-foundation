@@ -1,5 +1,13 @@
 # Core Migrations
 
+## Progress
+
+- Status: `partial`
+- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status 契约已落地；`apply` 仍保持 metadata-disabled。
+- Next:
+  - [ ] 接真实 Alembic runner，执行后验证 revision 状态。
+  - [ ] 将 destructive migration 审批、backup-ready gate 和 drift check 串进发布流程。
+
 ## 职责
 
 Migrations 模块负责数据库迁移治理。成熟底座不能只要求“每个 app 有 migrations”，还需要统一迁移注册、依赖顺序、预检查、回滚策略和生产发布流程。

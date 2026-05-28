@@ -1,5 +1,13 @@
 # Core Tenant Isolation
 
+## Progress
+
+- Status: `connected`
+- Done: tenant-scoped repository/query、raw SQL guard、跨租户 reason gate、业务唯一约束检查和 app model conformance 已落地。
+- Next:
+  - [ ] 补数据库级 RLS/advisory 策略验证，作为 cloud profile 兜底。
+  - [ ] 增加静态导入/查询 lint，防止业务绕过 tenant repository。
+
 ## 职责
 
 Tenant Isolation 定义多租户数据隔离的强制机制。成熟底座不能依赖“开发者记得过滤 `tenant_id`”，必须通过模型、Repository、SQL 封装、测试和审计共同保证。

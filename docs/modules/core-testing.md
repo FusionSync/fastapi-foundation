@@ -1,5 +1,13 @@
 # Core Testing
 
+## Progress
+
+- Status: `partial`
+- Done: contract/integration 测试目录、app conformance gate、tenant isolation、security、outbox、task/scheduler、platform app 等 checkpoint 测试已落地。
+- Next:
+  - [ ] 按 Foundation Roadmap 拆分大功能 checkpoint suites。
+  - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
+
 ## 职责
 
 Testing 模块提供测试基础设施，避免每个 app 重复搭建测试 app、测试用户、测试租户和测试数据库。

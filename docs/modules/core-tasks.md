@@ -1,5 +1,13 @@
 # Core Tasks
 
+## Progress
+
+- Status: `partial`
+- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery 和 task CLI 已落地。
+- Next:
+  - [ ] 接 RQ/Celery 或等价队列 provider。
+  - [ ] 串通 retry/backoff、dead-letter、tenant lifecycle gate 和 worker 运行角色。
+
 ## 职责
 
 Tasks 模块负责异步任务抽象，用于长耗时处理、外部服务调用、批量导入导出和后台作业。

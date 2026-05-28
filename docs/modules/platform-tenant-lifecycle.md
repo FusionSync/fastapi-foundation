@@ -1,5 +1,13 @@
 # Platform App: Tenant Lifecycle
 
+## Progress
+
+- Status: `partial`
+- Done: tenant lifecycle 状态机、provision/suspend/reactivate/delete/archive service、outbox event、session revocation hook、audit hook 和权限 decision 校验已落地。
+- Next:
+  - [ ] 用统一 lifecycle gate 覆盖 login/read/write/task/file download。
+  - [ ] 补 tenant lifecycle matrix 的端到端 checkpoint suite。
+
 ## 职责
 
 Tenant Lifecycle 定义租户从创建、启用、暂停到删除/归档的状态机。多租户底座不能只有一个模糊的 `status` 字段。

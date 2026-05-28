@@ -158,3 +158,9 @@ Checkpoint：
 - 小任务期间只做必要 smoke check。
 - 一个大功能完成后运行对应 checkpoint suite。
 - 多个大功能串起来后再运行完整 contract/integration/unit suite。
+
+## Progress 记录规则
+
+- 每个 `docs/modules/*.md` 必须维护 `## Progress`，记录当前 Status、已完成事实和下一步 TODO。
+- Progress 的 TODO 只能沿着本路线图的大功能 checkpoint 前进；模块级优化放在相关大功能连接完成之后。
+- 完成一个大功能时，同步更新所有受影响模块的 Progress，再运行对应 checkpoint suite。

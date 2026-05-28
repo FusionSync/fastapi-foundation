@@ -1,5 +1,13 @@
 # Core Exceptions
 
+## Progress
+
+- Status: `connected`
+- Done: app exception、错误码 catalog、统一 handler 和 response envelope 已接入。
+- Next:
+  - [ ] 为错误码补 owner/deprecation/details schema metadata gate。
+  - [ ] 将业务 app 错误码注册并入 app conformance。
+
 ## 职责
 
 Exceptions 模块定义领域异常、系统异常和异常到统一响应 envelope 的映射。

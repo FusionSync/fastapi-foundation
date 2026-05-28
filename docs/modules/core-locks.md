@@ -1,5 +1,13 @@
 # Core Locks
 
+## Progress
+
+- Status: `partial`
+- Done: lock provider 抽象、内存实现和 scheduler trigger 并发保护已落地。
+- Next:
+  - [ ] 接 Redis/database advisory lock provider。
+  - [ ] 为 outbox、audit hash chain、migration apply 定义跨进程锁使用点。
+
 ## 职责
 
 Locks 模块提供分布式锁和幂等执行保护，避免多实例部署下重复处理同一业务动作。

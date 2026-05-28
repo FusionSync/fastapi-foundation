@@ -1,5 +1,12 @@
 # 模块文档索引
 
+## Progress 使用规则
+
+- 每个模块文档的 `## Progress` 是该模块的进度事实源。
+- Status 含义：`connected` 表示最小运行链路和契约测试已接入；`partial` 表示核心 API 或 provider 已落地但大功能还未全部闭环；`planned` 表示仍以设计为主。
+- 推进顺序必须服从 [Foundation Roadmap](../architecture/01-foundation-roadmap.md) 的大功能 checkpoint；不要在 checkpoint 完成前反复优化单个模块细节。
+- 每次完成一个大功能后，同步更新相关模块的 Done/Next 列表，再运行该大功能的集中验证。
+
 ## Core 模块
 
 - [App Runtime](core-app-runtime.md)

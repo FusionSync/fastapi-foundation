@@ -1,5 +1,13 @@
 # Core Observability
 
+## Progress
+
+- Status: `partial`
+- Done: metrics middleware、低基数字段、readiness、process heartbeat 和 smoke 角色健康检查已落地。
+- Next:
+  - [ ] 接结构化日志、trace propagation 和 audit/security 关键字段。
+  - [ ] 输出 private/cloud 部署 profile 的监控面板和告警契约。
+
 ## 职责
 
 Observability 模块负责日志、指标、追踪和运行诊断。

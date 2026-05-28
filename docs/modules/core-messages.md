@@ -1,5 +1,13 @@
 # Core Messages
 
+## Progress
+
+- Status: `partial`
+- Done: message catalog 和 resolver 已落地，错误码可映射为稳定用户消息。
+- Next:
+  - [ ] 与 exception code registry 统一 owner、废弃状态和 details schema。
+  - [ ] 增加 i18n fallback 和业务 app message catalog 注册。
+
 ## 职责
 
 Messages 模块负责业务 code 对应的默认 message 管理，支持集中维护、多语言和私有化定制。

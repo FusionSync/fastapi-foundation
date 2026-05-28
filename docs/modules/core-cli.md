@@ -1,5 +1,13 @@
 # Core CLI
 
+## Progress
+
+- Status: `partial`
+- Done: `check-app`、`list-apps`、permissions、migrate、outbox、tasks、operations/smoke 等命令骨架已接入。
+- Next:
+  - [ ] 补 server/worker/scheduler/outbox-dispatcher/migrate 角色启动命令。
+  - [ ] 统一 CLI exit code、JSON error envelope 和发布脚本契约。
+
 ## 职责
 
 CLI 模块提供后台框架的命令行入口，避免初始化、运维和诊断脚本散落。

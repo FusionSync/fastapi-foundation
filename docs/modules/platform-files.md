@@ -1,5 +1,13 @@
 # Platform App: Files
 
+## Progress
+
+- Status: `partial`
+- Done: file metadata、local storage provider、owner/authorization gate、upload/download/delete 权限和基础 storage tests 已落地。
+- Next:
+  - [ ] 接 MinIO/S3、virus scan、retention 和 quota gate。
+  - [ ] 将业务资源级文件权限替换 owner-only 最小门禁。
+
 ## 职责
 
 Files 负责文件元数据、上传、下载、版本和 storage provider 调用。

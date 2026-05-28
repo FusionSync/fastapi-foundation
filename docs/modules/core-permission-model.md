@@ -1,5 +1,13 @@
 # Core Permission Model
 
+## Progress
+
+- Status: `partial`
+- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection 和 RoleGrant 事实源收敛已落地。
+- Next:
+  - [ ] 完成 policy cache invalidation 和 reconciliation CLI 闭环。
+  - [ ] 接资源实例级授权 adapter 和 Casbin/等价策略后端。
+
 ## 职责
 
 Permission Model 定义权限数据的事实源、权限点、角色模板、角色授予和策略投影。Casbin 只是授权执行引擎，不应成为唯一事实源。

@@ -1,5 +1,13 @@
 # Core Quotas
 
+## Progress
+
+- Status: `partial`
+- Done: quota provider、rule 和 usage 抽象已落地。
+- Next:
+  - [ ] 接持久 usage store。
+  - [ ] 将配额检查接入文件、任务和业务 mutation 的统一 gate。
+
 ## 职责
 
 Quotas 模块负责租户级、用户级或资源级配额控制。它回答“还能不能继续使用资源”。

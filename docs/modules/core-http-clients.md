@@ -1,5 +1,13 @@
 # Core HTTP Clients
 
+## Progress
+
+- Status: `partial`
+- Done: resilient HTTP client、retry config、错误类型和 transport 抽象已落地。
+- Next:
+  - [ ] 接 timeout budget、metrics 和 trace propagation。
+  - [ ] 增加按外部服务声明 credential/secret 的 provider 契约。
+
 ## 职责
 
 HTTP Clients 模块负责统一外部 HTTP 调用，避免各 app 直接使用 `httpx` 或 `requests` 并散落 timeout、retry、trace 和错误处理。

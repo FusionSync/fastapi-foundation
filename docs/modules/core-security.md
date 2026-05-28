@@ -1,5 +1,13 @@
 # Core Security
 
+## Progress
+
+- Status: `connected`
+- Done: security headers、trusted hosts、body size limit、secret provider、password hashing、upload guard 和 app route security policy 已落地。
+- Next:
+  - [ ] 将 route-level security policy 接入审计和 conformance 诊断。
+  - [ ] 为 private/cloud profile 补 CSP、cookie、TLS/header hardening 清单。
+
 ## 职责
 
 Security 模块负责认证之外的底层安全能力，包括密码、密钥、请求安全、文件安全和敏感信息保护。

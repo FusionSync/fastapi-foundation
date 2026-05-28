@@ -1,5 +1,13 @@
 # Core Storage
 
+## Progress
+
+- Status: `partial`
+- Done: storage provider、local backend、key path 规则和 platform files 接入点已落地。
+- Next:
+  - [ ] 接 MinIO/S3 provider。
+  - [ ] 将 tenant lifecycle、permission、quota 和 virus scan gate 串进文件访问链路。
+
 ## 职责
 
 Storage 模块负责文件存储抽象，屏蔽本地文件系统、MinIO 和 S3 的差异。

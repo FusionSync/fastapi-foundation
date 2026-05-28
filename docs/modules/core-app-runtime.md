@@ -1,5 +1,13 @@
 # Core App Runtime
 
+## Progress
+
+- Status: `connected`
+- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security 和 system routes。
+- Next:
+  - [ ] 按 server/worker/scheduler/outbox-dispatcher/migrate 拆分启动 profile。
+  - [ ] 为 app lifecycle startup/shutdown hook 定义注册和失败策略。
+
 ## 职责
 
 App Runtime 是 FastAPI 应用启动和装配中心，负责创建应用实例、加载模块、注册路由、绑定生命周期、安装中间件和异常处理。
