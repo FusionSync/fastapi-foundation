@@ -7,10 +7,12 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps import AppModule, EventHandlerSpec
+from core.apps import AppModule, EventHandlerSpec, ScheduleSpec, TaskHandlerSpec
 from core.base.models import BaseModel
 from core.cli.main import main
 from core.outbox import OutboxEvent
+from core.scheduler import ScheduleTriggerLog
+from core.tasks import TaskRun
 
 
 def test_check_config_local_profile_passes(capsys) -> None:
@@ -80,6 +82,54 @@ def test_outbox_dispatcher_role_can_run_one_iteration(tmp_path: Path, monkeypatc
     }
     assert delivered == [event_id]
     assert asyncio.run(_event_status(database_url, event_id)) == "published"
+
+
+def test_scheduler_role_can_run_registered_schedule_once(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _install_scheduler_app(monkeypatch)
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_create_schema(database_url))
+
+    exit_code = main(
+        [
+            "scheduler",
+            "--run-once",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_scheduler_app",
+            "--schedule-id",
+            "example.refresh.daily",
+            "--tenant-id",
+            "tenant-a",
+            "--planned-at",
+            "2026-05-28T01:00:00+00:00",
+            "--payload-json",
+            '{"value":"ok"}',
+            "--request-id",
+            "req-schedule",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "scheduler"
+    assert payload["role"] == "scheduler"
+    assert payload["schedule_id"] == "example.refresh.daily"
+    assert payload["task_type"] == "example.refresh"
+    assert payload["task_result"]["status"] == "succeeded"
+    assert payload["task_result"]["result_payload"] == {
+        "request_id": "req-schedule",
+        "tenant_id": "tenant-a",
+        "value": "ok",
+    }
+    assert asyncio.run(_row_count(database_url, TaskRun)) == 1
+    assert asyncio.run(_row_count(database_url, ScheduleTriggerLog)) == 1
 
 
 def test_local_deployment_smoke_passes(capsys) -> None:
@@ -162,6 +212,15 @@ async def _seed_pending_event(database_url: str) -> str:
         await engine.dispose()
 
 
+async def _create_schema(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(BaseModel.metadata.create_all)
+    finally:
+        await engine.dispose()
+
+
 async def _event_status(database_url: str, event_id: str) -> str:
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -170,6 +229,19 @@ async def _event_status(database_url: str, event_id: str) -> str:
             event = await session.get(OutboxEvent, event_id)
             assert event is not None
             return event.status
+    finally:
+        await engine.dispose()
+
+
+async def _row_count(database_url: str, model) -> int:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            from sqlalchemy import func, select
+
+            result = await session.scalar(select(func.count()).select_from(model))
+            return int(result or 0)
     finally:
         await engine.dispose()
 
@@ -196,3 +268,38 @@ def _install_outbox_app(monkeypatch, delivered: list[str]) -> None:
         ],
     )
     monkeypatch.setitem(sys.modules, "fake_operations_outbox_app", app_module)
+
+
+def _install_scheduler_app(monkeypatch) -> None:
+    handler_module = types.ModuleType("fake_operations_scheduler_handlers")
+
+    def refresh(envelope) -> dict[str, str]:
+        return {
+            "request_id": envelope.request_id,
+            "tenant_id": envelope.tenant_id,
+            "value": envelope.payload["value"],
+        }
+
+    handler_module.refresh = refresh
+    monkeypatch.setitem(sys.modules, "fake_operations_scheduler_handlers", handler_module)
+
+    app_module = types.ModuleType("fake_operations_scheduler_app")
+    app_module.module = AppModule(
+        label="operations_scheduler_app",
+        version="0.1.0",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_operations_scheduler_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1"},
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_operations_scheduler_app", app_module)

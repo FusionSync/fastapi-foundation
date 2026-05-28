@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery 和 task CLI 已落地。
+- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI 和 scheduler run-once 本地提交链路已落地。
 - Next:
   - [ ] 接 RQ/Celery 或等价队列 provider。
-  - [ ] 串通 retry/backoff、dead-letter、tenant lifecycle gate 和 worker 运行角色。
+  - [ ] 串通 worker 运行循环、队列 ack/retry/backoff 和部署 profile 参数。
 
 ## 职责
 

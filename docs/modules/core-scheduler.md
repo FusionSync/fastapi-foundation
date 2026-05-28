@@ -2,11 +2,11 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: schedule registry、provider、trigger log repository 和锁保护的触发路径已落地。
+- Status: `connected`
+- Done: schedule registry、provider、trigger log repository、锁保护的触发路径和 `core scheduler --run-once` 本地运行入口已落地。
 - Next:
-  - [ ] 接 cron 持久化配置和 scheduler 运行角色命令。
-  - [ ] 将调度任务与 TaskRun、tenant lifecycle 和 audit gate 串通。
+  - [ ] 接 cron 持久化配置和后台 scheduler loop。
+  - [ ] 将调度任务与 audit gate 和部署 profile 运行参数串通。
 
 ## 职责
 
@@ -96,5 +96,6 @@ manual
 - `ScheduleTriggerLog` 保存 `schedule_id`、`tenant_id`、`planned_at`、`triggered_at`、`task_id`、`task_type`、`status`、`request_id` 和错误信息。
 - `ScheduleTriggerRepository.record_result()` 使用 insert-first + 唯一约束记录触发历史；重复 trigger key 返回 `replayed`，不创建第二条历史。
 - scheduler provider 不直接调用业务函数，tenant lifecycle gate 仍由 task provider 执行。
+- `core scheduler --run-once` 可按 `--installed-app` 加载 `ScheduleRegistry`/`TaskRegistry`，用 local `SyncTaskProvider` 触发指定 schedule，写入 `TaskRun` 和 `ScheduleTriggerLog`，并输出稳定 JSON。
 
 后续 APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。private/cloud 多实例部署时，`LockedScheduleProvider` 必须注入 Redis、数据库 advisory lock 或等价的分布式 `LockProvider`；内存 lock 只适合 local/profile 和测试。
