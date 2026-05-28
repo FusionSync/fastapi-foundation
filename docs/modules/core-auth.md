@@ -52,6 +52,8 @@ token_version
 
 `CurrentUser` 不包含 `is_platform_admin` 这类绕过字段。平台管理员身份通过权限系统查询 platform scope grant 得出，并进入审计。
 
+请求解析租户时，`core.tenancy.DatabaseTenantContextResolver` 接收 `CurrentUser`，再从数据库读取 `Tenant` 和 `TenantMember` 事实；业务代码不应自己构造 tenancy membership 列表。
+
 ## 与账号 app 的关系
 
 `platform_apps.accounts` 负责用户表、登录接口、账号绑定和成员关系。`core.auth` 只提供认证抽象和依赖。

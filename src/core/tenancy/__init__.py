@@ -1,3 +1,4 @@
+from core.tenancy.db_resolver import DatabaseTenantContextResolver
 from core.tenancy.events import (
     TENANT_ARCHIVED_EVENT,
     TENANT_CREATED_EVENT,
@@ -27,6 +28,7 @@ from core.tenancy.services import TenantLifecycleService
 
 __all__ = [
     "CurrentUser",
+    "DatabaseTenantContextResolver",
     "TENANT_ARCHIVED_EVENT",
     "TENANT_CREATED_EVENT",
     "TENANT_DELETED_EVENT",
