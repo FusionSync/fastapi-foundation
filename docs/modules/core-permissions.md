@@ -49,6 +49,7 @@ decision = await AuthorizationService(session).authorize(
 平台级权限使用 `scope=platform` 的 RoleGrant，不允许通过 `CurrentUser.is_platform_admin` 绕过授权接口。
 平台级授权使用固定 domain `__platform__`，由 `AuthorizationService.require_platform()` 返回 `AuthorizationDecision`。
 跨租户 SQL 和 repository 入口只接受这个 decision，不接受调用方传入的裸布尔值。
+角色授予和撤销同样只接受 `AuthorizationDecision` 作为授权证明，不能只传 `actor_id`；service 会校验 decision 已允许、scope 匹配目标租户或 platform scope，并且 actor 与 decision user 一致。
 
 当前实现提供 `AuthorizationService`：
 

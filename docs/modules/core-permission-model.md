@@ -151,6 +151,7 @@ RoleGrantService
   授予时写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   撤销时删除 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   撤销时同步删除该 grant 已有 ProjectedPolicy，避免 outbox projector 消费前旧投影继续授权
+  授予和撤销都必须传入允许的 AuthorizationDecision，且 actor_id 必须与 decision.user_id 一致
   可注入 AuditService 写 role.granted / role.revoked 强一致审计
 ```
 

@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
+from core.exceptions import AppError
 from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
 from core.permissions import (
     ROLE_GRANT_CHANGED_EVENT,
+    AuthorizationDecision,
     PermissionCache,
     PolicyProjector,
     ProjectedPolicy,
@@ -56,6 +58,7 @@ async def test_role_grant_outbox_event_updates_projected_policy_and_cache(
             role_template_id="template-viewer",
             actor_id="owner-1",
             request_id="req_test",
+            authorization_decision=_role_grant_decision(),
         )
 
     async with unit_of_work(session_factory) as uow:
@@ -77,6 +80,32 @@ async def test_role_grant_outbox_event_updates_projected_policy_and_cache(
     assert [policy.resource for policy in policies] == ["example"]
     assert [policy.action for policy in policies] == ["read"]
     assert [policy.subject for policy in policies] == ["user:user-1"]
+
+
+@pytest.mark.asyncio
+async def test_role_grant_requires_authorization_decision(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    event_registry = EventRegistry()
+    event_registry.register(ROLE_GRANT_CHANGED_EVENT, 1, lambda event: None)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(_viewer_template())
+        with pytest.raises(AppError) as exc_info:
+            await RoleGrantService(
+                uow.session,
+                OutboxRepository(uow.session, registry=event_registry),
+            ).grant_role(
+                tenant_id="tenant-a",
+                subject_type="user",
+                subject_id="user-1",
+                role_template_id="template-viewer",
+                actor_id="owner-1",
+                request_id="req_grant",
+            )
+
+        assert exc_info.value.code == "PERMISSION_DENIED"
 
 
 @pytest.mark.asyncio
@@ -106,6 +135,7 @@ async def test_role_revoke_outbox_event_removes_projected_policy_and_cache(
             role_template_id="template-viewer",
             actor_id="owner-1",
             request_id="req_grant",
+            authorization_decision=_role_grant_decision(),
         )
         grant_id = grant.id
 
@@ -131,6 +161,7 @@ async def test_role_revoke_outbox_event_removes_projected_policy_and_cache(
             grant_id=grant_id,
             actor_id="owner-1",
             request_id="req_revoke",
+            authorization_decision=_role_grant_decision(),
             reason="user left tenant",
         )
 
@@ -169,6 +200,7 @@ async def test_role_revoke_removes_projected_policy_before_outbox_dispatch(
             role_template_id="template-viewer",
             actor_id="owner-1",
             request_id="req_grant",
+            authorization_decision=_role_grant_decision(),
         )
         await PolicyProjector(uow.session).project_grant(grant, _viewer_template())
         grant_id = grant.id
@@ -184,6 +216,7 @@ async def test_role_revoke_removes_projected_policy_before_outbox_dispatch(
             grant_id=grant_id,
             actor_id="owner-1",
             request_id="req_revoke",
+            authorization_decision=_role_grant_decision(),
             reason="user left tenant",
         )
 
@@ -378,6 +411,22 @@ def _viewer_template() -> RoleTemplate:
         name="viewer",
         version=1,
         permissions=[{"resource": "example", "action": "read"}],
+    )
+
+
+def _role_grant_decision(
+    *,
+    tenant_id: str = "tenant-a",
+    allowed: bool = True,
+) -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=allowed,
+        tenant_id=tenant_id,
+        user_id="owner-1",
+        resource="role_grant",
+        action="manage",
+        reason="matched_projected_policy" if allowed else "missing_projected_policy",
+        policy_version=1 if allowed else None,
     )
 
 

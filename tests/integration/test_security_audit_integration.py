@@ -8,7 +8,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.outbox import OutboxEvent, OutboxRepository
-from core.permissions import RoleGrant, RoleGrantService, RoleTemplate
+from core.permissions import AuthorizationDecision, RoleGrant, RoleGrantService, RoleTemplate
 from core.tenancy import TENANT_CREATED_EVENT, Tenant, TenantLifecycleService, TenantMember
 from platform_apps.accounts import AccountsService, User
 from platform_apps.audit import AuditLog, AuditService
@@ -44,6 +44,7 @@ async def test_role_grant_writes_strong_audit_with_outbox(
             role_template_id="template-viewer",
             actor_id="owner-1",
             request_id="req-grant",
+            authorization_decision=_role_grant_decision(),
             reason="onboard owner",
         )
 
@@ -86,6 +87,7 @@ async def test_role_grant_audit_rolls_back_with_business_transaction(
                 role_template_id="template-viewer",
                 actor_id="owner-1",
                 request_id="req-grant",
+                authorization_decision=_role_grant_decision(),
                 reason="test rollback",
             )
             raise RuntimeError("rollback role grant")
@@ -113,6 +115,7 @@ async def test_role_revoke_writes_strong_audit_with_outbox(
             role_template_id="template-viewer",
             actor_id="owner-1",
             request_id="req-grant",
+            authorization_decision=_role_grant_decision(),
         )
         grant_id = grant.id
 
@@ -126,6 +129,7 @@ async def test_role_revoke_writes_strong_audit_with_outbox(
             grant_id=grant_id,
             actor_id="owner-1",
             request_id="req-revoke",
+            authorization_decision=_role_grant_decision(),
             reason="user left tenant",
         )
 
@@ -353,6 +357,18 @@ def _viewer_template() -> RoleTemplate:
         name="viewer",
         version=1,
         permissions=[{"resource": "example", "action": "read"}],
+    )
+
+
+def _role_grant_decision() -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=True,
+        tenant_id="tenant-a",
+        user_id="owner-1",
+        resource="role_grant",
+        action="manage",
+        reason="matched_projected_policy",
+        policy_version=1,
     )
 
 
