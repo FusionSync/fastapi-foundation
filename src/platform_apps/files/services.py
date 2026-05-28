@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AppError
+from core.security import DEFAULT_UPLOAD_SECURITY_POLICY, UploadSecurityPolicy, validate_upload
 from core.storage import StorageProvider, file_object_key
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 from platform_apps.files.models import FileObject
@@ -27,9 +28,16 @@ class FileDownload:
 
 
 class FileService:
-    def __init__(self, session: AsyncSession, storage: StorageProvider) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        storage: StorageProvider,
+        *,
+        upload_policy: UploadSecurityPolicy | None = None,
+    ) -> None:
         self.session = session
         self.storage = storage
+        self.upload_policy = upload_policy or DEFAULT_UPLOAD_SECURITY_POLICY
 
     async def upload_bytes(
         self,
@@ -41,6 +49,7 @@ class FileService:
         content_type: str,
         data: bytes,
         file_type: str,
+        expected_checksum: str | None = None,
     ) -> FileObject:
         self._validate_upload(
             tenant_id=tenant_id,
@@ -50,6 +59,7 @@ class FileService:
             content_type=content_type,
             data=data,
             file_type=file_type,
+            expected_checksum=expected_checksum,
         )
         file_id = str(uuid4())
         object_key = file_object_key(tenant_id=tenant_id, file_id=file_id)
@@ -178,6 +188,7 @@ class FileService:
         content_type: str,
         data: bytes,
         file_type: str,
+        expected_checksum: str | None,
     ) -> None:
         fields = {
             "tenant_id": tenant_id,
@@ -194,5 +205,10 @@ class FileService:
                 f"file upload missing required fields: {missing}",
                 status_code=400,
             )
-        if not isinstance(data, bytes) or not data:
-            raise AppError("VALIDATION_ERROR", "file upload data is required", status_code=400)
+        validate_upload(
+            file_name=file_name,
+            content_type=content_type,
+            data=data,
+            expected_checksum=expected_checksum,
+            policy=self.upload_policy,
+        )

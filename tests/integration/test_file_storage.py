@@ -9,6 +9,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.exceptions import AppError
 from core.permissions import AuthorizationService, ProjectedPolicy
+from core.security import UploadSecurityPolicy
 from core.storage import LocalStorageProvider
 from platform_apps.audit import AuditLog, AuditService
 from platform_apps.files import FileObject, FileService
@@ -56,6 +57,37 @@ async def test_upload_writes_storage_and_metadata(
         persisted = await session.get(FileObject, file_object.id)
         assert persisted is not None
         assert persisted.object_key == file_object.object_key
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_file_before_storage_when_security_policy_fails(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        with pytest.raises(AppError) as rejected:
+            await FileService(
+                uow.session,
+                storage,
+                upload_policy=UploadSecurityPolicy(max_bytes=4),
+            ).upload_bytes(
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                file_name="proposal.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=b"docx-bytes",
+                file_type="upload",
+            )
+
+    assert rejected.value.code == "UPLOAD_REJECTED"
+    assert list(tmp_path.rglob("*")) == []
+    async with session_factory() as session:
+        persisted = await session.scalar(select(FileObject))
+        assert persisted is None
 
 
 @pytest.mark.asyncio

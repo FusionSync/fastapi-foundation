@@ -23,6 +23,7 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
         403,
         "当前租户状态不允许该操作",
     ),
+    "UPLOAD_REJECTED": ErrorCodeSpec("UPLOAD_REJECTED", 400, "文件上传被拒绝"),
     "PERMISSION_DENIED": ErrorCodeSpec("PERMISSION_DENIED", 403, "无权限访问该资源"),
     "NOT_FOUND": ErrorCodeSpec("NOT_FOUND", 404, "资源不存在"),
     "CONFLICT": ErrorCodeSpec("CONFLICT", 409, "资源冲突"),

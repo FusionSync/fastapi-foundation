@@ -56,7 +56,7 @@ DELETE /api/v1/files/{id}
 第一版落点：
 
 - `platform_apps.files.models.FileObject` 保存文件 metadata，不依赖具体 storage provider。
-- `FileService.upload_bytes()` 先写 storage，再写 FileObject metadata，并记录 bucket、object_key、size、checksum。
+- `FileService.upload_bytes()` 先经过 `core.security.UploadSecurityPolicy` 校验，再写 storage 和 FileObject metadata，并记录 bucket、object_key、size、checksum。
 - `FileService.download_bytes()` 执行 tenant lifecycle `file_download` gate，再校验 tenant、owner_type、owner_id。
 - 下载调用方可以传入 `AuthorizationService` 和 `user_id`，进一步要求 `file.download` 权限；拒绝时会复用权限模块的 `authorization.denied` 审计。
 - `FileService.delete_file()` 将 metadata 标记为 `deleted`，并删除 storage object。
