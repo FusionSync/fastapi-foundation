@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、permissions、migrate、outbox、tasks、operations/smoke 等命令骨架已接入。
+- Done: `check-app`、`list-apps`、permissions、migrate、outbox dispatch/dead-letter、tasks、operations/smoke 等命令骨架已接入。
 - Next:
   - [ ] 补 server/worker/scheduler/outbox-dispatcher/migrate 角色启动命令。
   - [ ] 统一 CLI exit code、JSON error envelope 和发布脚本契约。
@@ -42,6 +42,7 @@ create-superuser
 seed-permissions
 show-routes
 health-check
+outbox dispatch-once
 outbox dead-letter list
 outbox dead-letter replay
 tasks failed list
@@ -49,6 +50,7 @@ tasks failed retry
 ```
 
 `migrate apply` 必须传 `--yes`，并在执行前复用 migration preflight gate。破坏性迁移还必须传 `--backup-ready`。当前尚未接入真实 Alembic executor，因此 preflight 通过后也只返回 `mode=metadata-apply-disabled`、`applied=false`，避免 CI/CD 把 no-op 当作已应用。
+`outbox dispatch-once` 必须通过 `--installed-app` 或 settings 加载 AppModule 后构建 `EventRegistry`，领取 pending/failed outbox event，投递到已注册 handler，并输出 claimed/published/failed/dead_lettered JSON。
 `tasks failed retry` 必须传 `--yes`，并通过 `--installed-app` 或 settings 加载 AppModule 后执行已注册任务处理器。
 `smoke --profile <profile> --json` 必须输出 config 检查和所有运行角色的 `role_health` 明细，便于 CI/CD 在发布后判断 server、worker、scheduler、outbox-dispatcher、migrate 是否满足当前 profile 的运行门禁。
 

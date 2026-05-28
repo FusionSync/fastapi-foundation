@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、同事务写入、条件领取、有限重试、dead-letter replay 和 lease 完成校验已落地。
+- Done: outbox model、repository、同事务写入、条件领取、一次性 dispatcher CLI、有限重试、dead-letter replay 和 lease 完成校验已落地。
 - Next:
-  - [ ] 将 event publish 默认落到 outbox，并接 worker/outbox-dispatcher 运行角色。
+  - [ ] 将 event publish 默认落到 outbox，并接长驻 worker/outbox-dispatcher 运行角色。
   - [ ] 接跨进程锁、handler schema/version 和幂等 side-effect 指南。
 
 ## 为什么需要 Outbox
@@ -169,17 +169,19 @@ dispatcher 需要：
 - 如果副作用已经执行但未标记 `published`，handler 必须通过 `event_id` 幂等表或业务唯一约束避免重复副作用。
 - 第一版不追求 exactly-once；目标是 at-least-once delivery + idempotent handler。
 
-## Dead Letter CLI
+## Outbox CLI
 
 已提供最小运维闭环：
 
 ```bash
+core outbox dispatch-once --installed-app apps.example_domain.module --database-url sqlite+aiosqlite:///./data/local.db --json
 core outbox dead-letter list --database-url sqlite+aiosqlite:///./data/local.db --json
 core outbox dead-letter replay --event-id <event_id> --database-url sqlite+aiosqlite:///./data/local.db --yes --json
 ```
 
 行为：
 
+- `dispatch-once` 通过 `--installed-app` 或 settings 加载 app 事件处理器，领取一批待投递事件，调用 handler，并输出 claimed/published/failed/dead_lettered。
 - `list` 输出 `dead_letter` 事件的稳定 JSON，包含 tenant、event type、aggregate、attempt、last_error 和 dead_letter_reason。
 - `replay` 必须显式传 `--yes`，避免误操作。
 - `replay` 只允许重放 `dead_letter` 事件，成功后把状态改回 `pending`，清理 `dead_letter_reason`、`last_error`、`next_retry_at` 和锁字段。
