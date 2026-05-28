@@ -63,3 +63,22 @@ token_version
 - 所有写接口必须依赖认证。
 - 必须支持 `session_id`、`jti` 或 `token_version` 撤销机制，用于用户禁用、租户暂停/删除、角色撤销后的访问收敛。
 - token refresh 和会话管理可以分阶段实现，但撤销检查接口必须在 core auth 契约中预留。
+
+## 当前实现
+
+认证 provider 尚未绑定具体 JWT/OIDC 实现。当前先由 `platform_apps.accounts` 落地会话事实：
+
+- `User.token_version` 表达用户级 token 撤销版本。
+- `UserSession.status` 表达 session 是否 active/revoked。
+- 禁用用户会递增 token_version 并撤销 active sessions。
+- 租户生命周期服务可通过 accounts 的 session revocation hook 撤销指定 tenant sessions。
+
+后续 core auth provider 必须在解析 token 后校验：
+
+```text
+token.session_id 对应 UserSession.status == active
+token.token_version == User.token_version
+User.status == active
+```
+
+这样本地 JWT、Logto 或 Keycloak 适配都能复用同一套撤销事实。

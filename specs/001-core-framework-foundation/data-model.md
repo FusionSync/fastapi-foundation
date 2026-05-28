@@ -32,6 +32,7 @@ Fields:
 - `status`
 - `auth_provider`
 - `external_id`
+- `token_version`
 - `created_at`
 - `updated_at`
 
@@ -39,6 +40,29 @@ Rules:
 
 - External identity uniqueness is provider scoped.
 - Disabled users cannot create new sessions.
+- Disabling a user increments `token_version` and revokes active sessions.
+
+## UserSession
+
+Represents an authenticated session for a user and optional tenant.
+
+Fields:
+
+- `id`
+- `user_id`
+- `tenant_id`
+- `auth_provider`
+- `status`
+- `token_version`
+- `revoke_reason`
+- `revoked_at`
+- `created_at`
+
+Rules:
+
+- New sessions can only be created for active users.
+- Session token_version must match the user token_version at creation time.
+- Tenant suspension and deletion revoke active sessions scoped to the tenant.
 
 ## TenantMember
 
