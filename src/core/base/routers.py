@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from starlette.requests import Request
 
-from core.context import get_current_context
+from core.context import RequestContext, get_current_context
 from core.exceptions import AppError
 
 CORE_ROUTE_SECURITY_POLICY_ATTR = "_core_route_security_policy"
+RouteAuthorizer = Callable[[RequestContext | None, "RouteSecurityPolicy"], object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +63,11 @@ def get_router_security_policy(router: APIRouter) -> RouteSecurityPolicy | None:
     return None
 
 
-def enforce_route_security(policy: RouteSecurityPolicy) -> None:
+async def enforce_route_security(
+    policy: RouteSecurityPolicy,
+    *,
+    authorizer: RouteAuthorizer | None = None,
+) -> None:
     if policy.public:
         return
     context = get_current_context()
@@ -75,6 +83,18 @@ def enforce_route_security(policy: RouteSecurityPolicy) -> None:
             "Tenant context is required",
             status_code=403,
         )
+    if not policy.permissions:
+        return
+    if authorizer is None:
+        raise AppError(
+            "PERMISSION_DENIED",
+            "Route permissions require an authorizer",
+            status_code=403,
+            details={"permissions": list(policy.permissions)},
+        )
+    result = authorizer(context, policy)
+    if inspect.isawaitable(result):
+        await result
 
 
 def _build_route_security_policy(
@@ -105,7 +125,10 @@ def _build_route_security_policy(
 
 
 def _route_security_dependency(policy: RouteSecurityPolicy):
-    async def dependency() -> None:
-        enforce_route_security(policy)
+    async def dependency(request: Request) -> None:
+        await enforce_route_security(
+            policy,
+            authorizer=getattr(request.app.state, "route_authorizer", None),
+        )
 
     return dependency

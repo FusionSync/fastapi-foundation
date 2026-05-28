@@ -99,6 +99,9 @@ router = create_router(prefix="/examples", tags=["examples"])
 router = create_router(prefix="/health", tags=["health"], public=True)
 ```
 
+如果 router 声明 `permissions=[...]`，运行时必须在 `app.state.route_authorizer` 挂载授权器。
+route dependency 会在认证/租户上下文检查后调用该授权器；未挂载授权器时拒绝请求，避免权限声明只停留在元数据层。
+
 app conformance 会拒绝裸 `APIRouter`，避免业务 app 绕过统一认证、租户和后续权限/限流装配。
 
 ## Service 基类
