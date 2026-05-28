@@ -533,6 +533,93 @@ def test_backup_check_accepts_recent_backup(capsys) -> None:
     assert payload["ok"] is True
 
 
+def test_release_checkpoint_outputs_profile_parameter_matrix(capsys) -> None:
+    exit_code = main(
+        [
+            "release",
+            "checkpoint",
+            "--profile",
+            "local",
+            "--artifact-target",
+            "docker-compose",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "release checkpoint"
+    assert payload["profile"] == "local"
+    assert payload["artifact_target"] == "docker-compose"
+    assert [stage["name"] for stage in payload["stages"]] == [
+        "profile-template",
+        "deployment-artifacts",
+        "config-check",
+        "backup-readiness",
+        "config-drift",
+        "migrate-run",
+        "smoke",
+    ]
+    assert all(stage["ok"] is True for stage in payload["stages"])
+    assert set(payload["profile_matrix"]) == {
+        "server",
+        "worker",
+        "scheduler",
+        "outbox-dispatcher",
+        "migrate",
+    }
+    assert payload["profile_matrix"]["server"]["command"] == (
+        "core serve --run --host 127.0.0.1 --port 8000"
+    )
+    assert payload["profile_matrix"]["worker"]["env"]["OBSERVABILITY__SERVICE_ROLE"] == "worker"
+    assert payload["profile_matrix"]["scheduler"]["drift_check_command"] == (
+        "core config drift-check --profile local --role scheduler --json"
+    )
+    assert payload["stages"][1]["result"]["files"][0]["path"] == "docker-compose.local.yml"
+    assert payload["stages"][4]["result"]["mode"] == "profile-template"
+
+
+def test_release_checkpoint_blocks_config_drift_with_redacted_details(capsys) -> None:
+    exit_code = main(
+        [
+            "release",
+            "checkpoint",
+            "--profile",
+            "private",
+            "--artifact-target",
+            "systemd",
+            "--actual",
+            "APP__ENV=local",
+            "--actual",
+            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/wps_bid",
+            "--json",
+        ]
+    )
+
+    payload_text = capsys.readouterr().out
+    payload = json.loads(payload_text)
+    drift_stage = next(stage for stage in payload["stages"] if stage["name"] == "config-drift")
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["command"] == "release checkpoint"
+    assert drift_stage["ok"] is False
+    assert drift_stage["result"]["mode"] == "actual-env"
+    assert drift_stage["result"]["roles"]["server"]["drift"]["has_drift"] is True
+    assert {
+        "key": "APP__ENV",
+        "expected": "private",
+        "actual": "local",
+    } in drift_stage["result"]["roles"]["server"]["drift"]["mismatched"]
+    assert any(
+        mismatch["key"] == "DATABASE__URL"
+        and "wrong-host" in mismatch["actual"]
+        and "***" in mismatch["actual"]
+        for mismatch in drift_stage["result"]["roles"]["server"]["drift"]["mismatched"]
+    )
+    assert "super-secret" not in payload_text
+
+
 def _sqlite_url(tmp_path: Path) -> str:
     return f"sqlite+aiosqlite:///{tmp_path / 'operations-outbox.db'}"
 

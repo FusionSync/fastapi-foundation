@@ -116,6 +116,7 @@ local profile 可以使用 sync task provider；private/cloud profile 后续接 
 `core config artifacts --profile <profile> --target <docker-compose|systemd|helm-values> --json` 会直接从该矩阵输出部署产物内容；发布仓库或安装包应消费 `files` 字段，而不是手工复制命令。
 发布前应执行 `core config drift-check --profile <profile> --json`，或用重复 `--actual KEY=VALUE` 检查候选部署环境；校验 worker、scheduler、outbox-dispatcher 等角色时传 `--role <role>`，避免把所有运行时都按 server 日志字段检查。失败报告必须脱敏输出缺失/不匹配项，不能泄漏数据库密码或 secret。
 生成部署产物时也可以给 `core config artifacts` 传入重复 `--actual KEY=VALUE` 和 `--role <role>`，命令会附带输出 `drift` 并在漂移时返回非零 exit code，适合作为发布参数矩阵的早期 gate。
+发布脚本首选 `core release checkpoint --profile <profile> --artifact-target <docker-compose|systemd|helm-values> --json`，一次性输出 profile 参数矩阵并执行 config、backup、drift、migrate dry-run 和 smoke 聚合门禁。需要校验候选部署环境时，传重复 `--actual KEY=VALUE` 作为公共环境，或传 `--role-actual ROLE:KEY=VALUE` 覆盖某个进程角色。
 
 当前 `core worker` 命令提供配置级健康检查，不强制依赖数据库连接；`core serve --run --dry-run`、`core migrate run`、`core worker --run --max-iterations <n>`、`core scheduler --run-once`、`core scheduler --run --max-iterations <n>` 和 `core outbox-dispatcher --run` 可在 local/CI 中执行启动计划或有限轮运行验证。`worker --run`、`scheduler --run` 和 `outbox-dispatcher --run` 传入 `--instance-id` 时会写入 `process_heartbeats`。
 发布脚本调用 `--json` 命令时必须以进程退出码为准，并在失败时读取 stdout 中的 `ok=false`、`exit_code` 和 `error.code/message/details`；参数错误固定为 exit code `2`，运行期失败和显式确认缺失固定为非零 exit code `1`。

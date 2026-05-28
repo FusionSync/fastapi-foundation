@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status/run 契约和显式 Alembic executor apply 路径已落地；默认未配置 executor 时仍保持 metadata-disabled。
+- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status/run 契约、显式 Alembic executor apply 路径和 release checkpoint migrate dry-run stage 已落地；默认未配置 executor 时仍保持 metadata-disabled。
 - Next:
-  - [ ] 接跨进程 migration lock provider，并把 `migrate run` 接入发布 smoke/CI 模板。
+  - [ ] 接跨进程 migration lock provider。
   - [ ] 细化 expand/backfill/contract 分阶段 apply 命令和回滚/forward-fix 记录。
 
 ## 职责

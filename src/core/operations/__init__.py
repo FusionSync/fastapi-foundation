@@ -12,6 +12,11 @@ from core.operations.readiness import (
     ReadinessResult,
     check_app_readiness,
 )
+from core.operations.release import (
+    ReleaseCheckpointResult,
+    ReleaseCheckpointStage,
+    run_release_checkpoint,
+)
 from core.operations.smoke import SmokeResult, run_deployment_smoke
 
 __all__ = [
@@ -24,10 +29,13 @@ __all__ = [
     "ProcessHeartbeatSnapshot",
     "ProcessHealth",
     "ReadinessResult",
+    "ReleaseCheckpointResult",
+    "ReleaseCheckpointStage",
     "SmokeResult",
     "check_backup_readiness",
     "check_app_readiness",
     "check_config",
     "check_process_health",
+    "run_release_checkpoint",
     "run_deployment_smoke",
 ]

@@ -25,6 +25,7 @@ from core.operations import (
     check_config,
     check_process_health,
     run_deployment_smoke,
+    run_release_checkpoint,
 )
 from core.operations.backup import parse_backup_time
 from core.outbox import run_outbox_dispatch_loop
@@ -39,6 +40,8 @@ from core.scheduler import (
 from core.tasks import SyncTaskProvider, TaskRegistry, TaskRunRepository, run_task_worker_loop
 
 _PROFILES = ["local", "private", "cloud"]
+_ARTIFACT_TARGETS = ["docker-compose", "systemd", "helm-values"]
+_PROCESS_ROLES = ["server", "worker", "scheduler", "outbox-dispatcher", "migrate"]
 
 
 def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -58,6 +61,19 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
     backup_parser.add_argument("--max-age-hours", type=int)
     backup_parser.add_argument("--json", action="store_true", dest="as_json")
     backup_parser.set_defaults(handler=_handle_backup_check)
+
+    release_parser = subparsers.add_parser("release")
+    release_subparsers = release_parser.add_subparsers(dest="release_command", required=True)
+    checkpoint_parser = release_subparsers.add_parser("checkpoint")
+    checkpoint_parser.add_argument("--profile", choices=_PROFILES, required=True)
+    checkpoint_parser.add_argument("--artifact-target", choices=_ARTIFACT_TARGETS, required=True)
+    checkpoint_parser.add_argument("--actual", action="append", default=[])
+    checkpoint_parser.add_argument("--role-actual", action="append", default=[])
+    checkpoint_parser.add_argument("--latest-backup-at")
+    checkpoint_parser.add_argument("--max-age-hours", type=int)
+    checkpoint_parser.add_argument("--installed-app", action="append", default=[])
+    checkpoint_parser.add_argument("--json", action="store_true", dest="as_json")
+    checkpoint_parser.set_defaults(handler=_handle_release_checkpoint)
 
     for role in ("serve", "worker", "scheduler", "outbox-dispatcher"):
         role_parser = subparsers.add_parser(role)
@@ -129,6 +145,38 @@ def _handle_backup_check(args: argparse.Namespace) -> int:
         max_age_hours=args.max_age_hours,
     )
     print_payload(result.to_dict(), as_json=args.as_json)
+    return 0 if result.ok else 1
+
+
+def _handle_release_checkpoint(args: argparse.Namespace) -> int:
+    try:
+        actual_env = _parse_actual_env(args.actual)
+        role_actual_env = _parse_role_actual_env(args.role_actual)
+    except ValueError as exc:
+        print_payload(
+            error_payload(
+                code=CLI_USAGE_ERROR,
+                message=str(exc),
+                command="release checkpoint",
+                exit_code=2,
+            ),
+            as_json=args.as_json,
+        )
+        return 2
+    result = run_release_checkpoint(
+        profile=args.profile,
+        artifact_target=args.artifact_target,
+        actual_env=actual_env,
+        role_actual_env=role_actual_env,
+        latest_backup_at=parse_backup_time(args.latest_backup_at),
+        max_backup_age_hours=args.max_age_hours,
+        installed_apps=installed_apps(args.installed_app),
+    )
+    payload = {
+        "command": "release checkpoint",
+        **result.to_dict(),
+    }
+    print_payload(payload, as_json=args.as_json)
     return 0 if result.ok else 1
 
 
@@ -489,3 +537,33 @@ def _parse_payload_json(value: str) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError("payload-json must decode to an object")
     return dict(payload)
+
+
+def _parse_actual_env(values: list[str]) -> dict[str, str]:
+    actual: dict[str, str] = {}
+    for value in values:
+        key, item_value = _parse_env_assignment(value)
+        actual[key] = item_value
+    return actual
+
+
+def _parse_role_actual_env(values: list[str]) -> dict[str, dict[str, str]]:
+    actual: dict[str, dict[str, str]] = {}
+    for value in values:
+        if ":" not in value:
+            raise ValueError(f"Role config mapping must use ROLE:KEY=VALUE format: {value}")
+        role, assignment = value.split(":", 1)
+        if role not in _PROCESS_ROLES:
+            raise ValueError(f"Unknown process role in config mapping: {role}")
+        key, item_value = _parse_env_assignment(assignment)
+        actual.setdefault(role, {})[key] = item_value
+    return actual
+
+
+def _parse_env_assignment(value: str) -> tuple[str, str]:
+    if "=" not in value:
+        raise ValueError(f"Config mapping must use KEY=VALUE format: {value}")
+    key, item_value = value.split("=", 1)
+    if not key:
+        raise ValueError(f"Config mapping must use KEY=VALUE format: {value}")
+    return key, item_value

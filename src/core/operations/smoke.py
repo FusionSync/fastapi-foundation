@@ -36,8 +36,12 @@ class SmokeResult:
         }
 
 
-def run_deployment_smoke(profile: DeploymentMode) -> SmokeResult:
-    settings = Settings(app={"env": profile})
+def run_deployment_smoke(
+    profile: DeploymentMode,
+    *,
+    settings: Settings | None = None,
+) -> SmokeResult:
+    settings = settings or Settings(app={"env": profile})
     config_result = check_config(profile, settings=settings)
     role_health = {
         role: check_process_health(role, settings=settings)

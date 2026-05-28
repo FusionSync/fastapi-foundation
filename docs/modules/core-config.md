@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、配置 drift-check 和 profile 派生部署产物渲染已落地。
+- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、配置 drift-check、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
 - Next:
-  - [ ] 将运行时配置漂移结果接入发布 gate 和告警。
+  - [ ] 将运行时配置漂移结果接入告警。
 
 ## 职责
 
@@ -109,6 +109,10 @@ cloud
 - `source_template_command` / `drift_check_command`：产物来源和配置漂移校验入口。
 
 如果同时传入重复 `--actual KEY=VALUE`，命令会在输出产物时执行同一套 drift-check；发现缺失或不匹配时返回 exit code `1`，并在 `drift` 中输出脱敏报告。配合 `--role` 使用时，校验对象是该进程角色的运行时环境。
+
+## Release Checkpoint Drift Gate
+
+`core release checkpoint --profile <profile> --artifact-target <target> --json` 会把 profile template、部署产物、配置校验、备份就绪、按角色 drift-check、migration dry-run 和 smoke 汇总成一个发布 gate。传入重复 `--actual KEY=VALUE` 作为公共候选环境，或传 `--role-actual ROLE:KEY=VALUE` 覆盖单个进程角色环境；任一角色漂移都会让 checkpoint 返回 exit code `1`。
 
 ## Secret Provider
 
