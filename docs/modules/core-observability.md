@@ -79,8 +79,9 @@ external_http_requests_total
 ```
 
 `GET /metrics` 暴露 Prometheus text/plain 响应。底座启动时会创建进程内 `MetricsRegistry`，
-HTTP middleware 已记录 `http_requests_total{method,route,status_class}`。其他 task、outbox、
-migration 指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
+HTTP middleware 已记录 `http_requests_total{method,route,status_class}`，rate limit 和 quota 拒绝路径已分别记录
+`rate_limit_hits_total{reason,route,rule}`、`quota_exceeded_total{metric,scope}`。其他 task、outbox、migration
+指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
 
 ## 设计要求
 

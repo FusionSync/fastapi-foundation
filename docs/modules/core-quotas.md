@@ -59,7 +59,7 @@ file_count
 - `QuotaService.reserve()` 执行强校验并在通过时增加用量，适合文件上传、创建用户、提交任务等关键写操作。
 - `QuotaService.require_reserve()` 在配额不足时抛 `QUOTA_EXCEEDED`，并带稳定 details。
 - `QuotaService.release()` 支持释放并发类配额，例如 `concurrent_tasks`。
-- 配额不足时可通过 `AuditRecorder` 写 `quota.exceeded` 审计。
+- 配额不足时会写可选 `MetricsRegistry` 的 `quota_exceeded_total{metric,scope}`，并可通过 `AuditRecorder` 写 `quota.exceeded` 审计。
 - 指标契约已预留 `quota_exceeded_total`。
 
 内存 store 只用于 local profile、测试和单机版。private/cloud profile 后续应替换为数据库或 Redis-backed store，并保证 `reserve()` 的 check-and-increment 语义是原子的。

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from core.audit import AuditRecorder
 from core.cache import CacheProvider
 from core.exceptions import AppError
+from core.observability import MetricsRegistry
 from core.rate_limit.rules import RateLimitIdentity, RateLimitRule
 
 
@@ -46,9 +47,11 @@ class CacheRateLimiter:
         cache: CacheProvider,
         *,
         audit: AuditRecorder | None = None,
+        metrics: MetricsRegistry | None = None,
     ) -> None:
         self.cache = cache
         self.audit = audit
+        self.metrics = metrics
 
     async def check(
         self,
@@ -128,6 +131,15 @@ class CacheRateLimiter:
         decision: RateLimitDecision,
         identity: RateLimitIdentity,
     ) -> None:
+        if self.metrics is not None:
+            self.metrics.increment(
+                "rate_limit_hits_total",
+                {
+                    "reason": decision.reason,
+                    "route": identity.route or "unknown",
+                    "rule": decision.rule_name,
+                },
+            )
         if self.audit is None:
             return
         await self.audit.record(

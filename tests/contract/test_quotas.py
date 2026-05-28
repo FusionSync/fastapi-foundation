@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 
 from core.exceptions import AppError
+from core.observability import MetricsRegistry
 from core.quotas import (
     MemoryQuotaUsageStore,
     QuotaRegistry,
@@ -62,7 +63,8 @@ async def test_quota_check_is_read_only_and_reports_remaining_capacity() -> None
 async def test_quota_reserve_increments_usage_until_limit_and_audits_exhaustion() -> None:
     store = MemoryQuotaUsageStore()
     audit = AuditSpy()
-    service = QuotaService(store, audit=audit)
+    metrics = MetricsRegistry()
+    service = QuotaService(store, audit=audit, metrics=metrics)
     rule = QuotaRule(metric="file_count", limit=2, scope="tenant")
     subject = QuotaSubject(tenant_id="tenant-a")
 
@@ -98,6 +100,7 @@ async def test_quota_reserve_increments_usage_until_limit_and_audits_exhaustion(
             },
         }
     ]
+    assert 'quota_exceeded_total{metric="file_count",scope="tenant"} 1' in metrics.render()
 
 
 @pytest.mark.asyncio

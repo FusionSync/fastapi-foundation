@@ -5,6 +5,7 @@ import pytest
 
 from core.cache import MemoryCacheProvider
 from core.exceptions import AppError
+from core.observability import MetricsRegistry
 from core.rate_limit import (
     CacheRateLimiter,
     RateLimitIdentity,
@@ -40,7 +41,8 @@ async def test_cache_rate_limiter_blocks_after_fixed_window_limit() -> None:
     clock = Clock()
     cache = MemoryCacheProvider(clock=lambda: clock.now)
     audit = AuditSpy()
-    limiter = CacheRateLimiter(cache, audit=audit)
+    metrics = MetricsRegistry()
+    limiter = CacheRateLimiter(cache, audit=audit, metrics=metrics)
     rule = RateLimitRule(
         name="files.upload",
         limit=2,
@@ -86,6 +88,10 @@ async def test_cache_rate_limiter_blocks_after_fixed_window_limit() -> None:
             },
         }
     ]
+    assert (
+        'rate_limit_hits_total{reason="limit_exceeded",route="POST /files",rule="files.upload"} 1'
+        in metrics.render()
+    )
 
 
 @pytest.mark.asyncio

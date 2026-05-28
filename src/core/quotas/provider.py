@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from core.audit import AuditRecorder
 from core.exceptions import AppError
+from core.observability import MetricsRegistry
 from core.quotas.rules import QuotaRule, QuotaSubject
 from core.quotas.usage import QuotaUsageStore
 
@@ -40,9 +41,11 @@ class QuotaService:
         usage_store: QuotaUsageStore,
         *,
         audit: AuditRecorder | None = None,
+        metrics: MetricsRegistry | None = None,
     ) -> None:
         self.usage_store = usage_store
         self.audit = audit
+        self.metrics = metrics
 
     async def check(
         self,
@@ -139,6 +142,14 @@ class QuotaService:
         decision: QuotaDecision,
         subject: QuotaSubject,
     ) -> None:
+        if self.metrics is not None:
+            self.metrics.increment(
+                "quota_exceeded_total",
+                {
+                    "metric": decision.metric,
+                    "scope": decision.scope,
+                },
+            )
         if self.audit is None:
             return
         await self.audit.record(

@@ -73,7 +73,7 @@ default.write:
 - `RateLimitRegistry` 支持默认规则和 route override，便于登录、上传、批量写入等接口单独调小阈值。
 - `CacheRateLimiter` 使用 `CacheProvider.incr()` 实现 fixed-window 计数，不直接依赖 Redis。
 - 超限返回 `RateLimitDecision(allowed=False)`；`require()` 抛 `RATE_LIMITED`，并带 `Retry-After` header 和稳定 details。
-- 命中限流时会调用可选 `AuditRecorder` 写 `rate_limit.hit` 审计。
+- 命中限流时会写可选 `MetricsRegistry` 的 `rate_limit_hits_total{reason,route,rule}`，并调用可选 `AuditRecorder` 写 `rate_limit.hit` 审计。
 - cache provider 故障时按 rule 决定 fail-open 或 fail-closed；高风险接口应使用默认 `fail_closed=True`。
 - 指标契约已预留 `rate_limit_hits_total`。
 
