@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、CLI error envelope、config profile/drift、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、CLI error envelope、config profile/drift、app lifecycle、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 按 Foundation Roadmap 拆分大功能 checkpoint suites。
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
@@ -46,6 +46,7 @@ src/core/testing/
 - 兼容模式 `always_200` 必须单独测试，不能影响默认生产模式。
 - CLI contract test 必须覆盖成功输出、参数错误 exit code `2`、显式确认缺失、运行期异常和 JSON error envelope，保证发布脚本只依赖 stdout 与进程退出码。
 - Config profile contract test 必须覆盖模板输出、生产 secret reference、drift-check 成功/失败路径和敏感值脱敏。
+- App runtime contract test 必须覆盖 lifecycle startup/shutdown 执行顺序、handler 签名 conformance 和 startup 失败策略。
 
 ## 最小测试矩阵
 

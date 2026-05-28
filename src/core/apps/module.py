@@ -17,6 +17,8 @@ from core.permissions.specs import PermissionSpec
 _LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 ScheduleTrigger = Literal["interval", "cron", "date", "manual"]
 MisfirePolicy = Literal["skip", "run_once", "catch_up_limited"]
+LifecyclePhase = Literal["startup", "shutdown"]
+_LIFECYCLE_PHASES = {"startup", "shutdown"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,13 @@ class ScheduleSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class LifecycleHookSpec:
+    hook_id: str
+    phase: LifecyclePhase
+    handler_path: str
+
+
+@dataclass(frozen=True, slots=True)
 class AppModule:
     label: str
     version: str
@@ -60,6 +69,7 @@ class AppModule:
     event_handlers: list[EventHandlerSpec] = field(default_factory=list)
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
     schedules: list[ScheduleSpec] = field(default_factory=list)
+    lifecycle_hooks: list[LifecycleHookSpec] = field(default_factory=list)
     auth_session_store: str | None = None
     public_api: list[str] = field(default_factory=list)
     admin_models: list[AdminModelSpec] = field(default_factory=list)
@@ -119,6 +129,21 @@ def validate_app_module(module: AppModule) -> AppModule:
             raise TypeError(f"App {module.label!r} schedule must be ScheduleSpec")
         _validate_non_empty_path(schedule.schedule_id, f"App {module.label!r} schedule_id")
         _validate_non_empty_path(schedule.task_type, f"App {module.label!r} schedule task_type")
+    for lifecycle_hook in module.lifecycle_hooks:
+        if not isinstance(lifecycle_hook, LifecycleHookSpec):
+            raise TypeError(f"App {module.label!r} lifecycle_hook must be LifecycleHookSpec")
+        _validate_non_empty_path(
+            lifecycle_hook.hook_id,
+            f"App {module.label!r} lifecycle_hook hook_id",
+        )
+        if lifecycle_hook.phase not in _LIFECYCLE_PHASES:
+            raise ValueError(
+                f"App {module.label!r} lifecycle_hook phase must be startup or shutdown"
+            )
+        _validate_non_empty_path(
+            lifecycle_hook.handler_path,
+            f"App {module.label!r} lifecycle_hook handler_path",
+        )
     for public_api in module.public_api:
         if not isinstance(public_api, str) or not public_api:
             raise TypeError(f"App {module.label!r} public_api path must be a non-empty string")

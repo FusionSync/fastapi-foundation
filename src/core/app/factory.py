@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.admin import AdminRegistry
+from core.app.lifecycle import run_lifecycle_hooks
 from core.apps import AppRegistry
 from core.apps.conformance import AppCheckResult, check_apps
 from core.auth.jwt_provider import LocalJwtConfig, LocalJwtProvider
@@ -47,7 +48,7 @@ def create_app(
     app = FastAPI(
         title=resolved_settings.app.name,
         version=resolved_settings.app.version,
-        lifespan=_database_lifespan(database_runtime),
+        lifespan=_app_lifespan(database_runtime),
     )
     app.state.settings = resolved_settings
     app.state.database_engine = database_runtime.engine
@@ -70,11 +71,15 @@ def create_app(
     return app
 
 
-def _database_lifespan(database_runtime: DatabaseRuntime):
+def _app_lifespan(database_runtime: DatabaseRuntime):
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
-            yield
+            await run_lifecycle_hooks(app, phase="startup")
+            try:
+                yield
+            finally:
+                await run_lifecycle_hooks(app, phase="shutdown")
         finally:
             await database_runtime.dispose()
 

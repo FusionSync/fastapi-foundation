@@ -80,6 +80,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
     _check_background_handler_signatures(app_module, result)
+    _check_lifecycle_hook_signatures(app_module, result)
     _check_model_constraints(app_module, result)
     _check_router_security(app_module, result)
     _check_router_response_envelopes(package_dir, result)
@@ -180,6 +181,55 @@ def _check_envelope_handler_signature(
         result.errors.append(
             f"{handler_kind} handler {handler_path} must accept exactly one "
             "envelope argument"
+        )
+
+
+def _check_lifecycle_hook_signatures(app_module: AppModule, result: AppCheckResult) -> None:
+    for spec in app_module.lifecycle_hooks:
+        _check_context_handler_signature(
+            spec.handler_path,
+            hook_id=spec.hook_id,
+            result=result,
+        )
+
+
+def _check_context_handler_signature(
+    handler_path: str,
+    *,
+    hook_id: str,
+    result: AppCheckResult,
+) -> None:
+    try:
+        handler = _load_handler(handler_path)
+    except Exception as exc:
+        result.errors.append(
+            f"lifecycle hook {hook_id} {handler_path} cannot be imported: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError) as exc:
+        result.errors.append(
+            f"lifecycle hook {hook_id} {handler_path} signature cannot be inspected: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+    parameters = list(signature.parameters.values())
+    if len(parameters) != 1:
+        result.errors.append(
+            f"lifecycle hook {hook_id} {handler_path} must accept exactly one "
+            "context argument"
+        )
+        return
+    parameter = parameters[0]
+    if parameter.kind not in {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }:
+        result.errors.append(
+            f"lifecycle hook {hook_id} {handler_path} must accept exactly one "
+            "context argument"
         )
 
 

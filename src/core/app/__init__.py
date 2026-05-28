@@ -1,3 +1,4 @@
 from core.app.factory import create_app
+from core.app.lifecycle import AppLifecycleContext
 
-__all__ = ["create_app"]
+__all__ = ["AppLifecycleContext", "create_app"]

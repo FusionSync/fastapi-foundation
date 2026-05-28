@@ -7,6 +7,7 @@ from core.apps import (
     AppModule,
     AppRegistry,
     EventHandlerSpec,
+    LifecycleHookSpec,
     ScheduleSpec,
     TaskHandlerSpec,
     validate_app_module,
@@ -41,6 +42,13 @@ def test_valid_app_module_contract() -> None:
                 task_type="example.refresh",
                 trigger="cron",
                 trigger_config={"hour": "1"},
+            )
+        ],
+        lifecycle_hooks=[
+            LifecycleHookSpec(
+                hook_id="warmup",
+                phase="startup",
+                handler_path="apps.example_domain.lifecycle.warmup",
             )
         ],
     )
@@ -90,6 +98,42 @@ def test_invalid_event_task_and_schedule_specs_are_rejected() -> None:
                 label="demo",
                 version="0.1.0",
                 schedules=["not-a-spec"],  # type: ignore[list-item]
+            )
+        )
+    with pytest.raises(TypeError, match="lifecycle_hook must be LifecycleHookSpec"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                lifecycle_hooks=["not-a-spec"],  # type: ignore[list-item]
+            )
+        )
+    with pytest.raises(TypeError, match="lifecycle_hook handler_path"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                lifecycle_hooks=[
+                    LifecycleHookSpec(
+                        hook_id="warmup",
+                        phase="startup",
+                        handler_path="",
+                    )
+                ],
+            )
+        )
+    with pytest.raises(ValueError, match="lifecycle_hook phase"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                lifecycle_hooks=[
+                    LifecycleHookSpec(
+                        hook_id="warmup",
+                        phase="boot",  # type: ignore[arg-type]
+                        handler_path="apps.demo.lifecycle.warmup",
+                    )
+                ],
             )
         )
 

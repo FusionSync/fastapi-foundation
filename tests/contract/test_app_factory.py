@@ -214,6 +214,64 @@ def test_default_app_router_rejects_anonymous_request(
     assert response.json()["code"] == "AUTH_INVALID_TOKEN"
 
 
+def test_create_app_runs_declared_lifecycle_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "lifecycle_runtime", lifecycle_hooks=True)
+    app = create_app(Settings(installed_apps=["runtime_apps.lifecycle_runtime.module"]))
+
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+        from runtime_apps.lifecycle_runtime import lifecycle
+
+        assert response.status_code == 200
+        assert lifecycle.LOG == ["startup:lifecycle_runtime:startup"]
+
+    assert lifecycle.LOG == [
+        "startup:lifecycle_runtime:startup",
+        "shutdown:lifecycle_runtime:shutdown",
+    ]
+
+
+def test_create_app_rejects_invalid_lifecycle_hook_signature(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(
+        tmp_path,
+        "bad_lifecycle_runtime",
+        lifecycle_hooks=True,
+        invalid_lifecycle_signature=True,
+    )
+
+    with pytest.raises(ValueError, match="lifecycle hook .* must accept exactly one context"):
+        create_app(Settings(installed_apps=["runtime_apps.bad_lifecycle_runtime.module"]))
+
+
+def test_lifespan_fails_when_startup_hook_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(
+        tmp_path,
+        "failing_lifecycle_runtime",
+        lifecycle_hooks=True,
+        failing_startup_hook=True,
+    )
+    app = create_app(Settings(installed_apps=["runtime_apps.failing_lifecycle_runtime.module"]))
+
+    with pytest.raises(RuntimeError, match="startup lifecycle hook startup failed"):
+        with TestClient(app):
+            pass
+
+
 def _write_runtime_app(
     root: Path,
     name: str,
@@ -223,6 +281,9 @@ def _write_runtime_app(
     raw_response: bool = False,
     missing_response_model: bool = False,
     bad_tenant_model: bool = False,
+    lifecycle_hooks: bool = False,
+    invalid_lifecycle_signature: bool = False,
+    failing_startup_hook: bool = False,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -246,6 +307,39 @@ def _write_runtime_app(
     else:
         _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
     _write(app_dir / "services.py", "class RuntimeService:\n    pass\n")
+    lifecycle_import = ""
+    lifecycle_arg = ""
+    if lifecycle_hooks:
+        startup_signature = "context"
+        startup_body = "LOG.append(f'startup:{context.app_label}:{context.hook_id}')"
+        if invalid_lifecycle_signature:
+            startup_signature = ""
+            startup_body = "LOG.append('invalid')"
+        if failing_startup_hook:
+            startup_body = "raise RuntimeError('startup exploded')"
+        _write(
+            app_dir / "lifecycle.py",
+            "LOG = []\n\n"
+            f"def startup({startup_signature}):\n"
+            f"    {startup_body}\n\n"
+            "async def shutdown(context):\n"
+            "    LOG.append(f'shutdown:{context.app_label}:{context.hook_id}')\n",
+        )
+        lifecycle_import = ", LifecycleHookSpec"
+        lifecycle_arg = (
+            "    lifecycle_hooks=[\n"
+            "        LifecycleHookSpec(\n"
+            "            hook_id='startup',\n"
+            "            phase='startup',\n"
+            f"            handler_path='runtime_apps.{name}.lifecycle.startup',\n"
+            "        ),\n"
+            "        LifecycleHookSpec(\n"
+            "            hook_id='shutdown',\n"
+            "            phase='shutdown',\n"
+            f"            handler_path='runtime_apps.{name}.lifecycle.shutdown',\n"
+            "        ),\n"
+            "    ],\n"
+        )
     if raw_response:
         _write(
             app_dir / "router.py",
@@ -291,7 +385,7 @@ def _write_runtime_app(
         app_dir / "module.py",
         "from runtime_apps.{name}.permissions import PERMISSIONS\n"
         "from runtime_apps.{name}.router import router\n"
-        "from core.apps import AppModule, MigrationSpec\n\n"
+        f"from core.apps import AppModule, MigrationSpec{lifecycle_import}\n\n"
         "module = AppModule(\n"
         "    label={name!r},\n"
         "    version='0.1.0',\n"
@@ -299,6 +393,7 @@ def _write_runtime_app(
         "    models=['runtime_apps.{name}.models'],\n"
         "    migrations=MigrationSpec(path='runtime_apps.{name}.migrations'),\n"
         f"    permissions={permissions_expr},\n"
+        f"{lifecycle_arg}"
         ")\n".format(name=name),
     )
 

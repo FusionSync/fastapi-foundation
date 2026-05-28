@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes、`serve --run` 启动计划和 profile 进程模板。
+- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、`serve --run` 启动计划和 profile 进程模板。
 - Next:
-  - [ ] 为 app lifecycle startup/shutdown hook 定义注册和失败策略。
   - [ ] 将 profile 进程模板接入部署产物生成和运行时配置校验。
+  - [ ] 将 lifecycle hook 执行结果接入结构化日志和启动诊断。
 
 ## 职责
 
@@ -37,6 +37,7 @@ src/core/app/
 - 仍可通过 `request_security_pipeline` 显式覆盖默认请求安全流水线。
 - 暴露健康检查和版本信息。
 - `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
+- `AppModule.lifecycle_hooks` 声明的 startup/shutdown hook 会挂入 FastAPI lifespan；startup 按 dependency-first app 顺序执行，shutdown 按反向顺序执行。
 
 ## 不负责
 
@@ -71,6 +72,7 @@ app = create_app(settings, request_security_pipeline=pipeline)
 
 `core serve --run --dry-run` 会走同一个 `create_app()` 装配路径，输出启动计划、route_count 和 server `ProcessHealth`；去掉 `--dry-run` 后由 CLI 使用同一配置启动 Uvicorn。
 `core config template --profile <profile> --json` 为 `server`、`worker`、`scheduler`、`outbox-dispatcher` 和 `migrate` 输出统一启动命令、replica 建议和验证命令，后续 profile 部署产物必须从这个矩阵派生。
+生命周期 hook handler 必须正好接受一个 `AppLifecycleContext` 参数。startup hook 失败会阻止 lifespan 启动并释放数据库 runtime；shutdown hook 在数据库释放前执行，失败会以 `RuntimeError` 暴露给运行时。
 
 ## 稳定性要求
 
