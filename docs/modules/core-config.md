@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、配置 drift-check、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
+- Done: settings、profile 校验、secret provider、HTTP client credential secret ref、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、配置 drift-check、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
 - Next:
   - [ ] 将运行时配置漂移结果接入告警。
 
@@ -116,7 +116,7 @@ cloud
 
 ## Secret Provider
 
-`Settings.security.jwt_secret_ref` 可以声明外部密钥引用。`create_app(settings, secret_provider=...)` 会先调用 `resolve_settings_secrets()`，再执行启动校验。
+`Settings.security.jwt_secret_ref` 可以声明外部密钥引用。`create_app(settings, secret_provider=...)` 会先调用 `resolve_settings_secrets()`，再执行启动校验。外部 HTTP client 使用 `HttpClientCredentialSpec.secret_ref` 声明 credential 引用，并通过同一个 `SecretProvider` 协议在请求时解析。
 
 第一版提供：
 

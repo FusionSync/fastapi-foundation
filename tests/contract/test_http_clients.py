@@ -6,6 +6,7 @@ from core.http_clients import (
     CoreHttpClient,
     ExternalServiceAppError,
     HttpClientConfig,
+    HttpClientCredentialSpec,
     HttpRequest,
     HttpResponse,
     HttpTransport,
@@ -13,6 +14,7 @@ from core.http_clients import (
     RetryConfig,
 )
 from core.observability import MetricsRegistry
+from core.security import MappingSecretProvider
 
 
 @pytest.mark.asyncio
@@ -51,6 +53,90 @@ async def test_core_http_client_injects_context_headers_timeout_and_user_agent()
     assert request.headers["X-Request-ID"] == "req-1"
     assert request.headers["X-Trace-ID"] == "trace-1"
     assert request.headers["traceparent"] == "trace-1"
+
+
+@pytest.mark.asyncio
+async def test_core_http_client_resolves_declared_secret_header_from_provider() -> None:
+    transport = MockHttpTransport(
+        responses=[HttpResponse(status_code=200, headers={}, json_body={"ok": True})]
+    )
+    client = CoreHttpClient(
+        HttpClientConfig(
+            service_name="oidc",
+            base_url="https://oidc.example",
+            credential=HttpClientCredentialSpec(
+                header_name="Authorization",
+                secret_ref="OIDC_API_TOKEN",
+                value_prefix="Bearer ",
+            ),
+        ),
+        transport=transport,
+        secret_provider=MappingSecretProvider({"OIDC_API_TOKEN": "secret-token"}),
+    )
+
+    await client.get(
+        "/metadata",
+        headers={"Authorization": "Bearer caller-token", "X-Custom": "custom"},
+    )
+
+    request = transport.requests[0]
+    assert request.headers["Authorization"] == "Bearer secret-token"
+    assert request.headers["X-Custom"] == "custom"
+
+
+@pytest.mark.asyncio
+async def test_core_http_client_requires_provider_for_declared_secret_ref() -> None:
+    client = CoreHttpClient(
+        HttpClientConfig(
+            service_name="oidc",
+            base_url="https://oidc.example",
+            credential=HttpClientCredentialSpec(
+                header_name="Authorization",
+                secret_ref="OIDC_API_TOKEN",
+            ),
+        ),
+        transport=MockHttpTransport(
+            responses=[HttpResponse(status_code=200, headers={}, json_body={"ok": True})]
+        ),
+    )
+
+    with pytest.raises(AppError) as missing_provider:
+        await client.get("/metadata")
+
+    assert missing_provider.value.code == "VALIDATION_ERROR"
+    assert missing_provider.value.details == {
+        "service_name": "oidc",
+        "secret_ref": "OIDC_API_TOKEN",
+        "reason": "missing_secret_provider",
+    }
+
+
+@pytest.mark.asyncio
+async def test_core_http_client_rejects_missing_declared_secret() -> None:
+    client = CoreHttpClient(
+        HttpClientConfig(
+            service_name="oidc",
+            base_url="https://oidc.example",
+            credential=HttpClientCredentialSpec(
+                header_name="Authorization",
+                secret_ref="OIDC_API_TOKEN",
+            ),
+        ),
+        transport=MockHttpTransport(
+            responses=[HttpResponse(status_code=200, headers={}, json_body={"ok": True})]
+        ),
+        secret_provider=MappingSecretProvider({}),
+    )
+
+    with pytest.raises(AppError) as missing_secret:
+        await client.get("/metadata")
+
+    assert missing_secret.value.code == "VALIDATION_ERROR"
+    assert missing_secret.value.details == {
+        "service_name": "oidc",
+        "secret_ref": "OIDC_API_TOKEN",
+        "reason": "missing_secret",
+    }
 
 
 @pytest.mark.asyncio
@@ -213,10 +299,16 @@ def test_http_client_config_validates_timeout_retry_and_service_name() -> None:
         RetryConfig(max_attempts=0)
     with pytest.raises(AppError) as invalid_service:
         HttpClientConfig(service_name="", base_url="https://oidc.example")
+    with pytest.raises(AppError) as invalid_credential:
+        HttpClientCredentialSpec(header_name="Authorization\nInjected", secret_ref="token")
+    with pytest.raises(AppError) as invalid_header_space:
+        HttpClientCredentialSpec(header_name="Bad Header", secret_ref="token")
 
     assert invalid_timeout.value.code == "VALIDATION_ERROR"
     assert invalid_attempts.value.code == "VALIDATION_ERROR"
     assert invalid_service.value.code == "VALIDATION_ERROR"
+    assert invalid_credential.value.code == "VALIDATION_ERROR"
+    assert invalid_header_space.value.code == "VALIDATION_ERROR"
 
 
 def test_mock_http_transport_requires_enough_scripted_responses() -> None:

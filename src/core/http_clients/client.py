@@ -5,11 +5,12 @@ from time import monotonic
 from typing import Any
 
 from core.context import get_current_context
+from core.exceptions import AppError
 from core.http_clients.config import HttpClientConfig
 from core.http_clients.errors import ExternalServiceAppError
 from core.http_clients.transport import HttpResponse, HttpTransport
 from core.observability.metrics import MetricsRegistry
-from core.security import redact_sensitive_data
+from core.security import SecretProvider, redact_sensitive_data
 
 
 class CoreHttpClient:
@@ -19,11 +20,13 @@ class CoreHttpClient:
         *,
         transport: HttpTransport,
         metrics: MetricsRegistry | None = None,
+        secret_provider: SecretProvider | None = None,
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self.config = config
         self.transport = transport
         self.metrics = metrics
+        self.secret_provider = secret_provider
         self.clock = clock
 
     async def get(
@@ -109,7 +112,37 @@ class CoreHttpClient:
                 headers["X-Trace-ID"] = context.trace_id
                 headers["traceparent"] = context.trace_id
         headers.update(explicit or {})
+        headers.update(self._credential_headers())
         return headers
+
+    def _credential_headers(self) -> dict[str, str]:
+        credential = self.config.credential
+        if credential is None:
+            return {}
+        if self.secret_provider is None:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP credential secret provider is required",
+                status_code=400,
+                details={
+                    "service_name": self.config.service_name,
+                    "secret_ref": credential.secret_ref,
+                    "reason": "missing_secret_provider",
+                },
+            )
+        secret = self.secret_provider.get_secret(credential.secret_ref)
+        if not secret:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP credential secret was not found",
+                status_code=400,
+                details={
+                    "service_name": self.config.service_name,
+                    "secret_ref": credential.secret_ref,
+                    "reason": "missing_secret",
+                },
+            )
+        return {credential.header_name: f"{credential.value_prefix}{secret}"}
 
     def _timeout_for_attempt(self, budget_started_at: float) -> float:
         if self.config.timeout_budget_seconds is None:

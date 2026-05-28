@@ -2,10 +2,9 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: resilient HTTP client、retry config、错误类型、transport 抽象、timeout budget、metrics 和 trace propagation 已落地。
-- Next:
-  - [ ] 增加按外部服务声明 credential/secret 的 provider 契约。
+- Status: `connected`
+- Done: resilient HTTP client、retry config、错误类型、transport 抽象、timeout budget、metrics、trace propagation 和按外部服务声明 credential/secret 的 provider 契约已落地。
+- Next: _none_
 
 ## 职责
 
@@ -27,6 +26,7 @@ src/core/http_clients/
 - 统一 retry 和 backoff。
 - 自动透传 request_id、trace_id。
 - 统一 User-Agent。
+- 按外部服务声明 credential，并通过 `SecretProvider` 注入。
 - 统一错误转换为 `ExternalServiceAppError`。
 - 支持 mock client 便于测试。
 
@@ -43,16 +43,19 @@ src/core/http_clients/
 - app 不直接创建裸 `httpx.AsyncClient`。
 - 每个外部服务要有命名 client 和独立配置。
 - 默认必须设置 timeout，禁止无限等待。
+- 外部服务 credential 只能声明 secret ref，由 provider 解析后注入请求头，业务 app 不直接读取环境变量或硬编码 secret。
 - 外部调用失败必须带服务名、请求 ID 和脱敏后的错误详情。
 
 ## 当前实现
 
-已落地 `CoreHttpClient`、`HttpClientConfig`、`RetryConfig`、`ExternalServiceAppError` 和 transport 抽象：
+已落地 `CoreHttpClient`、`HttpClientConfig`、`HttpClientCredentialSpec`、`RetryConfig`、`ExternalServiceAppError` 和 transport 抽象：
 
 - `HttpClientConfig` 要求 `service_name`、`base_url` 和正数 `timeout_seconds`，默认 timeout 为 5 秒；可选 `timeout_budget_seconds` 会在重试间共享总超时预算。
+- `HttpClientCredentialSpec(header_name, secret_ref, value_prefix)` 用声明式方式描述外部服务 credential；`CoreHttpClient(secret_provider=...)` 会从 `SecretProvider` 解析 secret，并在显式 headers 之后注入最终 credential header。
 - `CoreHttpClient` 自动注入 `User-Agent`、`X-Request-ID`、`X-Trace-ID` 和 `traceparent`。
 - `RetryConfig` 支持按状态码重试和 transport 异常重试，默认只尝试一次。
 - HTTP 4xx/5xx 或 transport 异常会转换为 `EXTERNAL_SERVICE_ERROR`，HTTP status 为 502。
+- credential 缺少 provider 或 secret 时抛 `VALIDATION_ERROR`，details 包含 `service_name`、`secret_ref` 和稳定 `reason`。
 - 错误 details 包含 service、method、url、request_id、upstream status 或 error type，并通过 `redact_sensitive_data()` 脱敏 request/response body。
 - 可注入 `MetricsRegistry`，记录 `external_http_requests_total{service_name,method,outcome,status_class|error_type}`，标签保持低基数。
 - `MockHttpTransport` 可记录请求并按脚本返回响应或异常，方便 app contract/integration 测试。

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from core.exceptions import AppError
+
+_HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,11 +31,45 @@ class RetryConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class HttpClientCredentialSpec:
+    header_name: str
+    secret_ref: str
+    value_prefix: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.header_name.strip():
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP credential header_name is required",
+                status_code=400,
+            )
+        if _HEADER_NAME_PATTERN.fullmatch(self.header_name) is None:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP credential header_name contains invalid characters",
+                status_code=400,
+            )
+        if not self.secret_ref.strip():
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP credential secret_ref is required",
+                status_code=400,
+            )
+        if "\r" in self.value_prefix or "\n" in self.value_prefix:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP credential value_prefix contains invalid characters",
+                status_code=400,
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class HttpClientConfig:
     service_name: str
     base_url: str
     timeout_seconds: float = 5.0
     timeout_budget_seconds: float | None = None
+    credential: HttpClientCredentialSpec | None = None
     retry: RetryConfig = field(default_factory=RetryConfig)
     user_agent: str = "service-core/0.1"
 
