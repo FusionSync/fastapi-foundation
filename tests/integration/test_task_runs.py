@@ -202,6 +202,59 @@ async def test_sync_task_provider_replays_duplicate_idempotency_key_without_reex
 
 
 @pytest.mark.asyncio
+async def test_sync_task_provider_reports_duplicate_pending_task_without_reexecution(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    calls: list[str] = []
+
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        calls.append(envelope.task_id)
+        return {"value": str(envelope.payload["value"])}
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(
+            TaskRun(
+                id="task-pending-existing",
+                tenant_id="tenant-a",
+                task_type="example.refresh",
+                idempotency_key="example.refresh:tenant-a:pending",
+                status="pending",
+                progress=0,
+                input_payload={"value": "queued"},
+                queue="default",
+                attempt_count=0,
+                max_attempts=3,
+                request_id="req-pending",
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        result = await SyncTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).submit(
+            TaskEnvelope(
+                task_id="task-pending-duplicate",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "queued"},
+                idempotency_key="example.refresh:tenant-a:pending",
+                request_id="req-duplicate",
+            )
+        )
+
+    assert result.status == "pending"
+    assert result.task_id == "task-pending-existing"
+    assert result.metadata["idempotency"] == "in_progress"
+    assert calls == []
+    assert await _task_run_count(session_factory) == 1
+
+
+@pytest.mark.asyncio
 async def test_sync_task_provider_rejects_idempotency_key_payload_conflict(
     monkeypatch: pytest.MonkeyPatch,
     session_factory: async_sessionmaker[AsyncSession],

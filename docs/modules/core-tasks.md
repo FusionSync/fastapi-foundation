@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI 和 scheduler run-once 本地提交链路已落地。
+- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler run-once 本地提交链路和 worker run-once 本地执行链路已落地。
 - Next:
   - [ ] 接 RQ/Celery 或等价队列 provider。
-  - [ ] 串通 worker 运行循环、队列 ack/retry/backoff 和部署 profile 参数。
+  - [ ] 串通 worker 后台循环、队列 ack/retry/backoff 和部署 profile 参数。
 
 ## 职责
 
@@ -98,10 +98,13 @@ finished_at
 - `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed/dead_letter` 状态，不注入时保持原有纯运行时模式。
 - `TaskRunRepository.start_once()` 使用 insert-first + 唯一约束处理 task idempotency；`SyncTaskProvider.submit()` 遇到 duplicate 时返回已有运行记录，不重新执行 handler。
 - `SyncTaskProvider.retry()` 可基于已落库 `TaskRun` 重新执行同一个 `TaskEnvelope`，并复用 tenant lifecycle gate。
+- `TaskRunRepository.claim_next_pending()` 可按 queue 领取一个 `pending` 任务，标记为 `running` 并递增 attempt_count。
+- `SyncTaskProvider.run_task_run()` 可执行已持久化的 `pending/running/failed/dead_letter` 任务记录，复用 `TaskEnvelope`、注册 handler、tenant lifecycle gate 和结果落库逻辑。
 - `core tasks failed list` 输出 `failed/dead_letter` 任务；`core tasks failed retry --task-id <id> --yes` 显式重试注册过的任务处理器。
 - `TaskRunRepository.recover_stale_running()` 可把超过阈值的 `running` 任务恢复为 `failed/dead_letter`，避免 worker 崩溃后幂等键永久被占用。
 - `core tasks running recover --older-than-seconds <n> --yes` 执行恢复，输出被恢复的任务列表。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过 `SyncTaskProvider` 或未来队列 provider，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
+- `core worker --run-once` 加载 app task handler，按 queue 领取一个 `pending` `TaskRun`，执行后持久化为 `succeeded/failed/dead_letter`；当前用于 local/CI 有限轮验证，不替代生产级队列 worker。
 
 后续接入 RQ 或 Celery 时，provider 必须复用 `TaskEnvelope`、`TaskRegistry`、`TaskRun` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。
 

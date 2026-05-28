@@ -113,7 +113,7 @@ migrate health
 `outbox-dispatcher`、`migrate` 的 `ProcessHealth`，输出每个角色的 checks 和 details。
 local profile 可以使用 sync task provider；private/cloud profile 后续接 Redis、队列和 leader lock 时必须复用同一输出结构。
 
-当前 `core worker` 命令提供配置级健康检查，不强制依赖数据库连接；`core scheduler --run-once` 和 `core outbox-dispatcher --run` 可在 local/CI 中执行有限轮运行验证。
+当前 `core worker` 命令提供配置级健康检查，不强制依赖数据库连接；`core worker --run-once`、`core scheduler --run-once` 和 `core outbox-dispatcher --run` 可在 local/CI 中执行有限轮运行验证。
 生产部署应由对应进程定期写入 `process_heartbeats`，再把最新 `ProcessHeartbeatSnapshot` 传入
 `check_process_health()`，使 `heartbeat_status_healthy`、`heartbeat_role_matches` 和
 `heartbeat_fresh` 进入统一 `ProcessHealth`。默认 freshness 窗口为 120 秒，部署平台可以按任务类型调整。

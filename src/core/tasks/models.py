@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.base.models import BaseModel
 
-TaskRunStatus = Literal["running", "succeeded", "failed", "dead_letter"]
+TaskRunStatus = Literal["pending", "running", "succeeded", "failed", "dead_letter"]
 
 
 class TaskRun(BaseModel):

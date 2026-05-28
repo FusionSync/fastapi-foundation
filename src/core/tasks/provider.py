@@ -10,7 +10,7 @@ from core.tasks.registry import TaskEnvelope, TaskRegistry
 from core.tasks.repository import TaskRunRepository
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 
-TaskStatus = Literal["running", "succeeded", "failed", "dead_letter"]
+TaskStatus = Literal["pending", "running", "succeeded", "failed", "dead_letter"]
 TaskHandler = Callable[[TaskEnvelope], Awaitable[dict[str, Any] | None] | dict[str, Any] | None]
 
 
@@ -107,6 +107,38 @@ class SyncTaskProvider:
             task_run=task_run,
         )
 
+    async def run_task_run(
+        self,
+        task_run: TaskRun,
+        *,
+        tenant_status: TenantStatus = "active",
+    ) -> TaskResult:
+        if self.task_repository is None:
+            raise RuntimeError("task_repository is required to run a persisted task run")
+        assert_tenant_operation_allowed(
+            tenant_id=task_run.tenant_id,
+            status=tenant_status,
+            operation="task",
+        )
+        registered = self.task_registry.get(task_run.task_type)
+        if task_run.status == "pending":
+            await self.task_repository.start_pending(task_run)
+        elif task_run.status in {"failed", "dead_letter"}:
+            await self.task_repository.start_retry(task_run)
+        elif task_run.status != "running":
+            return _task_result_from_run(
+                task_run,
+                queue=registered.spec.queue,
+                idempotency="replayed",
+            )
+        envelope = self.task_repository.to_envelope(task_run)
+        return await self._execute(
+            envelope,
+            handler=registered.handler,
+            queue=registered.spec.queue,
+            task_run=task_run,
+        )
+
     async def _execute(
         self,
         envelope: TaskEnvelope,
@@ -164,6 +196,6 @@ def _task_result_from_run(
 
 
 def _task_status(status: str) -> TaskStatus:
-    if status in {"running", "succeeded", "failed", "dead_letter"}:
+    if status in {"pending", "running", "succeeded", "failed", "dead_letter"}:
         return status  # type: ignore[return-value]
     raise ValueError(f"Unknown task run status: {status!r}")

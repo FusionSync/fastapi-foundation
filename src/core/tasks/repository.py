@@ -82,13 +82,55 @@ class TaskRunRepository:
                 ) from None
             self._assert_same_idempotent_request(existing, envelope)
             outcome: TaskStartOutcome = (
-                "in_progress" if existing.status == "running" else "replayed"
+                "in_progress" if existing.status in {"pending", "running"} else "replayed"
             )
             return TaskStartResult(outcome=outcome, task_run=existing)
         return TaskStartResult(outcome="started", task_run=task_run)
 
     async def get(self, task_id: str) -> TaskRun | None:
         return await self.session.get(TaskRun, task_id)
+
+    async def claim_next_pending(
+        self,
+        *,
+        queue: str | None = None,
+        now: datetime | None = None,
+    ) -> TaskRun | None:
+        statement = (
+            select(TaskRun)
+            .where(TaskRun.status == "pending")
+            .order_by(TaskRun.created_at.asc(), TaskRun.id.asc())
+            .limit(1)
+        )
+        if queue is not None:
+            statement = statement.where(TaskRun.queue == queue)
+        result = await self.session.execute(statement)
+        task_run = result.scalars().first()
+        if task_run is None:
+            return None
+        await self.start_pending(task_run, now=now)
+        return task_run
+
+    async def start_pending(
+        self,
+        task_run: TaskRun,
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        if task_run.status != "pending":
+            raise AppError(
+                "CONFLICT",
+                "Only pending task runs can be claimed by a worker",
+                status_code=409,
+            )
+        task_run.status = "running"
+        task_run.progress = 0
+        task_run.attempt_count += 1
+        task_run.result_payload = None
+        task_run.error_message = None
+        task_run.started_at = now or datetime.now(UTC)
+        task_run.finished_at = None
+        await self.session.flush()
 
     async def _get_by_idempotency_key(
         self,

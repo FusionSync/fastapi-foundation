@@ -132,6 +132,49 @@ def test_scheduler_role_can_run_registered_schedule_once(
     assert asyncio.run(_row_count(database_url, ScheduleTriggerLog)) == 1
 
 
+def test_worker_role_can_run_one_pending_task(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _install_worker_app(monkeypatch)
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(
+        _seed_pending_task(
+            database_url,
+            task_id="task-pending-1",
+            payload={"value": "ok"},
+        )
+    )
+
+    exit_code = main(
+        [
+            "worker",
+            "--run-once",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_worker_app",
+            "--queue",
+            "default",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    task = asyncio.run(_task_run(database_url, "task-pending-1"))
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "worker"
+    assert payload["role"] == "worker"
+    assert payload["claimed"] == 1
+    assert payload["task_result"]["task_id"] == "task-pending-1"
+    assert payload["task_result"]["status"] == "succeeded"
+    assert task.status == "succeeded"
+    assert task.attempt_count == 1
+    assert task.result_payload == {"value": "ok", "worker": "sync"}
+
+
 def test_local_deployment_smoke_passes(capsys) -> None:
     exit_code = main(["smoke", "--profile", "local", "--json"])
 
@@ -221,6 +264,38 @@ async def _create_schema(database_url: str) -> None:
         await engine.dispose()
 
 
+async def _seed_pending_task(
+    database_url: str,
+    *,
+    task_id: str,
+    payload: dict[str, object],
+) -> None:
+    engine = create_async_engine(database_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            session.add(
+                TaskRun(
+                    id=task_id,
+                    tenant_id="tenant-a",
+                    task_type="example.refresh",
+                    idempotency_key=f"example.refresh:tenant-a:{task_id}",
+                    status="pending",
+                    progress=0,
+                    input_payload=payload,
+                    queue="default",
+                    attempt_count=0,
+                    max_attempts=3,
+                    request_id="req-worker",
+                )
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
 async def _event_status(database_url: str, event_id: str) -> str:
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -229,6 +304,19 @@ async def _event_status(database_url: str, event_id: str) -> str:
             event = await session.get(OutboxEvent, event_id)
             assert event is not None
             return event.status
+    finally:
+        await engine.dispose()
+
+
+async def _task_run(database_url: str, task_id: str) -> TaskRun:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            task_run = await session.get(TaskRun, task_id)
+            assert task_run is not None
+            session.expunge(task_run)
+            return task_run
     finally:
         await engine.dispose()
 
@@ -303,3 +391,26 @@ def _install_scheduler_app(monkeypatch) -> None:
         ],
     )
     monkeypatch.setitem(sys.modules, "fake_operations_scheduler_app", app_module)
+
+
+def _install_worker_app(monkeypatch) -> None:
+    handler_module = types.ModuleType("fake_operations_worker_handlers")
+
+    def refresh(envelope) -> dict[str, str]:
+        return {"value": envelope.payload["value"], "worker": "sync"}
+
+    handler_module.refresh = refresh
+    monkeypatch.setitem(sys.modules, "fake_operations_worker_handlers", handler_module)
+
+    app_module = types.ModuleType("fake_operations_worker_app")
+    app_module.module = AppModule(
+        label="operations_worker_app",
+        version="0.1.0",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_operations_worker_handlers.refresh",
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_operations_worker_app", app_module)

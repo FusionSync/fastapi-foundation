@@ -53,6 +53,12 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
     for role in ("serve", "worker", "scheduler", "outbox-dispatcher"):
         role_parser = subparsers.add_parser(role)
         role_parser.add_argument("--json", action="store_true", dest="as_json")
+        if role == "worker":
+            role_parser.add_argument("--run-once", action="store_true")
+            role_parser.add_argument("--database-url")
+            role_parser.add_argument("--installed-app", action="append", default=[])
+            role_parser.add_argument("--queue", default="default")
+            role_parser.add_argument("--tenant-status", default="active")
         if role == "scheduler":
             role_parser.add_argument("--run-once", action="store_true")
             role_parser.add_argument("--database-url")
@@ -99,6 +105,8 @@ def _handle_backup_check(args: argparse.Namespace) -> int:
 
 def _handle_process_role(args: argparse.Namespace) -> int:
     role = "server" if args.role == "serve" else args.role
+    if role == "worker" and args.run_once:
+        return _handle_worker_run_once(args)
     if role == "scheduler" and args.run_once:
         return _handle_scheduler_run_once(args)
     if role == "outbox-dispatcher" and args.run:
@@ -110,6 +118,36 @@ def _handle_process_role(args: argparse.Namespace) -> int:
     }
     print_payload(payload, as_json=args.as_json)
     return 0 if result.ok else 1
+
+
+def _handle_worker_run_once(args: argparse.Namespace) -> int:
+    try:
+        payload = asyncio.run(
+            _run_worker_once(
+                database_url=_database_url(args.database_url),
+                app_modules=installed_apps(args.installed_app),
+                queue=args.queue,
+                tenant_status=args.tenant_status,
+            )
+        )
+    except Exception as exc:
+        print_payload(
+            {
+                "ok": False,
+                "command": args.role,
+                "role": "worker",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+            as_json=args.as_json,
+        )
+        return 1
+    payload = {
+        **payload,
+        "command": args.role,
+        "role": "worker",
+    }
+    print_payload(payload, as_json=args.as_json)
+    return 0 if bool(payload.get("ok")) else 1
 
 
 def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
@@ -188,6 +226,42 @@ def _handle_outbox_dispatcher_run(args: argparse.Namespace) -> int:
     }
     print_payload(payload, as_json=args.as_json)
     return 0 if result.ok else 1
+
+
+async def _run_worker_once(
+    *,
+    database_url: str,
+    app_modules: list[str],
+    queue: str,
+    tenant_status: str,
+) -> dict[str, object]:
+    app_registry = AppRegistry(app_modules).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            if uow.session is None:
+                return {"ok": False, "error": "database session was not initialized"}
+            repository = TaskRunRepository(uow.session)
+            task_run = await repository.claim_next_pending(queue=queue)
+            if task_run is None:
+                return {"ok": True, "claimed": 0, "queue": queue, "task_result": None}
+            result = await SyncTaskProvider(
+                task_registry,
+                task_repository=repository,
+            ).run_task_run(
+                task_run,
+                tenant_status=tenant_status,  # type: ignore[arg-type]
+            )
+            return {
+                "ok": result.ok,
+                "claimed": 1,
+                "queue": queue,
+                "task_result": result.to_dict(),
+            }
+    finally:
+        await engine.dispose()
 
 
 async def _run_scheduler_once(
