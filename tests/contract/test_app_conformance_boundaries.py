@@ -112,6 +112,45 @@ def test_check_app_accepts_valid_background_handler_signatures(
     assert result.errors == []
 
 
+def test_check_app_accepts_declared_error_codes(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "[ErrorCodeSpec("
+            "'EXAMPLE_NOT_READY', 409, 'example is not ready', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is True
+    assert result.errors == []
+
+
+def test_check_app_rejects_error_code_owner_mismatch(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "[ErrorCodeSpec("
+            "'EXAMPLE_NOT_READY', 409, 'example is not ready', "
+            "owner_module='other_domain', details_schema={}, deprecated=False"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "error code EXAMPLE_NOT_READY owner_module must match app label 'example_domain'"
+        in result.errors
+    )
+
+
 def test_check_app_rejects_undeclared_public_api_dependency(isolated_apps: Path) -> None:
     _write_app(isolated_apps, "other_domain")
     _write_app(
@@ -209,6 +248,34 @@ def test_check_apps_rejects_circular_dependency(isolated_apps: Path) -> None:
     )
 
 
+def test_check_apps_rejects_duplicate_declared_error_codes(isolated_apps: Path) -> None:
+    shared_code = (
+        "[ErrorCodeSpec("
+        "'SHARED_APP_ERROR', 409, 'shared error', "
+        "owner_module={owner!r}, details_schema={{}}, deprecated=False"
+        ")]"
+    )
+    _write_app(
+        isolated_apps,
+        "first_domain",
+        error_codes=shared_code.format(owner="first_domain"),
+    )
+    _write_app(
+        isolated_apps,
+        "second_domain",
+        error_codes=shared_code.format(owner="second_domain"),
+    )
+
+    results = check_apps(["apps.first_domain.module", "apps.second_domain.module"])
+
+    assert any(
+        "duplicate app error code SHARED_APP_ERROR declared by apps: "
+        "first_domain, second_domain" in error
+        for result in results
+        for error in result.errors
+    )
+
+
 def _write_app(
     root: Path,
     name: str,
@@ -218,6 +285,7 @@ def _write_app(
     service_import: str = "",
     event_handler_body: str | None = None,
     task_handler_body: str | None = None,
+    error_codes: str | None = None,
 ) -> None:
     app_dir = root / "apps" / name
     migrations_dir = app_dir / "migrations"
@@ -253,6 +321,8 @@ def _write_app(
         app_module_imports.append("EventHandlerSpec")
     if task_handler_body is not None:
         app_module_imports.append("TaskHandlerSpec")
+    error_code_import = "from core.exceptions import ErrorCodeSpec\n" if error_codes else ""
+    error_codes_arg = f"    error_codes={error_codes},\n" if error_codes else ""
     event_handlers = (
         "    event_handlers=[\n"
         "        EventHandlerSpec(\n"
@@ -277,6 +347,7 @@ def _write_app(
     _write(
         app_dir / "module.py",
         f"from core.apps import {', '.join(app_module_imports)}\n"
+        f"{error_code_import}"
         f"from apps.{name}.permissions import PERMISSIONS\n"
         f"from apps.{name}.router import router\n\n"
         "module = AppModule(\n"
@@ -287,6 +358,7 @@ def _write_app(
         f"    models=['apps.{name}.models'],\n"
         f"    migrations=MigrationSpec(path='apps.{name}.migrations'),\n"
         "    permissions=PERMISSIONS,\n"
+        f"{error_codes_arg}"
         f"{event_handlers}"
         f"{task_handlers}"
         f"    public_api=['apps.{name}.public_api'],\n"

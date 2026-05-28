@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、rate-limit middleware、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、错误码 metadata/app 注册检查、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、rate-limit middleware、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
 
@@ -51,6 +51,7 @@ src/core/testing/
 - App runtime readiness contract test 必须覆盖 runtime registry counts、provider readiness 合并和 provider 失败时的统一 startup diagnostics。
 - App conformance contract test 必须覆盖 `FileResponse`/`StreamingResponse` 例外，以及 `JSONResponse` 不能绕过 typed envelope 的拒绝路径。
 - App conformance contract test 必须覆盖 admin metadata dotted path 诊断和 migration manifest metadata 诊断，错误消息要能定位 app、metadata 类型、id/path 和具体字段。
+- App conformance contract test 必须覆盖业务错误码 metadata、owner/app label 一致性、跨 app 重复声明和 runtime 注册。
 
 ## 最小测试矩阵
 
@@ -80,4 +81,5 @@ pytest tests/contract/test_app_conformance.py
 - schema 继承 core schema 基类。
 - tenant-scoped model 只能通过 tenant-safe repository/query 访问。
 - app 权限、事件、任务、调度定义可被 registry 收集。
+- app 错误码声明 metadata 完整，并会在 `AppRegistry.load()` 时注册到统一 exception registry。
 - admin route/widget/model metadata dotted path 可导入，migration manifest metadata 可解析且通过字段级校验。

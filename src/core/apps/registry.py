@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from core.apps.capabilities import DEFAULT_RUNTIME_CAPABILITIES
 from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
+from core.exceptions.codes import register_error_codes, validate_error_code_spec
 
 CORE_FRAMEWORK_VERSION = "0.1.0"
 
@@ -163,6 +164,15 @@ class AppRegistry:
                 errors=gate_errors,
             )
             raise ValueError("; ".join(gate_errors))
+        try:
+            self._register_app_error_codes(validation.ordered_modules)
+        except ValueError as exc:
+            self._set_diagnostics(
+                modules=diagnostics,
+                load_order=[module.label for module in validation.ordered_modules],
+                errors=[str(exc)],
+            )
+            raise
         self.modules = validation.ordered_modules
         self._set_diagnostics(
             modules=diagnostics,
@@ -235,7 +245,13 @@ class AppRegistry:
                     f"App {module.label!r} missing capabilities: "
                     f"{', '.join(missing_capabilities)}"
                 )
+        errors.extend(_error_code_gate_errors(modules))
         return errors
+
+    def _register_app_error_codes(self, modules: list[AppModule]) -> None:
+        specs = [spec for module in modules for spec in module.error_codes]
+        if specs:
+            register_error_codes(*specs)
 
 
 def _is_core_version_compatible(core_version: str, min_core_version: str | None) -> bool:
@@ -258,3 +274,37 @@ def _module_has_gate_error(module: AppModule, errors: list[str]) -> bool:
 
 def _module_gate_errors(module: AppModule, errors: list[str]) -> list[str]:
     return [error for error in errors if f"App {module.label!r} " in error]
+
+
+def _error_code_gate_errors(modules: list[AppModule]) -> list[str]:
+    errors: list[str] = []
+    declarations: dict[str, list[str]] = {}
+    for module in modules:
+        seen_by_module: set[str] = set()
+        for spec in module.error_codes:
+            try:
+                validate_error_code_spec(spec)
+            except ValueError as exc:
+                errors.append(f"App {module.label!r} error code {spec.code}: {exc}")
+                continue
+            if spec.code in seen_by_module:
+                errors.append(f"App {module.label!r} duplicate app error code {spec.code}")
+            seen_by_module.add(spec.code)
+            if spec.owner_module != module.label:
+                errors.append(
+                    f"App {module.label!r} error code {spec.code} owner_module "
+                    "must match app label"
+                )
+            declarations.setdefault(spec.code, []).append(module.label)
+
+    for code, labels in declarations.items():
+        unique_labels = sorted(set(labels))
+        if len(unique_labels) <= 1:
+            continue
+        declared_by = ", ".join(unique_labels)
+        for label in unique_labels:
+            errors.append(
+                f"App {label!r} duplicate app error code {code} declared by apps: "
+                f"{declared_by}"
+            )
+    return errors

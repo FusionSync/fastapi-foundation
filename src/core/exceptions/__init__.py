@@ -6,6 +6,7 @@ from core.exceptions.codes import (
     iter_error_codes,
     register_error_codes,
     require_error_code,
+    validate_error_code_spec,
 )
 from core.exceptions.handlers import register_exception_handlers
 
@@ -18,4 +19,5 @@ __all__ = [
     "register_error_codes",
     "register_exception_handlers",
     "require_error_code",
+    "validate_error_code_spec",
 ]

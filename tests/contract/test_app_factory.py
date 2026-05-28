@@ -9,6 +9,7 @@ from core.app import create_app
 from core.apps.conformance import check_app
 from core.cache import MemoryCacheProvider
 from core.config import Settings
+from core.exceptions import AppError, get_error_code
 from core.operations import DependencyProbeResult
 from core.rate_limit import CacheRateLimiter, RateLimitRegistry, RateLimitRule
 
@@ -151,6 +152,29 @@ def test_create_app_rejects_non_conforming_installed_app(
 
     with pytest.raises(ValueError, match="App conformance failed"):
         create_app(Settings(installed_apps=["runtime_apps.bad_runtime.module"]))
+
+
+def test_create_app_registers_declared_app_error_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(
+        tmp_path,
+        "runtime_errors",
+        error_codes=(
+            "[ErrorCodeSpec("
+            "'RUNTIME_NOT_READY', 409, 'runtime not ready', "
+            "owner_module='runtime_errors', details_schema={}, deprecated=False"
+            ")]"
+        ),
+    )
+
+    create_app(Settings(installed_apps=["runtime_apps.runtime_errors.module"]))
+
+    assert get_error_code("RUNTIME_NOT_READY").owner_module == "runtime_errors"
+    assert AppError("RUNTIME_NOT_READY").code == "RUNTIME_NOT_READY"
 
 
 def test_create_app_rejects_router_without_core_security_policy(
@@ -532,6 +556,7 @@ def _write_runtime_app(
     invalid_lifecycle_signature: bool = False,
     failing_startup_hook: bool = False,
     required_capabilities: list[str] | None = None,
+    error_codes: str | None = None,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -684,6 +709,8 @@ def _write_runtime_app(
     required_capabilities_arg = ""
     if required_capabilities:
         required_capabilities_arg = f"    required_capabilities={required_capabilities!r},\n"
+    error_code_import = "from core.exceptions import ErrorCodeSpec\n" if error_codes else ""
+    error_codes_arg = f"    error_codes={error_codes},\n" if error_codes else ""
     admin_import = ""
     admin_arg = ""
     if bad_admin_metadata:
@@ -703,6 +730,7 @@ def _write_runtime_app(
     module_imports = (
         f"from runtime_apps.{name}.permissions import PERMISSIONS\n"
         f"from runtime_apps.{name}.router import router\n"
+        f"{error_code_import}"
         f"from core.apps import AppModule, MigrationSpec{lifecycle_import}\n"
     )
     if admin_import:
@@ -718,6 +746,7 @@ def _write_runtime_app(
         f"    migrations=MigrationSpec(path='runtime_apps.{name}.migrations'),\n"
         f"    permissions={permissions_expr},\n"
         f"{required_capabilities_arg}"
+        f"{error_codes_arg}"
         f"{admin_arg}"
         f"{lifecycle_arg}"
         ")\n"

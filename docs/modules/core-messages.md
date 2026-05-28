@@ -57,6 +57,7 @@ QUOTA_EXCEEDED -> 已超出配额限制
 
 - 默认 `zh-CN` catalog 由 `core.exceptions` 错误码 registry 自动生成。
 - 默认 `en-US` catalog 覆盖核心错误码的英文文案。
+- 业务 app 错误码通过 `AppModule.error_codes` 注册后，未显式配置 message catalog 时会回退到对应 `ErrorCodeSpec.default_message`。
 - `MessageRegistry.register()` 按 `locale + code` 检查重复，除非显式 `replace=True`。
 - `MessageCatalog` 会拒绝空 locale、空 owner、空 message，以及包含 password、token、secret 等敏感词的文案。
 - `core.serialization.fail()` 在未传入 message 时会自动根据 code 和 locale 解析文案。

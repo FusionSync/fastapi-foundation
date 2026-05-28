@@ -12,6 +12,7 @@ from core.admin.specs import (
     AdminPermissionSpec,
     AdminRouteSpec,
 )
+from core.exceptions.codes import ErrorCodeSpec, validate_error_code_spec
 from core.permissions.specs import PermissionSpec
 
 _LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -69,6 +70,7 @@ class AppModule:
     models: list[str] = field(default_factory=list)
     migrations: MigrationSpec | None = None
     permissions: list[PermissionSpec] = field(default_factory=list)
+    error_codes: list[ErrorCodeSpec] = field(default_factory=list)
     event_handlers: list[EventHandlerSpec] = field(default_factory=list)
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
     schedules: list[ScheduleSpec] = field(default_factory=list)
@@ -102,6 +104,7 @@ def validate_app_module(module: AppModule) -> AppModule:
         module.provided_capabilities,
         f"App {module.label!r} provided_capabilities",
     )
+    _validate_list(module.error_codes, f"App {module.label!r} error_codes")
     for dependency in module.dependencies:
         if not _LABEL_PATTERN.match(dependency):
             raise ValueError(f"App {module.label!r} has invalid dependency: {dependency!r}")
@@ -126,6 +129,13 @@ def validate_app_module(module: AppModule) -> AppModule:
     for permission in module.permissions:
         if not isinstance(permission, PermissionSpec):
             raise TypeError(f"App {module.label!r} permission must be PermissionSpec")
+    for error_code in module.error_codes:
+        if not isinstance(error_code, ErrorCodeSpec):
+            raise TypeError(f"App {module.label!r} error_code must be ErrorCodeSpec")
+        try:
+            validate_error_code_spec(error_code)
+        except ValueError as exc:
+            raise ValueError(f"App {module.label!r} error_code {error_code.code}: {exc}") from exc
     for event_handler in module.event_handlers:
         if not isinstance(event_handler, EventHandlerSpec):
             raise TypeError(f"App {module.label!r} event_handler must be EventHandlerSpec")

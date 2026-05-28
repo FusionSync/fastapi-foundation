@@ -16,6 +16,7 @@ from core.apps.module import AppModule, validate_app_module
 from core.base import get_router_security_policy
 from core.base.models import TenantScopedModel
 from core.db.constraints import check_tenant_scoped_model
+from core.exceptions.codes import validate_error_code_spec
 from core.migrations.manifest import MigrationManifest
 from core.serialization import Envelope, ListEnvelope
 
@@ -82,6 +83,7 @@ def check_app(module_path: str) -> AppCheckResult:
     package_dir = Path(module_file).resolve().parent
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
+    _check_error_code_metadata(app_module, result)
     _check_admin_metadata(app_module, result)
     _check_background_handler_signatures(app_module, result)
     _check_lifecycle_hook_signatures(app_module, result)
@@ -110,6 +112,7 @@ def check_apps(module_paths: list[str]) -> list[AppCheckResult]:
     for label, errors in validation.errors_by_label.items():
         for result in results_by_label.get(label, []):
             result.errors.extend(errors)
+    _check_duplicate_app_error_codes(modules_by_result)
     return results
 
 
@@ -177,6 +180,41 @@ def _check_migration_metadata(app_module: AppModule, result: AppCheckResult) -> 
             )
         for violation in raw_manifest.validate():
             result.errors.append(f"migration metadata {manifest_module_path} {violation}")
+
+
+def _check_error_code_metadata(app_module: AppModule, result: AppCheckResult) -> None:
+    seen: set[str] = set()
+    for spec in app_module.error_codes:
+        try:
+            validate_error_code_spec(spec)
+        except ValueError as exc:
+            result.errors.append(f"error code {spec.code} invalid metadata: {exc}")
+            continue
+        if spec.code in seen:
+            result.errors.append(f"duplicate app error code {spec.code}")
+        seen.add(spec.code)
+        if spec.owner_module != app_module.label:
+            result.errors.append(
+                f"error code {spec.code} owner_module must match app label "
+                f"{app_module.label!r}"
+            )
+
+
+def _check_duplicate_app_error_codes(
+    modules_by_result: list[tuple[AppCheckResult, AppModule]],
+) -> None:
+    declarations: dict[str, list[tuple[AppCheckResult, AppModule]]] = {}
+    for result, app_module in modules_by_result:
+        for spec in app_module.error_codes:
+            declarations.setdefault(spec.code, []).append((result, app_module))
+
+    for code, declared_by in declarations.items():
+        labels = sorted({app_module.label for _, app_module in declared_by})
+        if len(labels) <= 1:
+            continue
+        error = f"duplicate app error code {code} declared by apps: {', '.join(labels)}"
+        for result, _ in declared_by:
+            result.errors.append(error)
 
 
 def _check_admin_metadata(app_module: AppModule, result: AppCheckResult) -> None:

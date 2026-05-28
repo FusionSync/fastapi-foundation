@@ -15,6 +15,7 @@ from core.apps import (
 )
 from core.base import create_router
 from core.config import Settings
+from core.exceptions import AppError, ErrorCodeSpec, get_error_code
 from core.permissions import PermissionSpec
 
 
@@ -263,6 +264,92 @@ def test_registry_diagnostics_include_capability_metadata(monkeypatch: pytest.Mo
         ],
         "errors": [],
     }
+
+
+def test_registry_registers_declared_app_error_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = types.ModuleType("fake_app_with_error_codes")
+    fake.module = AppModule(
+        label="demo_errors",
+        version="0.1.0",
+        error_codes=[
+            ErrorCodeSpec(
+                "DEMO_REGISTRY_NOT_READY",
+                409,
+                "demo is not ready",
+                owner_module="demo_errors",
+                details_schema={},
+                deprecated=False,
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_with_error_codes", fake)
+
+    AppRegistry(["fake_app_with_error_codes"]).load()
+
+    assert get_error_code("DEMO_REGISTRY_NOT_READY").owner_module == "demo_errors"
+    assert AppError("DEMO_REGISTRY_NOT_READY").code == "DEMO_REGISTRY_NOT_READY"
+
+
+def test_registry_rejects_error_code_owner_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = types.ModuleType("fake_app_with_wrong_error_owner")
+    fake.module = AppModule(
+        label="demo_errors",
+        version="0.1.0",
+        error_codes=[
+            ErrorCodeSpec(
+                "DEMO_WRONG_OWNER",
+                409,
+                "wrong owner",
+                owner_module="other_errors",
+                details_schema={},
+                deprecated=False,
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_with_wrong_error_owner", fake)
+
+    with pytest.raises(ValueError, match="owner_module must match app label"):
+        AppRegistry(["fake_app_with_wrong_error_owner"]).load()
+
+
+def test_registry_rejects_duplicate_declared_error_codes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = types.ModuleType("fake_first_error_app")
+    first.module = AppModule(
+        label="first_errors",
+        version="0.1.0",
+        error_codes=[
+            ErrorCodeSpec(
+                "DEMO_SHARED_REGISTRY_ERROR",
+                409,
+                "shared",
+                owner_module="first_errors",
+                details_schema={},
+                deprecated=False,
+            )
+        ],
+    )
+    second = types.ModuleType("fake_second_error_app")
+    second.module = AppModule(
+        label="second_errors",
+        version="0.1.0",
+        error_codes=[
+            ErrorCodeSpec(
+                "DEMO_SHARED_REGISTRY_ERROR",
+                409,
+                "shared",
+                owner_module="second_errors",
+                details_schema={},
+                deprecated=False,
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_first_error_app", first)
+    monkeypatch.setitem(sys.modules, "fake_second_error_app", second)
+
+    with pytest.raises(ValueError, match="duplicate app error code DEMO_SHARED_REGISTRY_ERROR"):
+        AppRegistry(["fake_first_error_app", "fake_second_error_app"]).load()
 
 
 def test_runtime_capabilities_are_derived_from_profile_and_providers() -> None:
