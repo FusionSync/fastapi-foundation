@@ -3,6 +3,7 @@
 ## 职责
 
 Files 负责文件元数据、上传、下载、版本和 storage provider 调用。
+它通过 `platform_apps.files.module` 暴露 `AppModule`，统一注册模型、权限、迁移包、router 和 public_api。
 
 ## 核心模型
 
@@ -61,5 +62,6 @@ DELETE /api/v1/files/{id}
 - 下载调用方可以传入 `AuthorizationService` 和 `user_id`，进一步要求 `file.download` 权限；拒绝时会复用权限模块的 `authorization.denied` 审计。
 - `FileService.delete_file()` 将 metadata 标记为 `deleted`，并删除 storage object。
 - 上传对象 key 使用 `tenants/{tenant_id}/files/{file_id}/original.bin`，保证对象存储可按 tenant 归档和恢复。
+- `platform_apps.files.permissions.PERMISSIONS` 注册 `file.upload`、`file.download`、`file.delete` 租户权限。
 
 当前 owner 校验是权限接入前的最小门禁。已接入的 `file.download` 授权用于平台文件权限；业务资源级文件下载后续可以在同一入口改用对应业务资源权限。

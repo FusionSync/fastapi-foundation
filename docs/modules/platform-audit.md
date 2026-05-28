@@ -3,6 +3,7 @@
 ## 职责
 
 Audit 负责记录关键操作、授权失败、文件访问、任务执行和业务资源变更。
+它通过 `platform_apps.audit.module` 暴露 `AppModule`，统一注册模型、权限、迁移包、router 和 public_api。
 
 ## 核心模型
 
@@ -62,5 +63,6 @@ AuditLog
 - `RoleGrantService` 可注入 `AuditService`，角色授予和撤销会写 `role.granted` / `role.revoked` 审计。
 - `AccountsService` 可注入 `AuditService`，禁用用户会写 `user.disabled` 审计。
 - `TenantLifecycleService` 可注入 `AuditService`，租户创建、暂停、恢复、删除和归档会写对应 `tenant.*` 审计。
+- `platform_apps.audit.permissions.PERMISSIONS` 注册 `audit_log.read` 和 `audit_log.export` 平台权限。
 
 当前 hash chain 是数据库内轻量链路，不替代外部 WORM 或 SIEM。生产环境如果有合规要求，应把审计导出和不可篡改存储作为部署 profile 能力继续接上。

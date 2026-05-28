@@ -1,5 +1,6 @@
 from platform_apps.accounts.auth import AccountsAuthSessionStore
 from platform_apps.accounts.models import ExternalIdentity, User, UserCredential, UserSession
+from platform_apps.accounts.module import module
 from platform_apps.accounts.services import AccountsService
 
 __all__ = [
@@ -9,4 +10,5 @@ __all__ = [
     "User",
     "UserCredential",
     "UserSession",
+    "module",
 ]

@@ -6,6 +6,8 @@ import pytest
 
 from core.apps.conformance import check_app, check_apps
 
+REAL_PLATFORM_APPS_DIR = Path(__file__).resolve().parents[2] / "src" / "platform_apps"
+
 
 @pytest.fixture
 def isolated_apps(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
@@ -214,4 +216,7 @@ def _purge_imported_apps() -> None:
         if name == "apps" or name.startswith("apps."):
             del sys.modules[name]
         if name == "platform_apps" or name.startswith("platform_apps."):
+            module_file = getattr(sys.modules[name], "__file__", None)
+            if module_file and Path(module_file).resolve().is_relative_to(REAL_PLATFORM_APPS_DIR):
+                continue
             del sys.modules[name]
