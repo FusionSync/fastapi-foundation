@@ -1,6 +1,7 @@
 from core.context.background import (
     BackgroundContext,
     outbox_background_context,
+    scheduler_background_context,
     task_background_context,
     use_background_context,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "get_current_context",
     "outbox_background_context",
     "reset_current_context",
+    "scheduler_background_context",
     "set_current_context",
     "task_background_context",
     "use_background_context",

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from core.context import scheduler_background_context, use_background_context
 from core.locks import LockProvider
 from core.scheduler.registry import ScheduleRegistry
 from core.scheduler.repository import ScheduleTriggerRepository
@@ -84,55 +85,62 @@ class ManualScheduleProvider:
         *,
         tenant_status: TenantStatus = "active",
     ) -> ScheduleTriggerResult:
-        registered = self.schedule_registry.get(request.schedule_id)
         planned_at = _ensure_aware(request.planned_at or datetime.now(UTC))
-        triggered_at = datetime.now(UTC)
-        idempotency_key = _idempotency_key(
-            schedule_id=request.schedule_id,
-            tenant_id=request.tenant_id,
-            planned_at=planned_at,
-        )
-        task_id = _task_id(idempotency_key)
-        task_result = await self.task_provider.submit(
-            TaskEnvelope(
-                task_id=task_id,
-                task_type=registered.spec.task_type,
-                tenant_id=request.tenant_id,
-                payload=dict(request.payload),
-                idempotency_key=idempotency_key,
-                request_id=request.request_id,
-            ),
-            tenant_status=tenant_status,
-        )
-        metadata: dict[str, object] = {
-            "provider": "manual",
-            "trigger": registered.spec.trigger,
-            "misfire_policy": registered.spec.misfire_policy,
-        }
-        if self.trigger_repository is not None:
-            history = await self.trigger_repository.record_result(
+        with use_background_context(
+            scheduler_background_context(
                 schedule_id=request.schedule_id,
                 tenant_id=request.tenant_id,
+                request_id=request.request_id,
+            )
+        ):
+            registered = self.schedule_registry.get(request.schedule_id)
+            triggered_at = datetime.now(UTC)
+            idempotency_key = _idempotency_key(
+                schedule_id=request.schedule_id,
+                tenant_id=request.tenant_id,
+                planned_at=planned_at,
+            )
+            task_id = _task_id(idempotency_key)
+            task_result = await self.task_provider.submit(
+                TaskEnvelope(
+                    task_id=task_id,
+                    task_type=registered.spec.task_type,
+                    tenant_id=request.tenant_id,
+                    payload=dict(request.payload),
+                    idempotency_key=idempotency_key,
+                    request_id=request.request_id,
+                ),
+                tenant_status=tenant_status,
+            )
+            metadata: dict[str, object] = {
+                "provider": "manual",
+                "trigger": registered.spec.trigger,
+                "misfire_policy": registered.spec.misfire_policy,
+            }
+            if self.trigger_repository is not None:
+                history = await self.trigger_repository.record_result(
+                    schedule_id=request.schedule_id,
+                    tenant_id=request.tenant_id,
+                    task_id=task_id,
+                    task_type=registered.spec.task_type,
+                    planned_at=planned_at,
+                    triggered_at=triggered_at,
+                    request_id=request.request_id,
+                    status=task_result.status,
+                    error_message=task_result.error_message,
+                    details={"task_ok": task_result.ok},
+                )
+                metadata["trigger_history"] = history.outcome
+                metadata["trigger_log_id"] = history.log.id
+            return ScheduleTriggerResult(
+                schedule_id=request.schedule_id,
                 task_id=task_id,
                 task_type=registered.spec.task_type,
                 planned_at=planned_at,
                 triggered_at=triggered_at,
-                request_id=request.request_id,
-                status=task_result.status,
-                error_message=task_result.error_message,
-                details={"task_ok": task_result.ok},
+                task_result=task_result,
+                metadata=metadata,
             )
-            metadata["trigger_history"] = history.outcome
-            metadata["trigger_log_id"] = history.log.id
-        return ScheduleTriggerResult(
-            schedule_id=request.schedule_id,
-            task_id=task_id,
-            task_type=registered.spec.task_type,
-            planned_at=planned_at,
-            triggered_at=triggered_at,
-            task_result=task_result,
-            metadata=metadata,
-        )
 
 
 class LockedScheduleProvider:

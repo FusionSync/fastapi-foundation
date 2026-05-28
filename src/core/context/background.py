@@ -53,6 +53,20 @@ def task_background_context(
     )
 
 
+def scheduler_background_context(
+    *,
+    schedule_id: str,
+    tenant_id: str,
+    request_id: str,
+) -> BackgroundContext:
+    return BackgroundContext(
+        request_id=request_id or f"scheduler:{schedule_id}",
+        tenant_id=tenant_id,
+        route=f"scheduler:{schedule_id}",
+        method="SCHEDULER",
+    )
+
+
 def outbox_background_context(
     *,
     event_id: str,

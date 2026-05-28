@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播、try/finally reset，以及 task/outbox handler 背景上下文 handoff 已落地。
+- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播、try/finally reset，以及 task/outbox/scheduler 背景上下文 handoff 已落地。
 - Next:
-  - [ ] 定义 scheduler job 的 context handoff。
   - [ ] 将 context 字段接入结构化日志和审计默认字段。
 
 ## 职责
@@ -60,6 +59,7 @@ started_at
 - 后台任务必须显式注入 `BackgroundContext`，不能隐式继承上一个 HTTP 请求上下文。
 - task handler 执行时由 `TaskEnvelope` 构造冻结背景上下文，route 为 `task:{task_type}`，method 为 `TASK`，执行后必须 reset。
 - outbox handler 执行时由 `EventEnvelope` 和 payload 中的 `request_id/actor_id/tenant_id` 构造冻结背景上下文，route 为 `outbox:{event_type}:v{event_version}`，method 为 `OUTBOX`，执行后必须 reset。
+- scheduler trigger 执行时由 `ScheduleTriggerRequest` 构造冻结背景上下文，route 为 `scheduler:{schedule_id}`，method 为 `SCHEDULER`，执行后必须 reset。
 
 ## 风险
 

@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.apps import AppModule, AppRegistry, ScheduleSpec, TaskHandlerSpec
 from core.base.models import BaseModel
+from core.context import (
+    RequestContext,
+    get_current_context,
+    reset_current_context,
+    set_current_context,
+)
 from core.db import unit_of_work
 from core.exceptions import AppError
 from core.locks import MemoryLockProvider
@@ -20,7 +26,7 @@ from core.scheduler import (
     ScheduleTriggerRepository,
     ScheduleTriggerRequest,
 )
-from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskRunRepository
+from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskResult, TaskRunRepository
 
 
 @pytest.fixture
@@ -153,6 +159,83 @@ async def test_manual_schedule_provider_triggers_registered_task(
         "value": "ok",
     }
     assert result.task_result.metadata == {"provider": "sync", "queue": "maintenance"}
+
+
+@pytest.mark.asyncio
+async def test_manual_schedule_provider_sets_background_context_for_submit_and_resets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_contexts: list[RequestContext | None] = []
+
+    class RecordingSubmitter:
+        async def submit(
+            self,
+            envelope: TaskEnvelope,
+            *,
+            tenant_status: str = "active",
+        ) -> TaskResult:
+            seen_contexts.append(get_current_context())
+            return TaskResult(
+                task_id=envelope.task_id,
+                task_type=envelope.task_type,
+                status="succeeded",
+            )
+
+    _install_handler_module(monkeypatch, refresh=lambda envelope: None)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1"},
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    outer_context = RequestContext(
+        request_id="req-outer",
+        tenant_id="tenant-outer",
+    ).freeze()
+    token = set_current_context(outer_context)
+    try:
+        await ManualScheduleProvider(
+            schedule_registry=schedule_registry,
+            task_provider=RecordingSubmitter(),
+        ).trigger(
+            ScheduleTriggerRequest(
+                schedule_id="example.refresh.daily",
+                tenant_id="tenant-a",
+                request_id="req-schedule",
+                planned_at=datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
+            )
+        )
+
+        assert get_current_context() == outer_context
+    finally:
+        reset_current_context(token)
+
+    assert len(seen_contexts) == 1
+    context = seen_contexts[0]
+    assert context is not None
+    assert context.request_id == "req-schedule"
+    assert context.tenant_id == "tenant-a"
+    assert context.route == "scheduler:example.refresh.daily"
+    assert context.method == "SCHEDULER"
+    assert context.frozen is True
 
 
 @pytest.mark.asyncio
