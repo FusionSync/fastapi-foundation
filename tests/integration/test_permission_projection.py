@@ -115,6 +115,105 @@ async def test_permission_reconciliation_detects_and_repairs_missing_policy(
     assert len(await _policies(session_factory)) == 1
 
 
+@pytest.mark.asyncio
+async def test_permission_reconciliation_repairs_incrementally_and_detects_version_drift(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(_viewer_template())
+        uow.session.add_all(
+            [
+                RoleGrant(
+                    id="grant-current",
+                    tenant_id="tenant-a",
+                    subject_type="user",
+                    subject_id="user-current",
+                    role_template_id="template-viewer",
+                    policy_version=1,
+                ),
+                RoleGrant(
+                    id="grant-drifted",
+                    tenant_id="tenant-a",
+                    subject_type="user",
+                    subject_id="user-drifted",
+                    role_template_id="template-viewer",
+                    policy_version=2,
+                ),
+                RoleGrant(
+                    id="grant-missing",
+                    tenant_id="tenant-a",
+                    subject_type="user",
+                    subject_id="user-missing",
+                    role_template_id="template-viewer",
+                    policy_version=1,
+                ),
+                ProjectedPolicy(
+                    id="policy-current",
+                    tenant_id="tenant-a",
+                    subject="user:user-current",
+                    resource="example",
+                    action="read",
+                    effect="allow",
+                    role_grant_id="grant-current",
+                    policy_version=1,
+                ),
+                ProjectedPolicy(
+                    id="policy-drifted-old-version",
+                    tenant_id="tenant-a",
+                    subject="user:user-drifted",
+                    resource="example",
+                    action="read",
+                    effect="allow",
+                    role_grant_id="grant-drifted",
+                    policy_version=1,
+                ),
+                ProjectedPolicy(
+                    id="policy-stale",
+                    tenant_id="tenant-a",
+                    subject="user:user-stale",
+                    resource="example",
+                    action="read",
+                    effect="allow",
+                    role_grant_id="grant-stale",
+                    policy_version=1,
+                ),
+            ]
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        result = await PolicyProjector(uow.session).reconcile(repair=False)
+
+    assert result.ok is False
+    assert sorted(rule.role_grant_id for rule in result.missing) == [
+        "grant-drifted",
+        "grant-missing",
+    ]
+    assert sorted(rule.role_grant_id for rule in result.stale) == [
+        "grant-drifted",
+        "grant-stale",
+    ]
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        repaired = await PolicyProjector(uow.session).reconcile(repair=True)
+
+    policies = await _policies(session_factory)
+    policy_ids = {policy.id for policy in policies}
+    versions_by_grant = {policy.role_grant_id: policy.policy_version for policy in policies}
+    assert repaired.repaired is True
+    assert repaired.ok is True
+    assert "policy-current" in policy_ids
+    assert "policy-drifted-old-version" not in policy_ids
+    assert "policy-stale" not in policy_ids
+    assert versions_by_grant == {
+        "grant-current": 1,
+        "grant-drifted": 2,
+        "grant-missing": 1,
+    }
+
+
 def test_tenant_member_has_no_role_fact_columns() -> None:
     role_like_columns = {"role", "roles", "role_id", "role_template_id"}
 

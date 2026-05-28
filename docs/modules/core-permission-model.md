@@ -116,6 +116,13 @@ viewer
 facts -> expected policies -> actual policies -> diff -> repair
 ```
 
+reconciliation repair 必须是增量修复：
+
+- 缺失的 expected policy 只补 missing。
+- 多余或过期的 actual policy 只删 stale。
+- 相同 tenant/subject/resource/action/role_grant_id 下的 `policy_version` 或 `effect` 漂移必须被视为 stale + missing，而不是误判为一致。
+- repair 必须失效权限缓存。
+
 当前实现落点：
 
 ```text

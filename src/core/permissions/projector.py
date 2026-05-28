@@ -75,20 +75,38 @@ class PolicyProjector:
             if grant.role_template_id in templates
             for rule in rules_for_grant(grant, templates[grant.role_template_id])
         ]
-        actual = [
-            rule_from_policy(policy)
-            for policy in (await self.session.execute(select(ProjectedPolicy))).scalars().all()
-        ]
+        policies = list((await self.session.execute(select(ProjectedPolicy))).scalars().all())
         expected_by_key = {rule.key: rule for rule in expected}
-        actual_by_key = {rule.key: rule for rule in actual}
-        missing = [rule for key, rule in expected_by_key.items() if key not in actual_by_key]
-        stale = [rule for key, rule in actual_by_key.items() if key not in expected_by_key]
+        actual_by_key = {rule_from_policy(policy).key: policy for policy in policies}
+        missing: list[PolicyRule] = []
+        stale: list[PolicyRule] = []
+        stale_policy_ids: list[str] = []
+
+        for key, expected_rule in expected_by_key.items():
+            actual_policy = actual_by_key.get(key)
+            if actual_policy is None:
+                missing.append(expected_rule)
+                continue
+            actual_rule = rule_from_policy(actual_policy)
+            if actual_rule != expected_rule:
+                missing.append(expected_rule)
+                stale.append(actual_rule)
+                stale_policy_ids.append(actual_policy.id)
+
+        for key, actual_policy in actual_by_key.items():
+            if key in expected_by_key:
+                continue
+            stale.append(rule_from_policy(actual_policy))
+            stale_policy_ids.append(actual_policy.id)
 
         if repair and (missing or stale):
-            await self.session.execute(delete(ProjectedPolicy))
-            for grant in grants:
-                role_template = templates.get(grant.role_template_id)
-                if role_template is not None:
-                    await self.project_grant(grant, role_template)
+            if stale_policy_ids:
+                await self.session.execute(
+                    delete(ProjectedPolicy).where(ProjectedPolicy.id.in_(stale_policy_ids))
+                )
+            for rule in missing:
+                self.session.add(projected_policy_from_rule(rule))
+            self.cache.invalidate()
+            await self.session.flush()
             return ReconciliationResult(repaired=True)
         return ReconciliationResult(repaired=False, missing=missing, stale=stale)
