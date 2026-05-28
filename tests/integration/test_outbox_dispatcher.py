@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -140,6 +141,67 @@ async def test_dead_letter_event_can_be_replayed(
     replayed = await _first_event(session_factory)
     assert replayed.status == "pending"
     assert replayed.dead_letter_reason is None
+
+
+@pytest.mark.asyncio
+async def test_claim_batch_does_not_reclaim_locked_event(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        first_claim = await OutboxRepository(uow.session, registry=registry).claim_batch(
+            dispatcher_id="dispatcher-1",
+            batch_size=1,
+            lock_seconds=60,
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        second_claim = await OutboxRepository(uow.session, registry=registry).claim_batch(
+            dispatcher_id="dispatcher-2",
+            batch_size=1,
+            lock_seconds=60,
+        )
+
+    event = await _first_event(session_factory)
+    assert len(first_claim) == 1
+    assert second_claim == []
+    assert event.locked_by == "dispatcher-1"
+
+
+@pytest.mark.asyncio
+async def test_claim_batch_recovers_expired_publishing_lock(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await OutboxRepository(uow.session, registry=registry).claim_batch(
+            dispatcher_id="dispatcher-1",
+            batch_size=1,
+            lock_seconds=-1,
+            now=datetime.now(UTC),
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        recovered_claim = await OutboxRepository(uow.session, registry=registry).claim_batch(
+            dispatcher_id="dispatcher-2",
+            batch_size=1,
+            lock_seconds=60,
+            now=datetime.now(UTC),
+        )
+
+    event = await _first_event(session_factory)
+    assert len(recovered_claim) == 1
+    assert event.locked_by == "dispatcher-2"
 
 
 async def _add_event(

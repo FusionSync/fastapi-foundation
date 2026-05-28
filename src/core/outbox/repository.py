@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.events import EventEnvelope, EventRegistry
@@ -50,18 +50,18 @@ class OutboxRepository:
         now: datetime | None = None,
     ) -> list[OutboxEvent]:
         resolved_now = now or datetime.now(UTC)
-        statement = (
-            self._eligible_statement(resolved_now)
-            .order_by(OutboxEvent.created_at.asc())
-            .limit(batch_size)
-        )
-        result = await self.session.execute(statement)
-        events = list(result.scalars().all())
+        candidate_ids = await self._candidate_ids(resolved_now, batch_size)
         lock_until = resolved_now + timedelta(seconds=lock_seconds)
-        for event in events:
-            event.status = "publishing"
-            event.locked_by = dispatcher_id
-            event.locked_until = lock_until
+        events: list[OutboxEvent] = []
+        for event_id in candidate_ids:
+            event = await self._try_claim_event(
+                event_id,
+                dispatcher_id=dispatcher_id,
+                lock_until=lock_until,
+                now=resolved_now,
+            )
+            if event is not None:
+                events.append(event)
         await self.session.flush()
         return events
 
@@ -118,6 +118,42 @@ class OutboxRepository:
         )
 
     def _eligible_statement(self, now: datetime) -> Select[tuple[OutboxEvent]]:
+        return select(OutboxEvent).where(self._eligible_filter(now))
+
+    async def _candidate_ids(self, now: datetime, batch_size: int) -> list[str]:
+        statement = (
+            select(OutboxEvent.id)
+            .where(self._eligible_filter(now))
+            .order_by(OutboxEvent.created_at.asc())
+            .limit(batch_size)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
+    async def _try_claim_event(
+        self,
+        event_id: str,
+        *,
+        dispatcher_id: str,
+        lock_until: datetime,
+        now: datetime,
+    ) -> OutboxEvent | None:
+        result = await self.session.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.id == event_id)
+            .where(self._eligible_filter(now))
+            .values(
+                status="publishing",
+                locked_by=dispatcher_id,
+                locked_until=lock_until,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            return None
+        return await self.session.get(OutboxEvent, event_id)
+
+    def _eligible_filter(self, now: datetime) -> object:
         unlocked = or_(OutboxEvent.locked_until.is_(None), OutboxEvent.locked_until <= now)
         retryable = and_(
             OutboxEvent.status.in_(["pending", "failed"]),
@@ -125,7 +161,7 @@ class OutboxRepository:
             unlocked,
         )
         abandoned = and_(OutboxEvent.status == "publishing", OutboxEvent.locked_until <= now)
-        return select(OutboxEvent).where(or_(retryable, abandoned))
+        return or_(retryable, abandoned)
 
     def _validate_event(
         self,
