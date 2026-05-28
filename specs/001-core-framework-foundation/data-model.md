@@ -177,6 +177,36 @@ Rules:
 - Consumers must be idempotent by `event_id`.
 - Dispatcher owns conditional claim, retry, timeout recovery, dead-letter behavior, and replay.
 
+## IdempotencyRecord
+
+Represents a durable idempotency claim for a high-risk write request.
+
+Fields:
+
+- `id`
+- `tenant_id`
+- `user_id`
+- `route`
+- `idempotency_key`
+- `request_hash`
+- `status`
+- `response_code`
+- `response_body`
+- `task_id`
+- `outbox_event_id`
+- `locked_until`
+- `expires_at`
+- `created_at`
+- `updated_at`
+
+Rules:
+
+- Scope uniqueness is `tenant_id + user_id + route + idempotency_key`.
+- A key reused with a different `request_hash` is rejected.
+- `processing` claims block duplicates until `locked_until` expires.
+- `succeeded` claims replay the stored response.
+- Task and outbox side effects should be linked through `task_id` or `outbox_event_id`.
+
 ## MigrationRecord
 
 Represents a migration known or applied by the framework.

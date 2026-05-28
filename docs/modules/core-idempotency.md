@@ -22,7 +22,7 @@ Idempotency
 src/core/idempotency/
   keys.py
   store.py
-  middleware.py
+  models.py
   deps.py
 ```
 
@@ -79,3 +79,18 @@ processing
 - 幂等记录必须有 TTL。
 - 对高风险写接口，router 应显式声明是否需要幂等。
 - 提交任务或写 outbox 时，幂等记录必须绑定 `task_id` 或 `outbox_event_id`，避免客户端重试重复提交。
+
+## 当前实现
+
+已落地 `IdempotencyRecord` 和 `IdempotencyStore`：
+
+- 使用 `tenant_id + user_id + route + idempotency_key` 唯一约束绑定幂等范围。
+- `claim()` 采用 insert-first + 唯一约束冲突处理，避免先查再插的并发窗口。
+- 首次 claim 创建 `processing` 记录，并写入 `locked_until` 和 `expires_at`。
+- 相同 key、相同请求仍在处理中时返回 `IDEMPOTENCY_IN_PROGRESS`。
+- 相同 key、不同请求指纹返回 `IDEMPOTENCY_KEY_CONFLICT`。
+- 成功请求通过 `mark_succeeded()` 保存 `response_code` 和 `response_body`，后续重复请求返回原响应。
+- 可通过 `outbox_event_id` 或 `task_id` 绑定异步副作用，避免客户端重试重复提交。
+- `locked_until` 过期后允许重新领取；`expires_at` 过期后允许复用同一 key。
+
+第一版没有直接做 HTTP middleware。推荐先由高风险写接口在 service/route 入口显式调用 store，等账户、文件、任务等大功能全部连通后，再抽象成可复用 dependency。
