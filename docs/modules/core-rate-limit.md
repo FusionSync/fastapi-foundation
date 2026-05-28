@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: rate-limit provider、规则和基础 contract tests 已落地。
+- Done: rate-limit provider、规则、request middleware、标准 `Retry-After` 输出和基础 contract tests 已落地。
 - Next:
-  - [ ] 接 request middleware。
-  - [ ] 增加 Redis/sliding-window provider 和标准 `Retry-After` 输出。
+  - [ ] 增加 Redis/sliding-window provider。
 
 ## 职责
 
@@ -74,15 +73,17 @@ default.write:
 
 ## 当前实现
 
-已落地 `RateLimitRule`、`RateLimitIdentity`、`RateLimitRegistry` 和 `CacheRateLimiter`：
+已落地 `RateLimitRule`、`RateLimitIdentity`、`RateLimitRegistry`、`CacheRateLimiter` 和 `RateLimitMiddleware`：
 
 - `RateLimitRule` 声明 `name`、`limit`、`window_seconds`、`dimensions` 和 `fail_closed`。
 - `RateLimitIdentity` 支持 `tenant_id`、`user_id`、`ip_address`、`route` 和 `global` 维度。
 - `RateLimitRegistry` 支持默认规则和 route override，便于登录、上传、批量写入等接口单独调小阈值。
 - `CacheRateLimiter` 使用 `CacheProvider.incr()` 实现 fixed-window 计数，不直接依赖 Redis。
 - 超限返回 `RateLimitDecision(allowed=False)`；`require()` 抛 `RATE_LIMITED`，并带 `Retry-After` header 和稳定 details。
+- `RateLimitMiddleware` 已接入 app factory。默认未配置 `app.state.rate_limit_registry` 和 `app.state.rate_limiter` 时无行为；配置后按 `METHOD path` 解析规则并在超限时直接返回统一 envelope。
+- middleware 输出 `429 + RATE_LIMITED`，兼容模式下按 `API__ERROR_HTTP_STATUS_MODE=always_200` 返回 HTTP 200，但仍保留 `Retry-After`、`X-App-Code` 和 `X-Request-ID`。
 - 命中限流时会写可选 `MetricsRegistry` 的 `rate_limit_hits_total{reason,route,rule}`，并调用可选 `AuditRecorder` 写 `rate_limit.hit` 审计。
 - cache provider 故障时按 rule 决定 fail-open 或 fail-closed；高风险接口应使用默认 `fail_closed=True`。
 - 指标契约已预留 `rate_limit_hits_total`。
 
-第一版没有直接做 middleware。业务 route 可以先显式调用 `RateLimitRegistry.resolve()` 和 `CacheRateLimiter.require()`；等核心 API dependency 形态稳定后，再抽成统一 dependency/middleware。
+第一版 middleware 适合 `global`、`ip_address`、`route` 和可由请求头/上下文得到的 `tenant_id` 维度。需要认证后 `user_id` 的细粒度策略，应在 route dependency 或 service gate 中复用 `CacheRateLimiter`，避免在认证上下文尚未建立前错误拒绝请求。

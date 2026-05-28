@@ -21,6 +21,7 @@ from core.migrations import MigrationRegistry
 from core.observability import HttpMetricsMiddleware, MetricsRegistry, render_metrics_contract
 from core.operations import DatabaseReadinessProbe, check_app_readiness
 from core.permissions import PermissionRegistry
+from core.rate_limit import RateLimitMiddleware
 from core.scheduler import ScheduleRegistry
 from core.security import (
     RequestBodySizeLimitMiddleware,
@@ -58,6 +59,7 @@ def create_app(
 
     _register_security_middleware(app, resolved_settings)
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(HttpMetricsMiddleware)
     register_exception_handlers(app)
     _register_system_routes(app, resolved_settings)

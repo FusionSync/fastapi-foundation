@@ -2,6 +2,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from core.cache import MemoryCacheProvider
 from core.exceptions import AppError
@@ -9,9 +11,11 @@ from core.observability import MetricsRegistry
 from core.rate_limit import (
     CacheRateLimiter,
     RateLimitIdentity,
+    RateLimitMiddleware,
     RateLimitRegistry,
     RateLimitRule,
 )
+from core.serialization import ok
 
 
 class Clock:
@@ -214,3 +218,83 @@ def test_rate_limit_rule_validates_limit_window_and_dimensions() -> None:
     assert invalid_limit.value.code == "VALIDATION_ERROR"
     assert invalid_window.value.code == "VALIDATION_ERROR"
     assert invalid_dimensions.value.code == "VALIDATION_ERROR"
+
+
+def test_rate_limit_middleware_blocks_request_with_retry_after_envelope() -> None:
+    app = FastAPI()
+    metrics = MetricsRegistry()
+    registry = RateLimitRegistry(
+        default_rule=RateLimitRule(
+            name="default.write",
+            limit=1,
+            window_seconds=30,
+            dimensions=("ip_address", "route"),
+        )
+    )
+    app.state.rate_limit_registry = registry
+    app.state.rate_limiter = CacheRateLimiter(MemoryCacheProvider(), metrics=metrics)
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.post("/workspaces")
+    async def create_workspace() -> dict[str, object]:
+        return ok({"created": True}, request_id="req_test")
+
+    client = TestClient(app)
+
+    first = client.post("/workspaces")
+    second = client.post("/workspaces")
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.headers["Retry-After"] == "30"
+    assert second.headers["X-App-Code"] == "RATE_LIMITED"
+    assert second.json()["code"] == "RATE_LIMITED"
+    assert second.json()["details"] == {
+        "rule": "default.write",
+        "limit": 1,
+        "current": 2,
+        "remaining": 0,
+        "retry_after": 30,
+        "key": "rate:default.write:ip_address=testclient:route=POST /workspaces",
+    }
+    assert (
+        'rate_limit_hits_total{reason="limit_exceeded",route="POST /workspaces",'
+        'rule="default.write"} 1'
+    ) in metrics.render()
+
+
+def test_rate_limit_middleware_uses_route_override_before_default_rule() -> None:
+    app = FastAPI()
+    registry = RateLimitRegistry(
+        default_rule=RateLimitRule(
+            name="default",
+            limit=100,
+            window_seconds=60,
+            dimensions=("ip_address", "route"),
+        )
+    )
+    registry.register_route(
+        "POST /auth/login",
+        RateLimitRule(
+            name="auth.login",
+            limit=1,
+            window_seconds=10,
+            dimensions=("ip_address", "route"),
+        ),
+    )
+    app.state.rate_limit_registry = registry
+    app.state.rate_limiter = CacheRateLimiter(MemoryCacheProvider())
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.post("/auth/login")
+    async def login() -> dict[str, object]:
+        return ok({"status": "ok"}, request_id="req_test")
+
+    client = TestClient(app)
+
+    assert client.post("/auth/login").status_code == 200
+    limited = client.post("/auth/login")
+
+    assert limited.status_code == 429
+    assert limited.headers["Retry-After"] == "10"
+    assert limited.json()["details"]["rule"] == "auth.login"

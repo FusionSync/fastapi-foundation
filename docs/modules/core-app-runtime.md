@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
+- Done: app factory 已串联 config、database runtime、security/rate-limit/metrics/context middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
 - Next:
   - [ ] 将 lifecycle hook 执行结果接入结构化日志和启动诊断。
 

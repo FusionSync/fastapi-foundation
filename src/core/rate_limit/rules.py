@@ -99,3 +99,8 @@ class RateLimitRegistry:
                 status_code=400,
             )
         return self.default_rule
+
+    def find(self, route: str) -> RateLimitRule | None:
+        if route in self._route_rules:
+            return self._route_rules[route]
+        return self.default_rule

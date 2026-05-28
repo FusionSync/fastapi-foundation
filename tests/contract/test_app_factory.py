@@ -5,8 +5,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.app import create_app
+from core.cache import MemoryCacheProvider
 from core.config import Settings
 from core.operations import DependencyProbeResult
+from core.rate_limit import CacheRateLimiter, RateLimitRegistry, RateLimitRule
 
 
 def test_health_endpoints_use_envelope() -> None:
@@ -187,6 +189,32 @@ def test_create_app_exposes_database_runtime() -> None:
 
     assert app.state.database_engine is not None
     assert app.state.session_factory is not None
+
+
+def test_app_factory_rate_limit_middleware_uses_runtime_registry() -> None:
+    app = create_app(Settings())
+    app.state.rate_limit_registry = RateLimitRegistry(
+        default_rule=RateLimitRule(
+            name="health",
+            limit=1,
+            window_seconds=15,
+            dimensions=("ip_address", "route"),
+        )
+    )
+    app.state.rate_limiter = CacheRateLimiter(
+        MemoryCacheProvider(),
+        metrics=app.state.metrics_registry,
+    )
+    client = TestClient(app)
+
+    assert client.get("/healthz").status_code == 200
+    limited = client.get("/healthz")
+
+    assert limited.status_code == 429
+    assert limited.headers["Retry-After"] == "15"
+    assert limited.headers["X-App-Code"] == "RATE_LIMITED"
+    assert limited.json()["code"] == "RATE_LIMITED"
+    assert limited.json()["details"]["rule"] == "health"
 
 
 def test_create_app_auto_wires_declared_auth_session_store() -> None:
