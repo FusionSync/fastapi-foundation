@@ -18,6 +18,10 @@ METRIC_NAMES = {
     "rate_limit_hits_total": "Counter for rate limit denials by rule and route class.",
     "quota_exceeded_total": "Counter for quota denials by metric and scope.",
     "external_http_requests_total": "Counter for external HTTP calls by service and result.",
+    "config_drift_has_drift": "Gauge for profile runtime configuration drift.",
+    "process_heartbeat_fresh": "Gauge for process heartbeat freshness by role and instance.",
+    "process_health_ok": "Gauge for role-level process health checks.",
+    "release_checkpoint_ok": "Gauge for release checkpoint gate status.",
 }
 
 _COUNTERS = {

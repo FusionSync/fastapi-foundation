@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: metrics middleware、低基数字段、请求结构化日志、外部 HTTP client 指标和 trace header 传播、task/outbox/scheduler 非 HTTP trace propagation、audit/security 关键 context 字段、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
-- Next:
-  - [ ] 输出 private/cloud 部署 profile 的监控面板和告警契约。
+- Done: metrics middleware、低基数字段、请求结构化日志、外部 HTTP client 指标和 trace header 传播、task/outbox/scheduler 非 HTTP trace propagation、audit/security 关键 context 字段、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入、smoke 角色健康检查、private/cloud 部署 profile 监控面板和告警契约已落地。
+- Next: _none_
 
 ## 职责
 
@@ -88,6 +87,10 @@ tenant_isolation_guard_failures_total
 rate_limit_hits_total
 quota_exceeded_total
 external_http_requests_total
+config_drift_has_drift
+process_heartbeat_fresh
+process_health_ok
+release_checkpoint_ok
 ```
 
 `GET /metrics` 暴露 Prometheus text/plain 响应。底座启动时会创建进程内 `MetricsRegistry`，
@@ -96,6 +99,7 @@ HTTP middleware 已记录 `http_requests_total{method,route,status_class}`，rat
 `MetricsRegistry`，记录 `outbox_dispatch_events_total{outcome}` 并刷新 pending/publishing/dead_letter gauge。
 Core HTTP client 可注入 `MetricsRegistry`，记录 `external_http_requests_total{service_name,method,outcome,status_class|error_type}`，
 并从 `RequestContext` 透传 `X-Request-ID`、`X-Trace-ID` 和 `traceparent`。
+`monitoring_contract(profile)` 输出 private/cloud 部署使用的 dashboard panels 和 alert rules；当前覆盖 HTTP traffic、process health、outbox delivery、release safety、config drift、heartbeat stale、outbox dead letter 和 release checkpoint failure。cloud profile 额外定义公网 5xx page 级告警。
 其他 task、migration 指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
 
 ## 设计要求

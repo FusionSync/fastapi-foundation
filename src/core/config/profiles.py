@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 
 from core.config.settings import DeploymentMode
+from core.observability.monitoring import MonitoringContract, monitoring_contract
 from core.security_hardening import SecurityHardeningItem, security_hardening_checklist
 
 
@@ -28,10 +29,11 @@ class ProfileTemplate:
     processes: dict[str, ProcessTemplate]
     validation_commands: list[str]
     security_hardening: tuple[SecurityHardeningItem, ...] = field(default_factory=tuple)
+    monitoring: MonitoringContract | None = None
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "ok": True,
             "profile": self.profile,
             "env": self.env,
@@ -42,6 +44,9 @@ class ProfileTemplate:
             "security_hardening": [item.to_dict() for item in self.security_hardening],
             "notes": self.notes,
         }
+        if self.monitoring is not None:
+            payload["monitoring"] = self.monitoring.to_dict()
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +163,7 @@ def _local_template() -> ProfileTemplate:
             "core smoke --profile local --json",
         ],
         security_hardening=security_hardening_checklist("local").items,
+        monitoring=monitoring_contract("local"),
         notes=["Local profile is for development and single-node smoke checks."],
     )
 
@@ -213,6 +219,7 @@ def _private_template() -> ProfileTemplate:
             "core smoke --profile private --json",
         ],
         security_hardening=security_hardening_checklist("private").items,
+        monitoring=monitoring_contract("private"),
         notes=["Private profile requires PostgreSQL and an external JWT secret."],
     )
 
@@ -267,6 +274,7 @@ def _cloud_template() -> ProfileTemplate:
             "core smoke --profile cloud --json",
         ],
         security_hardening=security_hardening_checklist("cloud").items,
+        monitoring=monitoring_contract("cloud"),
         notes=["Cloud profile must keep standard HTTP statuses for probes and clients."],
     )
 

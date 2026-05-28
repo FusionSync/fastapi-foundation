@@ -76,6 +76,7 @@ def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtif
     for command in template.validation_commands:
         lines.append(f"    - {_yaml_scalar(command)}")
     lines.extend(_yaml_hardening_items(template.security_hardening, key="x-security-hardening"))
+    lines.extend(_yaml_monitoring_contract(template.monitoring, key="x-monitoring"))
     lines.append("services:")
     for role, process in template.processes.items():
         lines.extend(
@@ -111,7 +112,11 @@ def _systemd_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
     files = [
         DeploymentArtifact(
             path=f"wps-bid-{template.profile}.env",
-            content=_env_file(template.env, hardening_items=template.security_hardening),
+            content=_env_file(
+                template.env,
+                hardening_items=template.security_hardening,
+                monitoring=template.monitoring,
+            ),
         )
     ]
     for role, process in template.processes.items():
@@ -176,6 +181,7 @@ def _helm_values_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact
             lines.append("    notes:")
             lines.extend(f"      - {_yaml_scalar(note)}" for note in process.notes)
     lines.extend(_yaml_hardening_items(template.security_hardening, key="securityHardening"))
+    lines.extend(_yaml_monitoring_contract(template.monitoring, key="monitoring"))
     lines.append("validationCommands:")
     for command in template.validation_commands:
         lines.append(f"  - {_yaml_scalar(command)}")
@@ -187,7 +193,12 @@ def _helm_values_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact
     ]
 
 
-def _env_file(env: dict[str, str], *, hardening_items: object = ()) -> str:
+def _env_file(
+    env: dict[str, str],
+    *,
+    hardening_items: object = (),
+    monitoring: object = None,
+) -> str:
     lines = [f"{key}={value}" for key, value in env.items()]
     items = list(hardening_items)
     if items:
@@ -198,6 +209,11 @@ def _env_file(env: dict[str, str], *, hardening_items: object = ()) -> str:
             lines.append(f"#   control: {item.control}")
             lines.append(f"#   required: {item.required}")
             lines.append(f"#   evidence: {item.evidence}")
+    if monitoring is not None:
+        lines.append("")
+        lines.append("# Monitoring alert contract:")
+        for rule in monitoring.alert_rules:
+            lines.append(f"# - {rule.name}: {rule.expression}")
     return "\n".join(lines) + "\n"
 
 
@@ -226,4 +242,36 @@ def _yaml_hardening_items(items: object, *, key: str) -> list[str]:
                 f"    evidence: {_yaml_scalar(item.evidence)}",
             ]
         )
+    return lines
+
+
+def _yaml_monitoring_contract(contract: object, *, key: str) -> list[str]:
+    if contract is None:
+        return []
+    lines = [f"{key}:", "  dashboardPanels:"]
+    for panel in contract.dashboard_panels:
+        lines.extend(
+            [
+                f"    - id: {_yaml_scalar(panel.id)}",
+                f"      title: {_yaml_scalar(panel.title)}",
+                f"      description: {_yaml_scalar(panel.description)}",
+                "      metrics:",
+            ]
+        )
+        lines.extend(f"        - {_yaml_scalar(metric)}" for metric in panel.metrics)
+    lines.append("  alertRules:")
+    for rule in contract.alert_rules:
+        lines.extend(
+            [
+                f"    - id: {_yaml_scalar(rule.id)}",
+                f"      name: {_yaml_scalar(rule.name)}",
+                f"      severity: {_yaml_scalar(rule.severity)}",
+                f"      metric: {_yaml_scalar(rule.metric)}",
+                f"      expression: {_yaml_scalar(rule.expression)}",
+                f"      for: {_yaml_scalar(rule.for_duration)}",
+                "      labels:",
+            ]
+        )
+        lines.extend(f"        - {_yaml_scalar(label)}" for label in rule.labels)
+        lines.append(f"      runbook: {_yaml_scalar(rule.runbook)}")
     return lines

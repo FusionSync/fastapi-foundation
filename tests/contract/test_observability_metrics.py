@@ -6,7 +6,11 @@ from fastapi.testclient import TestClient
 from core.app import create_app
 from core.cache import MemoryCacheProvider
 from core.config import Settings
-from core.observability import METRIC_NAMES, render_metrics_contract
+from core.observability import (
+    METRIC_NAMES,
+    monitoring_contract,
+    render_metrics_contract,
+)
 from core.rate_limit import CacheRateLimiter, RateLimitRegistry, RateLimitRule
 
 
@@ -20,6 +24,46 @@ def test_metrics_contract_contains_required_cross_cutting_names() -> None:
     assert "outbox_events_dead_letter" in metrics
     assert "migration_preflight_total" in metrics
     assert "tenant_isolation_guard_failures_total" in metrics
+
+
+def test_private_cloud_monitoring_contract_contains_dashboard_and_alerts() -> None:
+    private = monitoring_contract("private").to_dict()
+    cloud = monitoring_contract("cloud").to_dict()
+
+    assert private["profile"] == "private"
+    assert [panel["id"] for panel in private["dashboard_panels"]] == [
+        "http_traffic",
+        "process_health",
+        "outbox_delivery",
+        "release_safety",
+    ]
+    assert any(
+        rule["id"] == "config_drift_detected"
+        and rule["severity"] == "critical"
+        and rule["metric"] == "config_drift_has_drift"
+        and "core config drift-check --profile private --json" in rule["runbook"]
+        for rule in private["alert_rules"]
+    )
+    assert any(
+        rule["id"] == "process_heartbeat_stale"
+        and "service_role" in rule["labels"]
+        and "instance_id" in rule["labels"]
+        for rule in private["alert_rules"]
+    )
+    assert any(
+        rule["id"] == "release_checkpoint_failed"
+        and "--artifact-target docker-compose" in rule["runbook"]
+        for rule in private["alert_rules"]
+    )
+    assert any(
+        "release_checkpoint_ok" in panel["metrics"]
+        for panel in private["dashboard_panels"]
+        if panel["id"] == "release_safety"
+    )
+    assert any(
+        rule["id"] == "cloud_http_5xx_rate_high" and rule["severity"] == "page"
+        for rule in cloud["alert_rules"]
+    )
 
 
 def test_metrics_endpoint_exposes_contract() -> None:

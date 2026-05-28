@@ -53,6 +53,17 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
         and "includeSubDomains" in item["evidence"]
         for item in payload["security_hardening"]
     )
+    assert [panel["id"] for panel in payload["monitoring"]["dashboard_panels"]] == [
+        "http_traffic",
+        "process_health",
+        "outbox_delivery",
+        "release_safety",
+    ]
+    assert any(
+        rule["id"] == "config_drift_detected"
+        and rule["severity"] == "critical"
+        for rule in payload["monitoring"]["alert_rules"]
+    )
 
 
 def test_cloud_profile_template_uses_standard_http_and_external_secret_ref(capsys) -> None:
@@ -202,6 +213,21 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
     assert payload["ok"] is False
     assert payload["command"] == "config drift-check"
     assert payload["drift"]["has_drift"] is True
+    assert payload["alerts"] == [
+        {
+            "name": "ConfigDriftDetected",
+            "severity": "critical",
+            "profile": "private",
+            "role": None,
+            "labels": {"profile": "private"},
+            "annotations": {
+                "summary": "Runtime configuration drift detected for private profile",
+                "missing_count": "5",
+                "mismatched_count": "2",
+                "runbook": "core config drift-check --profile private --json",
+            },
+        }
+    ]
     assert payload["drift"]["missing"][0] == {
         "key": "SECURITY__JWT_SECRET_REF",
         "expected": "APP_JWT_SECRET",
@@ -218,6 +244,7 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
         for mismatch in payload["drift"]["mismatched"]
     )
     assert "super-secret" not in payload_text
+    assert "super-secret" not in json.dumps(payload["alerts"])
 
 
 def test_private_profile_renders_docker_compose_deployment_artifacts(capsys) -> None:
@@ -304,6 +331,10 @@ def test_cloud_profile_renders_helm_values_from_process_matrix(capsys) -> None:
     assert "securityHardening:" in values
     assert 'category: "tls"' in values
     assert "preload" in values
+    assert "monitoring:" in values
+    assert 'id: "config_drift_detected"' in values
+    assert 'metric: "config_drift_has_drift"' in values
+    assert 'id: "cloud_http_5xx_rate_high"' in values
     assert "validationCommands:" in values
     assert '  - "core config drift-check --profile cloud --json"' in values
 
@@ -332,6 +363,10 @@ def test_deployment_artifacts_validate_actual_env_with_redacted_drift(capsys) ->
     assert payload["command"] == "config artifacts"
     assert payload["target"] == "systemd"
     assert payload["drift"]["has_drift"] is True
+    assert payload["alerts"][0]["name"] == "ConfigDriftDetected"
+    assert payload["alerts"][0]["annotations"]["runbook"] == (
+        "core config drift-check --profile private --json"
+    )
     assert payload["drift"]["missing"][0] == {
         "key": "API__ERROR_HTTP_STATUS_MODE",
         "expected": "standard",

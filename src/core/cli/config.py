@@ -5,10 +5,13 @@ import os
 
 from core.cli.common import CLI_USAGE_ERROR, error_payload, print_payload
 from core.config import (
+    ConfigDriftReport,
     check_profile_drift,
     render_deployment_artifacts,
     render_profile_template,
 )
+from core.config.settings import DeploymentMode
+from core.observability import config_drift_alerts
 
 _PROFILES = ["local", "private", "cloud"]
 _ARTIFACT_TARGETS = ["docker-compose", "systemd", "helm-values"]
@@ -70,6 +73,7 @@ def _handle_config_drift_check(args: argparse.Namespace) -> int:
         "command": "config drift-check",
         "profile": args.profile,
         "drift": report.to_dict(),
+        "alerts": _drift_alerts(args.profile, report, role=args.role),
     }
     if args.role is not None:
         payload["role"] = args.role
@@ -102,6 +106,7 @@ def _handle_config_artifacts(args: argparse.Namespace) -> int:
         report = check_profile_drift(args.profile, actual_env, role=args.role)
         payload["ok"] = not report.has_drift
         payload["drift"] = report.to_dict()
+        payload["alerts"] = _drift_alerts(args.profile, report, role=args.role)
         if args.role is not None:
             payload["role"] = args.role
     print_payload(payload, as_json=args.as_json)
@@ -120,3 +125,18 @@ def _parse_actual_env(values: list[str]) -> dict[str, str]:
             raise ValueError(f"Actual config mapping must use KEY=VALUE format: {value}")
         actual[key] = item_value
     return actual
+
+
+def _drift_alerts(
+    profile: DeploymentMode,
+    report: ConfigDriftReport,
+    *,
+    role: str | None,
+) -> list[dict[str, object]]:
+    return config_drift_alerts(
+        profile=profile,
+        has_drift=report.has_drift,
+        missing_count=len(report.missing),
+        mismatched_count=len(report.mismatched),
+        role=role,
+    )
