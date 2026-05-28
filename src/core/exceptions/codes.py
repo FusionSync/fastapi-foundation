@@ -16,6 +16,7 @@ class ErrorCodeSpec:
 _ERROR_CODES: dict[str, ErrorCodeSpec] = {
     "VALIDATION_ERROR": ErrorCodeSpec("VALIDATION_ERROR", 400, "参数校验失败"),
     "AUTH_INVALID_TOKEN": ErrorCodeSpec("AUTH_INVALID_TOKEN", 401, "认证失败"),
+    "USER_DISABLED": ErrorCodeSpec("USER_DISABLED", 403, "用户已禁用"),
     "TENANT_ACCESS_DENIED": ErrorCodeSpec("TENANT_ACCESS_DENIED", 403, "无权访问该租户"),
     "TENANT_CONTEXT_CONFLICT": ErrorCodeSpec("TENANT_CONTEXT_CONFLICT", 403, "租户上下文冲突"),
     "TENANT_STATE_FORBIDDEN": ErrorCodeSpec(

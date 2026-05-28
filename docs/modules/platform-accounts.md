@@ -65,8 +65,11 @@ PATCH /api/v1/me
 - `UserCredential` 和 `ExternalIdentity` 预留本地密码与 OIDC/Logto/Keycloak subject 映射。
 - `UserSession` 保存 session_id、tenant_id、auth_provider、status 和创建时的 token_version。
 - `AccountsService.create_session()` 只允许 active user 创建 session。
+- `AccountsService.create_local_user()` 创建 local user 并写 `UserCredential.password_hash`。
+- `AccountsService.verify_local_password()` 使用 `core.security.PasswordHasher` 校验本地密码。
 - `AccountsService.disable_user()` 会把 user 标记为 disabled、递增 token_version，并撤销该用户所有 active sessions。
 - `AccountsService.disable_user()` 可注入 `AuditService` 写 `user.disabled` 强一致审计，记录撤销 session 数和新的 token_version。
 - `AccountsService.revoke_tenant_sessions()` 可作为 `TenantLifecycleService` 的 `session_revocation_hook`，在租户暂停/删除时撤销对应 tenant 的 active sessions。
+- `AccountsAuthSessionStore` 适配 `core.auth.AuthSessionValidator`，把 UserSession/User fact 转换为 core 统一认证主体。
 
-当前实现只负责会话事实和撤销收敛，不负责 JWT 签发。后续本地 JWT provider 应把 `session_id` 和 `token_version` 写入 token，并在请求认证时校验 session 是否仍 active。
+当前实现只负责本地密码凭据、会话事实和撤销收敛，不负责 JWT 签发。后续本地 JWT provider 应把 `session_id` 和 `token_version` 写入 token，并在请求认证时调用 `AuthSessionValidator`。

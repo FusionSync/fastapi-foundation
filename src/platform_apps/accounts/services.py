@@ -6,14 +6,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
+from core.auth import invalid_auth_token
 from core.exceptions import AppError
-from platform_apps.accounts.models import ExternalIdentity, User, UserSession
+from core.security import PasswordHasher
+from platform_apps.accounts.models import ExternalIdentity, User, UserCredential, UserSession
 
 
 class AccountsService:
-    def __init__(self, session: AsyncSession, *, audit: AuditRecorder | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        audit: AuditRecorder | None = None,
+        password_hasher: PasswordHasher | None = None,
+    ) -> None:
         self.session = session
         self.audit = audit
+        self.password_hasher = password_hasher or PasswordHasher()
 
     async def create_user(
         self,
@@ -48,6 +57,48 @@ class AccountsService:
                 )
             )
             await self.session.flush()
+        return user
+
+    async def create_local_user(
+        self,
+        *,
+        email: str,
+        display_name: str,
+        password: str,
+    ) -> User:
+        normalized_email = email.strip().lower()
+        user = await self.create_user(
+            email=normalized_email,
+            display_name=display_name,
+            auth_provider="local",
+            external_id=normalized_email,
+        )
+        self.session.add(
+            UserCredential(
+                user_id=user.id,
+                password_hash=self.password_hasher.hash_password(password),
+            )
+        )
+        await self.session.flush()
+        return user
+
+    async def verify_local_password(self, *, email: str, password: str) -> User:
+        normalized_email = email.strip().lower()
+        result = await self.session.execute(
+            select(User)
+            .where(User.email == normalized_email)
+            .where(User.auth_provider == "local")
+        )
+        user = result.scalars().first()
+        if user is None:
+            invalid_auth_token("invalid_credentials")
+        if user.status != "active":
+            invalid_auth_token("user_not_active")
+        credential = await self.session.get(UserCredential, user.id)
+        if credential is None:
+            invalid_auth_token("missing_credentials")
+        if not self.password_hasher.verify_password(password, credential.password_hash):
+            invalid_auth_token("invalid_credentials")
         return user
 
     async def create_session(

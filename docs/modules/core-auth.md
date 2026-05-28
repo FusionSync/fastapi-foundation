@@ -66,14 +66,25 @@ token_version
 
 ## 当前实现
 
-认证 provider 尚未绑定具体 JWT/OIDC 实现。当前先由 `platform_apps.accounts` 落地会话事实：
+当前已落地 core 侧认证主体和 session 撤销校验契约：
+
+- `TokenClaims` 表达 token 解析后的最小 claims：`user_id`、`session_id`、`auth_provider`、`token_version`、`tenant_id`。
+- `CurrentUser` 是业务 app 可依赖的统一当前用户对象，不包含平台管理员绕过字段。
+- `AuthSessionValidator` 通过 `AuthSessionStore` 协议加载 session/user fact，统一校验 session 是否 active、user 是否 active、token_version 是否匹配、tenant 是否匹配。
+- `StaticAuthSessionStore` 用于测试和本地 contract。
+- 认证失败统一抛 `AUTH_INVALID_TOKEN`，并带 `WWW-Authenticate: Bearer`。
+- `platform_apps.accounts.AccountsAuthSessionStore` 是当前 SQLAlchemy 适配器，读取 `UserSession` 和 `User`。
+
+当前先由 `platform_apps.accounts` 落地会话事实：
 
 - `User.token_version` 表达用户级 token 撤销版本。
 - `UserSession.status` 表达 session 是否 active/revoked。
 - 禁用用户会递增 token_version 并撤销 active sessions。
 - 租户生命周期服务可通过 accounts 的 session revocation hook 撤销指定 tenant sessions。
+- `AccountsService.create_local_user()` 使用 `core.security.PasswordHasher` 创建本地密码凭据。
+- `AccountsService.verify_local_password()` 校验本地密码，失败时抛 `AUTH_INVALID_TOKEN`。
 
-后续 core auth provider 必须在解析 token 后校验：
+后续 JWT/OIDC provider 必须先完成 token 签名、issuer、audience 和过期时间校验，然后把 claims 交给 `AuthSessionValidator`：
 
 ```text
 token.session_id 对应 UserSession.status == active
