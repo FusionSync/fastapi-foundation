@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播和 try/finally reset 已落地。
+- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播、try/finally reset，以及 task/outbox handler 背景上下文 handoff 已落地。
 - Next:
-  - [ ] 定义 background task、outbox handler 和 scheduler job 的 context handoff。
+  - [ ] 定义 scheduler job 的 context handoff。
   - [ ] 将 context 字段接入结构化日志和审计默认字段。
 
 ## 职责
@@ -53,11 +53,13 @@ started_at
 
 - service 可以读取 context，但不应该修改 context。
 - auth 和 tenancy 是允许写 context 的依赖。
-- 后台任务没有 HTTP request，必须显式构造 TaskContext。
+- 后台任务没有 HTTP request，必须显式构造 `BackgroundContext`。
 - 测试中必须提供 context fixture。
 - RequestContext 在认证、租户解析和授权完成后必须冻结，业务 service 不允许修改 `user_id`、`tenant_id`、`request_id`。
 - middleware 必须使用 `try/finally` reset ContextVar token，避免请求间上下文污染。
-- 后台任务必须显式接收 `TaskContext`，不能隐式继承上一个 HTTP 请求上下文。
+- 后台任务必须显式注入 `BackgroundContext`，不能隐式继承上一个 HTTP 请求上下文。
+- task handler 执行时由 `TaskEnvelope` 构造冻结背景上下文，route 为 `task:{task_type}`，method 为 `TASK`，执行后必须 reset。
+- outbox handler 执行时由 `EventEnvelope` 和 payload 中的 `request_id/actor_id/tenant_id` 构造冻结背景上下文，route 为 `outbox:{event_type}:v{event_version}`，method 为 `OUTBOX`，执行后必须 reset。
 
 ## 风险
 

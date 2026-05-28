@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from core.context import outbox_background_context, use_background_context
 from core.exceptions import AppError
 from core.idempotency import IdempotencyStore, hash_request_payload
 
@@ -176,9 +177,18 @@ def _import_event_handler(handler_path: str) -> EventHandler:
 
 
 async def _call_handler(handler: EventHandler, envelope: EventEnvelope) -> None:
-    result = handler(envelope)
-    if inspect.isawaitable(result):
-        await result
+    with use_background_context(
+        outbox_background_context(
+            event_id=envelope.event_id,
+            event_type=envelope.event_type,
+            event_version=envelope.event_version,
+            tenant_id=envelope.tenant_id,
+            payload=envelope.payload,
+        )
+    ):
+        result = handler(envelope)
+        if inspect.isawaitable(result):
+            await result
 
 
 def _handler_key(handler: EventHandler) -> str:

@@ -63,5 +63,6 @@ src/core/events/
 - `OutboxEventPublisher` 通过 `OutboxRepository.add()` 写入 outbox，并使用同一个 registry 校验 event_type/event_version 是否已注册。
 - `core outbox dispatch-once` 和 `core outbox-dispatcher --run` 会按 `--installed-app` 或 settings 加载 `EventRegistry`，领取 outbox event 并调用已注册 handler。
 - outbox dispatcher 会向 `EventRegistry.dispatch()` 传入 `IdempotencyStore`，以 `event_id + handler_key` 跳过已成功 handler，并允许失败 handler 后续重试。
+- outbox handler 执行期间会从 `EventEnvelope` 注入冻结背景上下文，包含 payload 中的 `request_id/actor_id`、tenant_id 和 `outbox:{event_type}:v{event_version}` route，执行后 reset。
 
 需要可靠投递的事件仍然通过 outbox 写入和 dispatcher 投递；`EventRegistry` 只负责运行时 handler 解析和分发，不承担消息队列职责。

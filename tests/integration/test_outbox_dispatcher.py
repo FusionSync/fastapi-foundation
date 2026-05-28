@@ -8,6 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.apps import EventHandlerSpec
 from core.base.models import BaseModel
+from core.context import (
+    RequestContext,
+    get_current_context,
+    reset_current_context,
+    set_current_context,
+)
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
 from core.exceptions import AppError
@@ -57,6 +63,48 @@ async def test_dispatcher_publishes_claimed_event(
     assert event.published_at is not None
     assert 'outbox_dispatch_events_total{outcome="claimed"} 1' in rendered_metrics
     assert 'outbox_dispatch_events_total{outcome="published"} 1' in rendered_metrics
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_sets_background_context_for_handler_and_resets(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seen_contexts: list[RequestContext | None] = []
+    registry = EventRegistry()
+    registry.register(
+        "business.created",
+        1,
+        lambda event: seen_contexts.append(get_current_context()),
+    )
+    await _add_event(session_factory, registry)
+    outer_context = RequestContext(
+        request_id="req-outer",
+        tenant_id="tenant-outer",
+    ).freeze()
+    token = set_current_context(outer_context)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            stats = await OutboxDispatcher(
+                OutboxRepository(uow.session, registry=registry),
+                registry,
+                dispatcher_id="dispatcher-1",
+            ).dispatch_once()
+
+        assert stats.published == 1
+        assert get_current_context() == outer_context
+    finally:
+        reset_current_context(token)
+
+    assert len(seen_contexts) == 1
+    context = seen_contexts[0]
+    assert context is not None
+    assert context.request_id == "req_test"
+    assert context.user_id == "user-1"
+    assert context.tenant_id == "tenant-a"
+    assert context.route == "outbox:business.created:v1"
+    assert context.method == "OUTBOX"
+    assert context.frozen is True
 
 
 @pytest.mark.asyncio

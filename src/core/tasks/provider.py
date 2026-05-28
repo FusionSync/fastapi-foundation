@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from core.context import task_background_context, use_background_context
 from core.tasks.models import TaskRun
 from core.tasks.registry import TaskEnvelope, TaskRegistry
 from core.tasks.repository import TaskRunRepository
@@ -148,9 +149,17 @@ class SyncTaskProvider:
         task_run: TaskRun | None,
     ) -> TaskResult:
         try:
-            result = handler(envelope)
-            if inspect.isawaitable(result):
-                result = await result
+            with use_background_context(
+                task_background_context(
+                    task_id=envelope.task_id,
+                    task_type=envelope.task_type,
+                    tenant_id=envelope.tenant_id,
+                    request_id=envelope.request_id,
+                )
+            ):
+                result = handler(envelope)
+                if inspect.isawaitable(result):
+                    result = await result
         except Exception as exc:
             error_message = f"{type(exc).__name__}: {exc}"
             if task_run is not None and self.task_repository is not None:

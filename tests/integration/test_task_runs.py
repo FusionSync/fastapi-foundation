@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.apps import AppModule, AppRegistry, TaskHandlerSpec
 from core.base.models import BaseModel
+from core.context import (
+    RequestContext,
+    get_current_context,
+    reset_current_context,
+    set_current_context,
+)
 from core.db import unit_of_work
 from core.exceptions import AppError
 from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskRun, TaskRunRepository
@@ -61,6 +67,54 @@ async def test_sync_task_provider_persists_successful_task_run(
     assert task_run.queue == "default"
     assert task_run.request_id == "req-1"
     assert task_run.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_sync_task_provider_sets_background_context_for_handler_and_resets(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seen_contexts: list[RequestContext | None] = []
+
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        seen_contexts.append(get_current_context())
+        return {"task_id": envelope.task_id}
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+    outer_context = RequestContext(
+        request_id="req-outer",
+        tenant_id="tenant-outer",
+    ).freeze()
+    token = set_current_context(outer_context)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            await SyncTaskProvider(
+                task_registry,
+                task_repository=TaskRunRepository(uow.session),
+            ).submit(
+                TaskEnvelope(
+                    task_id="task-context-1",
+                    task_type="example.refresh",
+                    tenant_id="tenant-a",
+                    payload={},
+                    idempotency_key="example.refresh:tenant-a:context",
+                    request_id="req-task",
+                )
+            )
+
+        assert get_current_context() == outer_context
+    finally:
+        reset_current_context(token)
+
+    assert len(seen_contexts) == 1
+    context = seen_contexts[0]
+    assert context is not None
+    assert context.request_id == "req-task"
+    assert context.tenant_id == "tenant-a"
+    assert context.route == "task:example.refresh"
+    assert context.method == "TASK"
+    assert context.frozen is True
 
 
 @pytest.mark.asyncio

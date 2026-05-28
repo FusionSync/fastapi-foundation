@@ -94,6 +94,7 @@ finished_at
 - task_type 全局唯一，重复注册启动前失败。
 - `SyncTaskProvider` 用于 local/profile 和单机版，可同步执行普通函数或 async handler。
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。
+- task handler 执行期间会从 `TaskEnvelope` 注入冻结背景上下文，避免继承外层 HTTP/CLI ContextVar。
 - `TaskRun` 定义统一任务运行记录，保存 input、result、error、queue、request_id、attempt_count、started_at、finished_at。
 - `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed/dead_letter` 状态，不注入时保持原有纯运行时模式。
 - `TaskRunRepository.start_once()` 使用 insert-first + 唯一约束处理 task idempotency；`SyncTaskProvider.submit()` 遇到 duplicate 时返回已有运行记录，不重新执行 handler。
