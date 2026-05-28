@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 
 from core.config.settings import DeploymentMode
+from core.security_hardening import SecurityHardeningItem, security_hardening_checklist
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,7 @@ class ProfileTemplate:
     env: dict[str, str]
     processes: dict[str, ProcessTemplate]
     validation_commands: list[str]
+    security_hardening: tuple[SecurityHardeningItem, ...] = field(default_factory=tuple)
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -37,6 +39,7 @@ class ProfileTemplate:
                 role: template.to_dict() for role, template in self.processes.items()
             },
             "validation_commands": self.validation_commands,
+            "security_hardening": [item.to_dict() for item in self.security_hardening],
             "notes": self.notes,
         }
 
@@ -154,6 +157,7 @@ def _local_template() -> ProfileTemplate:
             "core migrate run --backup-ready --json",
             "core smoke --profile local --json",
         ],
+        security_hardening=security_hardening_checklist("local").items,
         notes=["Local profile is for development and single-node smoke checks."],
     )
 
@@ -208,6 +212,7 @@ def _private_template() -> ProfileTemplate:
             "core migrate run --backup-ready --json",
             "core smoke --profile private --json",
         ],
+        security_hardening=security_hardening_checklist("private").items,
         notes=["Private profile requires PostgreSQL and an external JWT secret."],
     )
 
@@ -261,6 +266,7 @@ def _cloud_template() -> ProfileTemplate:
             "core migrate run --backup-ready --json",
             "core smoke --profile cloud --json",
         ],
+        security_hardening=security_hardening_checklist("cloud").items,
         notes=["Cloud profile must keep standard HTTP statuses for probes and clients."],
     )
 

@@ -75,6 +75,7 @@ def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtif
     ]
     for command in template.validation_commands:
         lines.append(f"    - {_yaml_scalar(command)}")
+    lines.extend(_yaml_hardening_items(template.security_hardening, key="x-security-hardening"))
     lines.append("services:")
     for role, process in template.processes.items():
         lines.extend(
@@ -110,7 +111,7 @@ def _systemd_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
     files = [
         DeploymentArtifact(
             path=f"wps-bid-{template.profile}.env",
-            content=_env_file(template.env),
+            content=_env_file(template.env, hardening_items=template.security_hardening),
         )
     ]
     for role, process in template.processes.items():
@@ -174,6 +175,7 @@ def _helm_values_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact
         if process.notes:
             lines.append("    notes:")
             lines.extend(f"      - {_yaml_scalar(note)}" for note in process.notes)
+    lines.extend(_yaml_hardening_items(template.security_hardening, key="securityHardening"))
     lines.append("validationCommands:")
     for command in template.validation_commands:
         lines.append(f"  - {_yaml_scalar(command)}")
@@ -185,8 +187,18 @@ def _helm_values_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact
     ]
 
 
-def _env_file(env: dict[str, str]) -> str:
-    return "".join(f"{key}={value}\n" for key, value in env.items())
+def _env_file(env: dict[str, str], *, hardening_items: object = ()) -> str:
+    lines = [f"{key}={value}" for key, value in env.items()]
+    items = list(hardening_items)
+    if items:
+        lines.append("")
+        lines.append("# Security hardening checklist:")
+        for item in items:
+            lines.append(f"# - category: {item.category}")
+            lines.append(f"#   control: {item.control}")
+            lines.append(f"#   required: {item.required}")
+            lines.append(f"#   evidence: {item.evidence}")
+    return "\n".join(lines) + "\n"
 
 
 def _yaml_mapping(values: dict[str, str], *, indent: int) -> list[str]:
@@ -195,6 +207,23 @@ def _yaml_mapping(values: dict[str, str], *, indent: int) -> list[str]:
 
 
 def _yaml_scalar(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
     if isinstance(value, int):
         return str(value)
     return json.dumps(str(value))
+
+
+def _yaml_hardening_items(items: object, *, key: str) -> list[str]:
+    hardening_items = list(items)
+    lines = [f"{key}:"]
+    for item in hardening_items:
+        lines.extend(
+            [
+                f"  - category: {_yaml_scalar(item.category)}",
+                f"    control: {_yaml_scalar(item.control)}",
+                f"    required: {_yaml_scalar(item.required)}",
+                f"    evidence: {_yaml_scalar(item.evidence)}",
+            ]
+        )
+    return lines

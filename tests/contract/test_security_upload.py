@@ -6,6 +6,7 @@ from core.exceptions import AppError
 from core.security import (
     SecurityHeadersConfig,
     UploadSecurityPolicy,
+    security_hardening_checklist,
     security_headers,
     validate_upload,
 )
@@ -126,3 +127,27 @@ def test_security_headers_config_validates_hsts() -> None:
         SecurityHeadersConfig(hsts_max_age_seconds=0)
 
     assert invalid_hsts.value.code == "VALIDATION_ERROR"
+
+
+def test_security_hardening_checklist_covers_profiles() -> None:
+    local = security_hardening_checklist("local")
+    private = security_hardening_checklist("private")
+    cloud = security_hardening_checklist("cloud")
+
+    assert [item.category for item in local.items] == ["headers"]
+    assert "Content-Security-Policy" in local.items[0].evidence
+    assert [item.category for item in private.items] == ["csp", "cookie", "tls", "headers"]
+    assert all(item.required for item in private.items)
+    assert any(
+        item.category == "tls"
+        and "Strict-Transport-Security" in item.evidence
+        and "includeSubDomains" in item.evidence
+        for item in private.items
+    )
+    assert any(item.category == "tls" and "preload" in item.evidence for item in cloud.items)
+    assert private.to_dict()["profile"] == "private"
+
+
+def test_security_hardening_checklist_rejects_unknown_profile() -> None:
+    with pytest.raises(ValueError, match="Unknown deployment profile"):
+        security_hardening_checklist("staging")

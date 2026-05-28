@@ -1,5 +1,12 @@
-from core.security.headers import SecurityHeadersConfig, security_headers
+# ruff: noqa: I001
+# Import masking before headers because core.exceptions/core.messages read security exports.
 from core.security.masking import DEFAULT_SENSITIVE_KEYS, REDACTED, redact_sensitive_data
+from core.security_hardening import (
+    SecurityHardeningChecklist,
+    SecurityHardeningItem,
+    security_hardening_checklist,
+)
+from core.security.headers import SecurityHeadersConfig, security_headers
 from core.security.middleware import (
     RequestBodySizeLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -31,12 +38,15 @@ __all__ = [
     "RequestBodySizeLimitMiddleware",
     "SecretProvider",
     "SecurityHeadersConfig",
+    "SecurityHardeningChecklist",
+    "SecurityHardeningItem",
     "SecurityHeadersMiddleware",
     "UploadSecurityPolicy",
     "UploadValidationResult",
     "TrustedHostGuardMiddleware",
     "redact_sensitive_data",
     "resolve_settings_secrets",
+    "security_hardening_checklist",
     "security_headers",
     "validate_upload",
 ]

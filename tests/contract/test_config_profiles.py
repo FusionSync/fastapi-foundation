@@ -40,6 +40,19 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
         "core migrate run --backup-ready --json",
         "core smoke --profile private --json",
     ]
+    assert [item["category"] for item in payload["security_hardening"]] == [
+        "csp",
+        "cookie",
+        "tls",
+        "headers",
+    ]
+    assert all(item["required"] is True for item in payload["security_hardening"])
+    assert any(
+        item["category"] == "tls"
+        and "Strict-Transport-Security" in item["evidence"]
+        and "includeSubDomains" in item["evidence"]
+        for item in payload["security_hardening"]
+    )
 
 
 def test_cloud_profile_template_uses_standard_http_and_external_secret_ref(capsys) -> None:
@@ -56,6 +69,10 @@ def test_cloud_profile_template_uses_standard_http_and_external_secret_ref(capsy
     assert payload["processes"]["server"]["replicas"] == "autoscale"
     assert payload["processes"]["worker"]["replicas"] == "autoscale"
     assert payload["processes"]["scheduler"]["replicas"] == 1
+    assert any(
+        item["category"] == "tls" and "preload" in item["evidence"]
+        for item in payload["security_hardening"]
+    )
 
 
 def test_private_profile_config_check_accepts_external_secret_reference() -> None:
@@ -235,6 +252,10 @@ def test_private_profile_renders_docker_compose_deployment_artifacts(capsys) -> 
 
     compose = payload["files"][0]["content"]
     assert "services:" in compose
+    assert "x-security-hardening:" in compose
+    assert "category: \"csp\"" in compose
+    assert "category: \"cookie\"" in compose
+    assert "Strict-Transport-Security" in compose
     assert "server:" in compose
     assert "worker:" in compose
     assert "scheduler:" in compose
@@ -280,6 +301,9 @@ def test_cloud_profile_renders_helm_values_from_process_matrix(capsys) -> None:
     assert 'command: "core worker --run --instance-id ${INSTANCE_ID}"' in values
     assert 'API__ERROR_HTTP_STATUS_MODE: "standard"' in values
     assert 'SECURITY__JWT_SECRET_REF: "APP_JWT_SECRET"' in values
+    assert "securityHardening:" in values
+    assert 'category: "tls"' in values
+    assert "preload" in values
     assert "validationCommands:" in values
     assert '  - "core config drift-check --profile cloud --json"' in values
 
@@ -323,4 +347,10 @@ def test_deployment_artifacts_validate_actual_env_with_redacted_drift(capsys) ->
         and "***" in mismatch["actual"]
         for mismatch in payload["drift"]["mismatched"]
     )
+    env_file = next(file for file in payload["files"] if file["path"].endswith(".env"))
+    assert "# Security hardening checklist:" in env_file["content"]
+    assert "# - category: csp" in env_file["content"]
+    assert "#   control:" in env_file["content"]
+    assert "#   required: True" in env_file["content"]
+    assert "Strict-Transport-Security" in env_file["content"]
     assert "super-secret" not in payload_text

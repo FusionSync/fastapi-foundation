@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: security headers、trusted hosts、body size limit、secret provider、HTTP client credential secret 注入、password hashing、upload guard、app route security policy、route permission conformance 诊断和权限拒绝审计接入已落地。
-- Next:
-  - [ ] 为 private/cloud profile 补 CSP、cookie、TLS/header hardening 清单。
+- Done: security headers、trusted hosts、body size limit、secret provider、HTTP client credential secret 注入、password hashing、upload guard、app route security policy、route permission conformance 诊断、权限拒绝审计接入和 private/cloud CSP、cookie、TLS/header hardening 清单已落地。
+- Next: _none_
 
 ## 职责
 
@@ -51,6 +50,8 @@ src/core/security/
 - 上传被拒绝时抛 `UPLOAD_REJECTED`，details 中包含稳定 `reason`，例如 `file_too_large`、`extension_not_allowed`、`content_type_not_allowed`、`checksum_mismatch`。
 - `FileService.upload_bytes()` 默认拒绝缺少 `AuthorizationService` 的调用，并在通过 `file.upload` 授权后接入默认上传安全策略；业务可以注入更严格的 `upload_policy`。
 - `SecurityHeadersConfig` 和 `security_headers()` 提供 CSP、HSTS、X-Frame-Options、Referrer-Policy、Permissions-Policy 等响应头。
+- `security_hardening_checklist(profile)` 为 local/private/cloud 输出结构化 hardening 清单；private/cloud 覆盖 CSP、cookie、TLS/HSTS 和通用响应头控制项，private 要求 `Strict-Transport-Security` + `includeSubDomains`，cloud 额外要求 `preload`。
+- private/cloud profile template 与派生部署产物会携带同一份 `security_hardening` 清单，发布包必须逐项核对 ingress/reverse proxy 的 CSP、Secure/HttpOnly/SameSite cookie、TLS/HSTS 和安全响应头配置。
 - `SecurityHeadersMiddleware` 在 app factory 中为响应补充安全响应头。
 - `TrustedHostGuardMiddleware` 按 `settings.security.trusted_hosts` 拒绝不可信 Host，并返回统一 envelope。
 - `RequestBodySizeLimitMiddleware` 按 `settings.security.max_request_body_bytes` 拒绝超大请求体，并返回 `REQUEST_TOO_LARGE`。

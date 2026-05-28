@@ -114,6 +114,7 @@ migrate health
 local profile 可以使用 sync task provider；private/cloud profile 后续接 Redis、队列和 leader lock 时必须复用同一输出结构。
 `core config template --profile <profile> --json` 是部署 profile 的配置和进程矩阵来源；发布脚本、Docker Compose、Helm 或 systemd 示例必须从其中的 `env`、`processes` 和 `validation_commands` 派生，避免文档、脚本和 CLI 参数漂移。
 `core config artifacts --profile <profile> --target <docker-compose|systemd|helm-values> --json` 会直接从该矩阵输出部署产物内容；发布仓库或安装包应消费 `files` 字段，而不是手工复制命令。
+private/cloud profile 的 template 还会输出 `security_hardening`；部署产物会在 Docker Compose 的 `x-security-hardening`、Helm values 的 `securityHardening` 或 systemd env 注释中保留同一清单。发布前必须逐项核对 ingress/reverse proxy 的 CSP、Secure/HttpOnly/SameSite cookie、TLS/HSTS 和安全响应头配置；cloud profile 的 HSTS 必须覆盖 `preload`。
 发布前应执行 `core config drift-check --profile <profile> --json`，或用重复 `--actual KEY=VALUE` 检查候选部署环境；校验 worker、scheduler、outbox-dispatcher 等角色时传 `--role <role>`，避免把所有运行时都按 server 日志字段检查。失败报告必须脱敏输出缺失/不匹配项，不能泄漏数据库密码或 secret。
 生成部署产物时也可以给 `core config artifacts` 传入重复 `--actual KEY=VALUE` 和 `--role <role>`，命令会附带输出 `drift` 并在漂移时返回非零 exit code，适合作为发布参数矩阵的早期 gate。
 发布脚本首选 `core release checkpoint --profile <profile> --artifact-target <docker-compose|systemd|helm-values> --json`，一次性输出 profile 参数矩阵并执行 config、backup、drift、migrate dry-run 和 smoke 聚合门禁。需要校验候选部署环境时，传重复 `--actual KEY=VALUE` 作为公共环境，或传 `--role-actual ROLE:KEY=VALUE` 覆盖某个进程角色。

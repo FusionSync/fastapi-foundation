@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、HTTP client credential secret ref、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、配置 drift-check、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
+- Done: settings、profile 校验、secret provider、HTTP client credential secret ref、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、profile security hardening 清单、配置 drift-check、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
 - Next:
   - [ ] 将运行时配置漂移结果接入告警。
 
@@ -82,9 +82,11 @@ cloud
 
 - `env` 给出该 profile 的环境变量键和值或占位符。
 - `processes` 给出 `server`、`worker`、`scheduler`、`outbox-dispatcher`、`migrate` 的启动命令、replica 建议和运行备注。
+- `security_hardening` 给出该 profile 必须核对的 CSP、cookie、TLS/HSTS 和响应头控制项。
 - `validation_commands` 给出发布脚本可直接执行的检查命令，包括 `check-config`、`config drift-check`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
 
 模板中的生产密钥通过 `SECURITY__JWT_SECRET_REF` 引用外部 secret，不输出 `SECURITY__JWT_SECRET` 明文。private/cloud 模板默认使用 PostgreSQL URL 占位符和标准 HTTP status mode。
+private/cloud 模板的 hardening 清单默认要求生产 ingress 或反向代理启用 CSP、Secure/HttpOnly/SameSite cookie、HSTS 和安全响应头；cloud profile 的 HSTS evidence 额外包含 `preload`。
 `check-config` 会接受生产 profile 的外部 secret reference，但启动期 `create_app()` 仍必须通过 secret provider 解析到真实密钥后才能通过 `validate_startup_settings()`。
 
 ## Config Drift Check
@@ -107,6 +109,8 @@ cloud
 - `files`：待写入部署仓库或安装包的文件名和内容。
 - `validation_commands`：发布脚本必须执行的校验命令，包含 `check-config`、`config drift-check`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
 - `source_template_command` / `drift_check_command`：产物来源和配置漂移校验入口。
+
+部署产物会保留 profile template 中的 security hardening 清单：Docker Compose 使用 `x-security-hardening`，Helm values 使用 `securityHardening`，systemd env 示例使用注释块承载同一组控制项。
 
 如果同时传入重复 `--actual KEY=VALUE`，命令会在输出产物时执行同一套 drift-check；发现缺失或不匹配时返回 exit code `1`，并在 `drift` 中输出脱敏报告。配合 `--role` 使用时，校验对象是该进程角色的运行时环境。
 
