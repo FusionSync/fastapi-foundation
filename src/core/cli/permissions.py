@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.apps.registry import AppRegistry
 from core.cli.common import installed_apps, print_payload
-from core.permissions import PermissionRegistry
+from core.db import unit_of_work
+from core.permissions import PermissionRegistry, PolicyProjector
 
 
 def register_permission_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -17,10 +21,20 @@ def register_permission_commands(subparsers: argparse._SubParsersAction) -> None
         command_parser = permissions_subparsers.add_parser(command)
         command_parser.add_argument("--installed-app", action="append", default=[])
         command_parser.add_argument("--json", action="store_true", dest="as_json")
+        if command == "reconcile":
+            command_parser.add_argument("--database-url")
+            command_parser.add_argument("--repair", action="store_true")
         command_parser.set_defaults(handler=_handle_permissions)
 
 
 def _handle_permissions(args: argparse.Namespace) -> int:
+    if args.permissions_command == "reconcile" and args.database_url:
+        payload = asyncio.run(
+            _reconcile_projection(database_url=args.database_url, repair=args.repair)
+        )
+        print_payload(payload, as_json=args.as_json)
+        return 0 if bool(payload.get("ok")) else 1
+
     try:
         app_registry = AppRegistry(installed_apps(args.installed_app)).load()
         permission_registry = PermissionRegistry.from_app_registry(app_registry)
@@ -39,3 +53,20 @@ def _handle_permissions(args: argparse.Namespace) -> int:
         }
     print_payload(payload, as_json=args.as_json)
     return 0 if bool(payload.get("ok")) else 1
+
+
+async def _reconcile_projection(*, database_url: str, repair: bool) -> dict[str, object]:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            if uow.session is None:
+                return {
+                    "ok": False,
+                    "mode": "projection",
+                    "error": "database session was not initialized",
+                }
+            result = await PolicyProjector(uow.session).reconcile(repair=repair)
+            return {**result.to_dict(), "mode": "projection"}
+    finally:
+        await engine.dispose()

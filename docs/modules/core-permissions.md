@@ -76,10 +76,16 @@ CLI 可查看权限目录：
 ```bash
 core permissions catalog --installed-app apps.example_domain.module --json
 core permissions reconcile --installed-app apps.example_domain.module --json
+core permissions reconcile --database-url sqlite+aiosqlite:///./data/local.db --json
+core permissions reconcile --database-url sqlite+aiosqlite:///./data/local.db --repair --json
 ```
 
 `catalog` 来自 app module 的 `PermissionSpec` 和 admin metadata 转换后的平台权限。
-`reconcile` 的数据库修复能力由 `PolicyProjector.reconcile(repair=True)` 提供，CLI 当前先提供 metadata contract，用于部署前检查权限目录是否可收集。
+`reconcile` 有两种模式：
+
+- 不传 `--database-url` 时运行 metadata mode，用于部署前检查权限目录是否可收集。
+- 传 `--database-url` 时运行 projection mode，调用 `PolicyProjector.reconcile()` 检测 RoleGrant/RoleTemplate 与 ProjectedPolicy 的 drift。
+- projection mode 只有显式传 `--repair` 时才会修复 missing/stale policy，并提交事务。
 
 ## 角色建议
 

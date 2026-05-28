@@ -123,6 +123,15 @@ reconciliation repair 必须是增量修复：
 - 相同 tenant/subject/resource/action/role_grant_id 下的 `policy_version` 或 `effect` 漂移必须被视为 stale + missing，而不是误判为一致。
 - repair 必须失效权限缓存。
 
+CLI 入口：
+
+```bash
+core permissions reconcile --database-url <sqlalchemy-async-url> --json
+core permissions reconcile --database-url <sqlalchemy-async-url> --repair --json
+```
+
+不带 `--repair` 时只报告 missing/stale policy；带 `--repair` 时执行增量修复并提交事务。
+
 当前实现落点：
 
 ```text

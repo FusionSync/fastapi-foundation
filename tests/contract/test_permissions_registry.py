@@ -1,11 +1,23 @@
+import asyncio
 import json
 import sys
 import types
+from pathlib import Path
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.admin import AdminModelSpec, AdminPermissionSpec, AdminRouteSpec
 from core.apps import AppModule, AppRegistry
+from core.base.models import BaseModel
 from core.cli.main import main
-from core.permissions import PermissionRegistry, PermissionSpec
+from core.permissions import (
+    PermissionRegistry,
+    PermissionSpec,
+    ProjectedPolicy,
+    RoleGrant,
+    RoleTemplate,
+)
 
 
 def test_permission_registry_collects_app_module_permissions() -> None:
@@ -108,3 +120,100 @@ def test_permissions_reconcile_cli_outputs_metadata_mode(capsys) -> None:
     assert payload["ok"] is True
     assert payload["reconciled"] is True
     assert payload["mode"] == "metadata"
+
+
+def test_permissions_reconcile_cli_detects_projection_drift(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_seed_role_grant_without_projection(database_url))
+
+    exit_code = main(
+        [
+            "permissions",
+            "reconcile",
+            "--database-url",
+            database_url,
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["mode"] == "projection"
+    assert payload["repaired"] is False
+    assert payload["missing"][0]["role_grant_id"] == "grant-1"
+
+
+def test_permissions_reconcile_cli_repairs_projection_drift(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_seed_role_grant_without_projection(database_url))
+
+    exit_code = main(
+        [
+            "permissions",
+            "reconcile",
+            "--database-url",
+            database_url,
+            "--repair",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["mode"] == "projection"
+    assert payload["repaired"] is True
+    assert asyncio.run(_projected_policy_count(database_url)) == 1
+
+
+def _sqlite_url(tmp_path: Path) -> str:
+    return f"sqlite+aiosqlite:///{tmp_path / 'permissions-cli.db'}"
+
+
+async def _seed_role_grant_without_projection(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            session.add(
+                RoleTemplate(
+                    id="template-viewer",
+                    scope="tenant",
+                    name="viewer",
+                    version=1,
+                    permissions=[{"resource": "example", "action": "read"}],
+                )
+            )
+            session.add(
+                RoleGrant(
+                    id="grant-1",
+                    tenant_id="tenant-a",
+                    subject_type="user",
+                    subject_id="user-1",
+                    role_template_id="template-viewer",
+                    policy_version=1,
+                )
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _projected_policy_count(database_url: str) -> int:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            result = await session.scalar(select(func.count()).select_from(ProjectedPolicy))
+            return int(result or 0)
+    finally:
+        await engine.dispose()
