@@ -41,6 +41,12 @@ src/core/serialization/
 - Pydantic 输出统一使用 `model_dump(mode="json", by_alias=True)`。
 - 默认不使用 `exclude_none=True` 影响 envelope 字段；envelope 未使用字段显式为 `null`。
 
+当前实现提供 `to_jsonable()`，并已接入 `ok()`、`ok_list()` 和 `fail()`：
+
+- aware `datetime` 输出 `isoformat()`，naive `datetime` 抛 `SYSTEM_ERROR`。
+- `date`、`Decimal`、`UUID`、`Enum` 和嵌套 list/dict 会递归编码。
+- Pydantic model 先 `model_dump(mode="python", by_alias=True)`，再经过统一编码。
+
 ## BaseSchema 关系
 
 `core.base.schemas.BaseSchema` 应复用 serialization 配置：

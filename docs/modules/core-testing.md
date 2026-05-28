@@ -34,7 +34,7 @@ src/core/testing/
 - API 测试必须断言响应 envelope 和业务 code。
 - 每个注册 app 必须通过 app conformance test。
 - API contract test 必须校验 HTTP status、业务 code、headers、envelope schema 和 `request_id`。
-- serialization golden test 必须覆盖 datetime、Decimal、UUID、Enum、空值和列表响应。
+- serialization golden test 已覆盖 datetime、Decimal、UUID、Enum、空值和列表响应；新增编码规则时必须先扩展 golden test。
 - 兼容模式 `always_200` 必须单独测试，不能影响默认生产模式。
 
 ## 最小测试矩阵

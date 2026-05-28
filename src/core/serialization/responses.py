@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.context.context import get_current_context
 from core.messages import resolve_message
+from core.serialization.encoders import to_jsonable
 
 
 class Pagination(BaseModel):
@@ -43,7 +44,7 @@ def ok(
     return Envelope(
         code="OK",
         message=message,
-        data=data,
+        data=to_jsonable(data),
         items=None,
         pagination=None,
         details=None,
@@ -65,7 +66,7 @@ def ok_list(
         code="OK",
         message=message,
         data=None,
-        items=items,
+        items=to_jsonable(items),
         pagination=pagination_model,
         details=None,
         request_id=_request_id(request_id),
@@ -86,6 +87,6 @@ def fail(
         data=None,
         items=None,
         pagination=None,
-        details=details,
+        details=to_jsonable(details),
         request_id=_request_id(request_id),
     ).model_dump(mode="json", by_alias=True)
