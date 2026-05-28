@@ -6,6 +6,7 @@ from core.config import Settings, get_settings, validate_startup_settings
 from core.context import RequestContextMiddleware
 from core.exceptions import register_exception_handlers
 from core.observability import HttpMetricsMiddleware, MetricsRegistry, render_metrics_contract
+from core.operations import check_app_readiness
 from core.security import (
     RequestBodySizeLimitMiddleware,
     SecretProvider,
@@ -65,7 +66,12 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
 
     @app.get("/readyz", include_in_schema=False)
     async def readyz() -> dict[str, object]:
-        return ok({"status": "ready"})
+        readiness = check_app_readiness(
+            settings=settings,
+            app_registry=getattr(app.state, "app_registry", None),
+            metrics_registry=getattr(app.state, "metrics_registry", None),
+        )
+        return ok(readiness.to_dict())
 
     @app.get("/version", include_in_schema=False)
     async def version() -> dict[str, object]:

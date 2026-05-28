@@ -45,7 +45,7 @@ GET /version
 GET /metrics
 ```
 
-`healthz` 只检查进程存活，`readyz` 检查数据库、缓存、存储等依赖。
+`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、AppRegistry 和 MetricsRegistry。
 worker、scheduler 和 outbox-dispatcher 也必须提供等价探针或 CLI health check。
 
 ## 指标

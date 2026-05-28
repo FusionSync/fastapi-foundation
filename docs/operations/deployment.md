@@ -93,7 +93,7 @@ server /healthz
   process alive
 
 server /readyz
-  database, cache, storage, auth metadata ready
+  config loaded, database configured, AppRegistry loaded, MetricsRegistry loaded
 
 worker health
   queue reachable, database reachable, worker heartbeat fresh
