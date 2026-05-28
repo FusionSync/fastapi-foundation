@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from core.config.settings import DeploymentMode
@@ -40,12 +41,57 @@ class ProfileTemplate:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class ConfigDriftReport:
+    has_drift: bool
+    checked: list[str]
+    missing: list[dict[str, str]] = field(default_factory=list)
+    mismatched: list[dict[str, str]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "has_drift": self.has_drift,
+            "checked": self.checked,
+            "missing": self.missing,
+            "mismatched": self.mismatched,
+        }
+
+
 def render_profile_template(profile: DeploymentMode) -> ProfileTemplate:
     if profile == "local":
         return _local_template()
     if profile == "private":
         return _private_template()
     return _cloud_template()
+
+
+def check_profile_drift(
+    profile: DeploymentMode,
+    actual_env: dict[str, str],
+) -> ConfigDriftReport:
+    expected_env = render_profile_template(profile).env
+    checked = list(expected_env)
+    missing: list[dict[str, str]] = []
+    mismatched: list[dict[str, str]] = []
+    for key, expected in expected_env.items():
+        actual = actual_env.get(key)
+        if actual is None:
+            missing.append({"key": key, "expected": _redact_value(key, expected)})
+            continue
+        if not _matches_expected(expected, actual):
+            mismatched.append(
+                {
+                    "key": key,
+                    "expected": _redact_value(key, expected),
+                    "actual": _redact_value(key, actual),
+                }
+            )
+    return ConfigDriftReport(
+        has_drift=bool(missing or mismatched),
+        checked=checked,
+        missing=missing,
+        mismatched=mismatched,
+    )
 
 
 def _local_template() -> ProfileTemplate:
@@ -87,6 +133,7 @@ def _local_template() -> ProfileTemplate:
         },
         validation_commands=[
             "core check-config --profile local --json",
+            "core config drift-check --profile local --json",
             "core serve --run --dry-run --json",
             "core migrate run --backup-ready --json",
             "core smoke --profile local --json",
@@ -140,6 +187,7 @@ def _private_template() -> ProfileTemplate:
         },
         validation_commands=[
             "core check-config --profile private --json",
+            "core config drift-check --profile private --json",
             "core serve --run --dry-run --json",
             "core migrate run --backup-ready --json",
             "core smoke --profile private --json",
@@ -192,9 +240,37 @@ def _cloud_template() -> ProfileTemplate:
         },
         validation_commands=[
             "core check-config --profile cloud --json",
+            "core config drift-check --profile cloud --json",
             "core serve --run --dry-run --json",
             "core migrate run --backup-ready --json",
             "core smoke --profile cloud --json",
         ],
         notes=["Cloud profile must keep standard HTTP statuses for probes and clients."],
+    )
+
+
+def _matches_expected(expected: str, actual: str) -> bool:
+    if "${" not in expected:
+        return actual == expected
+    pattern = re.escape(expected)
+    pattern = re.sub(r"\\\$\\\{[A-Z0-9_]+\\\}", r".+", pattern)
+    return re.fullmatch(pattern, actual) is not None
+
+
+def _redact_value(key: str, value: str) -> str:
+    redacted = re.sub(r"://([^:/@]+):([^@]+)@", r"://\1:***@", value)
+    normalized_key = key.upper()
+    if _is_sensitive_key(normalized_key) and "${" not in value:
+        return "***"
+    return redacted
+
+
+def _is_sensitive_key(key: str) -> bool:
+    if key.endswith("_REF") or key.endswith("__JWT_SECRET_REF"):
+        return False
+    return (
+        key.endswith("SECRET")
+        or key.endswith("__JWT_SECRET")
+        or "PASSWORD" in key
+        or "TOKEN" in key
     )

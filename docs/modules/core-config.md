@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查和 local/private/cloud profile 模板输出已落地。
+- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出和配置 drift-check 已落地。
 - Next:
-  - [ ] 增加配置 diff/drift 检查。
-  - [ ] 将 profile 模板接入真实部署产物生成和配置漂移校验。
+  - [ ] 将 profile 模板和 drift-check 接入真实部署产物生成。
+  - [ ] 将运行时配置漂移结果接入发布 gate 和告警。
 
 ## 职责
 
@@ -83,10 +83,22 @@ cloud
 
 - `env` 给出该 profile 的环境变量键和值或占位符。
 - `processes` 给出 `server`、`worker`、`scheduler`、`outbox-dispatcher`、`migrate` 的启动命令、replica 建议和运行备注。
-- `validation_commands` 给出发布脚本可直接执行的检查命令，包括 `check-config`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
+- `validation_commands` 给出发布脚本可直接执行的检查命令，包括 `check-config`、`config drift-check`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
 
 模板中的生产密钥通过 `SECURITY__JWT_SECRET_REF` 引用外部 secret，不输出 `SECURITY__JWT_SECRET` 明文。private/cloud 模板默认使用 PostgreSQL URL 占位符和标准 HTTP status mode。
 `check-config` 会接受生产 profile 的外部 secret reference，但启动期 `create_app()` 仍必须通过 secret provider 解析到真实密钥后才能通过 `validate_startup_settings()`。
+
+## Config Drift Check
+
+`core config drift-check --profile <profile> --json` 会把实际环境变量与 profile 模板中的 `env` 对比；也可以通过重复 `--actual KEY=VALUE` 显式传入待检查环境，便于 CI/CD 在不读取宿主环境的情况下验证发布参数。
+
+漂移报告输出：
+
+- `checked`：模板要求检查的环境变量。
+- `missing`：实际环境缺失的必需项。
+- `mismatched`：实际值与模板不一致的项。
+
+模板值中的 `${PLACEHOLDER}` 会作为非空通配符处理，因此 `DATABASE__URL=postgresql+asyncpg://app:${DATABASE_PASSWORD}@postgres:5432/wps_bid` 可匹配运行时注入的真实密码。报告中的数据库 URL password、secret、token、password 字段必须脱敏。
 
 ## Secret Provider
 
