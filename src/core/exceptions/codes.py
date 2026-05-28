@@ -29,6 +29,7 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
     "IDEMPOTENCY_KEY_CONFLICT": ErrorCodeSpec("IDEMPOTENCY_KEY_CONFLICT", 409, "幂等键冲突"),
     "IDEMPOTENCY_IN_PROGRESS": ErrorCodeSpec("IDEMPOTENCY_IN_PROGRESS", 409, "请求正在处理中"),
     "LOCK_NOT_ACQUIRED": ErrorCodeSpec("LOCK_NOT_ACQUIRED", 409, "资源正在处理中"),
+    "QUOTA_EXCEEDED": ErrorCodeSpec("QUOTA_EXCEEDED", 403, "配额不足"),
     "RATE_LIMITED": ErrorCodeSpec("RATE_LIMITED", 429, "请求过于频繁"),
     "SYSTEM_ERROR": ErrorCodeSpec("SYSTEM_ERROR", 500, "系统错误"),
 }

@@ -11,6 +11,7 @@ METRIC_NAMES = {
     "migration_apply_total": "Counter for migration apply results.",
     "tenant_isolation_guard_failures_total": "Counter for tenant isolation guard failures.",
     "rate_limit_hits_total": "Counter for rate limit denials by rule and route class.",
+    "quota_exceeded_total": "Counter for quota denials by metric and scope.",
 }
 
 _COUNTERS = {
@@ -19,6 +20,7 @@ _COUNTERS = {
     "migration_apply_total",
     "tenant_isolation_guard_failures_total",
     "rate_limit_hits_total",
+    "quota_exceeded_total",
 }
 _HISTOGRAMS = {"http_request_duration_seconds", "outbox_dispatch_duration_seconds"}
 
