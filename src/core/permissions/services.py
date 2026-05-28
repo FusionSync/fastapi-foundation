@@ -6,8 +6,8 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
+from core.events import EventPublisher
 from core.exceptions import AppError
-from core.outbox import OutboxRepository
 from core.permissions.decisions import AuthorizationDecision, assert_authorization_decision
 from core.permissions.models import ProjectedPolicy, RoleGrant
 from core.permissions.projector import ROLE_GRANT_CHANGED_EVENT
@@ -17,12 +17,12 @@ class RoleGrantService:
     def __init__(
         self,
         session: AsyncSession,
-        outbox: OutboxRepository,
+        events: EventPublisher,
         *,
         audit: AuditRecorder | None = None,
     ) -> None:
         self.session = session
-        self.outbox = outbox
+        self.events = events
         self.audit = audit
 
     async def grant_role(
@@ -53,7 +53,7 @@ class RoleGrantService:
             policy_version=policy_version,
         )
         self.session.add(grant)
-        await self.outbox.add(
+        await self.events.publish(
             event_type=ROLE_GRANT_CHANGED_EVENT,
             aggregate_type="role_grant",
             aggregate_id=grant.id,
@@ -102,7 +102,7 @@ class RoleGrantService:
             actor_id=actor_id,
             mutation="revoke",
         )
-        await self.outbox.add(
+        await self.events.publish(
             event_type=ROLE_GRANT_CHANGED_EVENT,
             aggregate_type="role_grant",
             aggregate_id=grant.id,

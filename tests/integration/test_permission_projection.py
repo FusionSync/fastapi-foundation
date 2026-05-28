@@ -8,7 +8,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
 from core.exceptions import AppError
-from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
+from core.outbox import OutboxDispatcher, OutboxEvent, OutboxEventPublisher, OutboxRepository
 from core.permissions import (
     ROLE_GRANT_CHANGED_EVENT,
     AuthorizationDecision,
@@ -53,8 +53,10 @@ async def test_role_grant_outbox_event_updates_projected_policy_and_cache(
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
         uow.session.add(_viewer_template())
-        outbox = OutboxRepository(uow.session, registry=event_registry)
-        await RoleGrantService(uow.session, outbox).grant_role(
+        await RoleGrantService(
+            uow.session,
+            _event_publisher(uow.session, event_registry),
+        ).grant_role(
             tenant_id="tenant-a",
             subject_type="user",
             subject_id="user-1",
@@ -98,7 +100,7 @@ async def test_role_grant_requires_authorization_decision(
         with pytest.raises(AppError) as exc_info:
             await RoleGrantService(
                 uow.session,
-                OutboxRepository(uow.session, registry=event_registry),
+                _event_publisher(uow.session, event_registry),
             ).grant_role(
                 tenant_id="tenant-a",
                 subject_type="user",
@@ -130,7 +132,7 @@ async def test_role_revoke_outbox_event_removes_projected_policy_and_cache(
         uow.session.add(_viewer_template())
         grant = await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         ).grant_role(
             tenant_id="tenant-a",
             subject_type="user",
@@ -159,7 +161,7 @@ async def test_role_revoke_outbox_event_removes_projected_policy_and_cache(
         assert uow.session is not None
         await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         ).revoke_role(
             grant_id=grant_id,
             actor_id="owner-1",
@@ -195,7 +197,7 @@ async def test_role_revoke_removes_projected_policy_before_outbox_dispatch(
         uow.session.add(_viewer_template())
         grant = await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         ).grant_role(
             tenant_id="tenant-a",
             subject_type="user",
@@ -214,7 +216,7 @@ async def test_role_revoke_removes_projected_policy_before_outbox_dispatch(
         assert uow.session is not None
         await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         ).revoke_role(
             grant_id=grant_id,
             actor_id="owner-1",
@@ -499,3 +501,7 @@ async def _grant_count(session_factory: async_sessionmaker[AsyncSession]) -> int
     async with session_factory() as session:
         result = await session.scalar(select(func.count()).select_from(RoleGrant))
         return int(result or 0)
+
+
+def _event_publisher(session: AsyncSession, registry: EventRegistry) -> OutboxEventPublisher:
+    return OutboxEventPublisher(OutboxRepository(session, registry=registry))

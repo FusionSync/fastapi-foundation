@@ -5,7 +5,7 @@ import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
-from core.outbox import OutboxRepository
+from core.events import EventPublisher
 from core.permissions import (
     PLATFORM_TENANT_ID,
     AuthorizationDecision,
@@ -28,13 +28,13 @@ class TenantLifecycleService:
     def __init__(
         self,
         session: AsyncSession,
-        outbox: OutboxRepository,
+        events: EventPublisher,
         *,
         session_revocation_hook: SessionRevocationHook | None = None,
         audit: AuditRecorder | None = None,
     ) -> None:
         self.session = session
-        self.outbox = outbox
+        self.events = events
         self.session_revocation_hook = session_revocation_hook
         self.audit = audit
 
@@ -73,7 +73,7 @@ class TenantLifecycleService:
         validate_tenant_transition("provisioning", "active")
         tenant.status = "active"
         await publish_tenant_lifecycle_event(
-            self.outbox,
+            self.events,
             TENANT_CREATED_EVENT,
             tenant=tenant,
             actor_id=actor_id,
@@ -215,7 +215,7 @@ class TenantLifecycleService:
         if revoke_sessions:
             await self._revoke_sessions(tenant.id, reason)
         await publish_tenant_lifecycle_event(
-            self.outbox,
+            self.events,
             event_type,
             tenant=tenant,
             actor_id=actor_id,

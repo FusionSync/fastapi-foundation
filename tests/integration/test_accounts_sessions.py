@@ -9,7 +9,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.exceptions import AppError
-from core.outbox import OutboxRepository
+from core.outbox import OutboxEventPublisher, OutboxRepository
 from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.security import PasswordHasher
 from core.tenancy import Tenant, TenantLifecycleService, TenantMember
@@ -140,7 +140,7 @@ async def test_tenant_lifecycle_can_revoke_tenant_sessions_through_hook(
         assert tenant is not None
         await TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=registry),
+            _event_publisher(uow.session, registry),
             session_revocation_hook=AccountsService(
                 uow.session
             ).revoke_tenant_sessions_for_lifecycle,
@@ -421,6 +421,10 @@ def _add_tenant(
             deployment_mode="local",
         )
     )
+
+
+def _event_publisher(session: AsyncSession, registry: EventRegistry) -> OutboxEventPublisher:
+    return OutboxEventPublisher(OutboxRepository(session, registry=registry))
 
 
 def _user_manage_decision(

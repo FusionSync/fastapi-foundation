@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventRegistry
-from core.outbox import OutboxEvent, OutboxRepository
+from core.outbox import OutboxEvent, OutboxEventPublisher, OutboxRepository
 from core.permissions import (
     PLATFORM_TENANT_ID,
     AuthorizationDecision,
@@ -41,7 +41,7 @@ async def test_role_grant_writes_strong_audit_with_outbox(
         uow.session.add(_viewer_template())
         grant = await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             audit=AuditService(uow.session),
         ).grant_role(
             tenant_id="tenant-a",
@@ -84,7 +84,7 @@ async def test_role_grant_audit_rolls_back_with_business_transaction(
             uow.session.add(_viewer_template())
             await RoleGrantService(
                 uow.session,
-                OutboxRepository(uow.session, registry=event_registry),
+                _event_publisher(uow.session, event_registry),
                 audit=AuditService(uow.session),
             ).grant_role(
                 tenant_id="tenant-a",
@@ -113,7 +113,7 @@ async def test_role_revoke_writes_strong_audit_with_outbox(
         uow.session.add(_viewer_template())
         grant = await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         ).grant_role(
             tenant_id="tenant-a",
             subject_type="user",
@@ -129,7 +129,7 @@ async def test_role_revoke_writes_strong_audit_with_outbox(
         assert uow.session is not None
         await RoleGrantService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             audit=AuditService(uow.session),
         ).revoke_role(
             grant_id=grant_id,
@@ -231,7 +231,7 @@ async def test_tenant_suspend_writes_lifecycle_audit(
         assert tenant is not None
         await TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             audit=AuditService(uow.session),
         ).suspend_tenant(
             tenant,
@@ -267,7 +267,7 @@ async def test_tenant_provision_writes_lifecycle_audit(
         assert uow.session is not None
         tenant = await TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             audit=AuditService(uow.session),
         ).provision_tenant(
             tenant_id="tenant-a",
@@ -320,7 +320,7 @@ async def test_tenant_reactivate_writes_lifecycle_audit_and_outbox_event(
         assert tenant is not None
         await TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             audit=AuditService(uow.session),
         ).reactivate_tenant(
             tenant,
@@ -358,6 +358,10 @@ def _tenant_event_registry() -> EventRegistry:
     registry.register("permissions.role_grant_changed", 1, lambda event: None)
     registry.register("tenant.suspended", 1, lambda event: None)
     return registry
+
+
+def _event_publisher(session: AsyncSession, registry: EventRegistry) -> OutboxEventPublisher:
+    return OutboxEventPublisher(OutboxRepository(session, registry=registry))
 
 
 def _viewer_template() -> RoleTemplate:

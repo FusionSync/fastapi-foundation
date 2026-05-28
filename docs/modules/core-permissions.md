@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、projection cache 和审计字段要求已落地。
+- Done: permission registry、authorization decision、platform/tenant scope 校验、projection cache、outbox-backed role grant events 和审计字段要求已落地。
 - Next:
   - [ ] 接 route dependency，让业务 mutation 默认拿到 `AuthorizationDecision`。
   - [ ] 补资源 owner adapter 和跨租户平台权限统一 gate。

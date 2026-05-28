@@ -8,7 +8,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.exceptions import AppError
-from core.outbox import OutboxEvent, OutboxRepository
+from core.outbox import OutboxEvent, OutboxEventPublisher, OutboxRepository
 from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.tenancy import (
     TENANT_CREATED_EVENT,
@@ -73,7 +73,7 @@ async def test_provisioning_creates_active_tenant_owner_member_and_created_event
         assert uow.session is not None
         service = TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         )
         tenant = await service.provision_tenant(
             tenant_id="tenant-a",
@@ -112,7 +112,7 @@ async def test_suspending_tenant_revokes_sessions_and_blocks_writes(
         assert current is not None
         service = TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             session_revocation_hook=lambda tenant_id, reason: revoked.append((tenant_id, reason)),
         )
         await service.suspend_tenant(
@@ -150,7 +150,7 @@ async def test_delete_workflow_enters_deleting_and_emits_outbox_event(
         assert current is not None
         service = TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
             session_revocation_hook=lambda tenant_id, reason: revoked.append((tenant_id, reason)),
         )
         await service.begin_delete_tenant(
@@ -187,7 +187,7 @@ async def test_delete_workflow_can_finish_as_deleted(
         assert current is not None
         service = TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         )
         await service.begin_delete_tenant(
             current,
@@ -224,7 +224,7 @@ async def test_tenant_lifecycle_mutation_requires_authorization_decision(
         assert current is not None
         service = TenantLifecycleService(
             uow.session,
-            OutboxRepository(uow.session, registry=event_registry),
+            _event_publisher(uow.session, event_registry),
         )
         with pytest.raises(AppError) as exc_info:
             await service.suspend_tenant(
@@ -275,6 +275,10 @@ def _tenant_event_registry() -> EventRegistry:
     ):
         registry.register(event_type, 1, lambda event: None)
     return registry
+
+
+def _event_publisher(session: AsyncSession, registry: EventRegistry) -> OutboxEventPublisher:
+    return OutboxEventPublisher(OutboxRepository(session, registry=registry))
 
 
 def _tenant_manage_decision(

@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、同事务写入、条件领取、一次性 dispatcher CLI、有限重试、dead-letter replay 和 lease 完成校验已落地。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、有限重试、dead-letter replay 和 lease 完成校验已落地。
 - Next:
-  - [ ] 将 event publish 默认落到 outbox，并接长驻 worker/outbox-dispatcher 运行角色。
+  - [ ] 接长驻 worker/outbox-dispatcher 运行角色。
   - [ ] 接跨进程锁、handler schema/version 和幂等 side-effect 指南。
 
 ## 为什么需要 Outbox
@@ -78,12 +78,12 @@ outbox 必须通过 core transaction/unit-of-work 写入：
 ```text
 async with unit_of_work() as uow:
   await resource_repo.create(..., session=uow.session)
-  await outbox_repo.add(..., session=uow.session)
+  await event_publisher.publish(...)
 ```
 
 规则：
 
-- repository 必须绑定同一个 `AsyncSession`。
+- `OutboxEventPublisher` 内部的 repository 必须绑定同一个 `AsyncSession`。
 - `outbox_repo.add()` 禁止在已有事务外隐式打开新连接。
 - rollback 后不得留下 outbox event。
 - 后台任务没有 HTTP request 时，必须显式传入 TaskContext 和 unit-of-work。
@@ -137,7 +137,7 @@ service 不直接发可靠事件，而是在事务中写 outbox：
 ```text
 await service.run_in_transaction(
   write_business_data()
-  outbox.add(event)
+  event_publisher.publish(event)
 )
 ```
 

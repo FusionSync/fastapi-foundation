@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: event handler spec、`EventRegistry` 和 outbox `dispatch-once` CLI 已能从 app registry 汇总 handler 并投递 outbox event。
+- Done: event handler spec、`EventRegistry`、`EventPublisher` 协议、outbox-backed publisher 和 outbox `dispatch-once` CLI 已能从 app registry 汇总 handler 并投递 outbox event。
 - Next:
-  - [ ] 接 outbox-backed publish API，避免业务 service 直接依赖 `OutboxRepository.add()`。
   - [ ] 定义事件 schema/version 兼容策略和 handler retry 语义。
+  - [ ] 将 long-running outbox dispatcher 运行角色接入发布命令。
 
 ## 职责
 
@@ -58,7 +58,8 @@ src/core/events/
 - `EventHandlerSpec.handler_path` 必须能 import 到 callable。
 - 同一 event_type/event_version 可以注册多个 handler。
 - 同一 event_type/event_version/handler_path 重复注册会启动前失败，避免重复副作用。
-- `OutboxRepository.add()` 可使用同一个 registry 校验 event_type/event_version 是否已注册。
+- 业务 service 依赖 `EventPublisher.publish()`，不直接依赖 `OutboxRepository.add()`；当前可靠实现是 `OutboxEventPublisher`。
+- `OutboxEventPublisher` 通过 `OutboxRepository.add()` 写入 outbox，并使用同一个 registry 校验 event_type/event_version 是否已注册。
 - `core outbox dispatch-once` 会按 `--installed-app` 或 settings 加载 `EventRegistry`，领取 outbox event 并调用已注册 handler。
 
 需要可靠投递的事件仍然通过 outbox 写入和 dispatcher 投递；`EventRegistry` 只负责运行时 handler 解析和分发，不承担消息队列职责。

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from core.outbox import OutboxRepository
+from core.events import EventPublisher
 from core.tenancy.models import Tenant
 
 TENANT_CREATED_EVENT = "tenant.created"
@@ -23,7 +23,7 @@ TENANT_LIFECYCLE_EVENTS = (
 
 
 async def publish_tenant_lifecycle_event(
-    outbox: OutboxRepository,
+    publisher: EventPublisher,
     event_type: str,
     *,
     tenant: Tenant,
@@ -31,7 +31,7 @@ async def publish_tenant_lifecycle_event(
     request_id: str,
     extra: Mapping[str, str],
 ) -> None:
-    await outbox.add(
+    await publisher.publish(
         event_type=event_type,
         aggregate_type="tenant",
         aggregate_id=tenant.id,
