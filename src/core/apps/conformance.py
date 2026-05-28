@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from importlib import util
 from pathlib import Path
 
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.routing import APIRoute
 
 from core.apps.boundaries import check_public_api_boundaries
@@ -26,6 +27,7 @@ REQUIRED_APP_FILES = (
     "permissions.py",
 )
 HTTP_ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "options", "head"}
+BINARY_RESPONSE_CLASSES = (FileResponse, StreamingResponse)
 
 
 @dataclass(slots=True)
@@ -307,6 +309,8 @@ def _check_router_openapi_envelopes(app_module: AppModule, result: AppCheckResul
         for route in router.routes:
             if not isinstance(route, APIRoute) or not route.include_in_schema:
                 continue
+            if _has_explicit_binary_response_class(route):
+                continue
             response_model = route.response_model
             if isinstance(response_model, type) and issubclass(
                 response_model,
@@ -315,8 +319,16 @@ def _check_router_openapi_envelopes(app_module: AppModule, result: AppCheckResul
                 continue
             result.errors.append(
                 f"{route.path} route must declare response_model=Envelope[...] "
-                "or ListEnvelope[...]"
+                "or ListEnvelope[...] unless it uses an explicit binary response_class"
             )
+
+
+def _has_explicit_binary_response_class(route: APIRoute) -> bool:
+    response_class = route.response_class
+    return isinstance(response_class, type) and issubclass(
+        response_class,
+        BINARY_RESPONSE_CLASSES,
+    )
 
 
 def _is_route_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:

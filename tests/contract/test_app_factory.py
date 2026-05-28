@@ -155,6 +155,41 @@ def test_create_app_rejects_route_without_typed_envelope_response_model(
         create_app(Settings(installed_apps=["runtime_apps.untyped_response.module"]))
 
 
+@pytest.mark.parametrize(
+    ("name", "runtime_kwargs", "expected_path"),
+    [
+        ("download_runtime", {"streaming_response": True}, "/api/v1/runtime/download"),
+        ("file_download_runtime", {"file_response": True}, "/api/v1/runtime/file"),
+    ],
+)
+def test_create_app_allows_binary_route_without_typed_envelope_response_model(
+    name: str,
+    runtime_kwargs: dict[str, bool],
+    expected_path: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, name, **runtime_kwargs)
+
+    app = create_app(Settings(installed_apps=[f"runtime_apps.{name}.module"]))
+
+    assert any(route.path == expected_path for route in app.routes)
+
+
+def test_create_app_rejects_json_response_class_without_typed_envelope_response_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "json_response_runtime", json_response_class=True)
+
+    with pytest.raises(ValueError, match="route must declare response_model=Envelope"):
+        create_app(Settings(installed_apps=["runtime_apps.json_response_runtime.module"]))
+
+
 def test_create_app_rejects_tenant_scoped_model_constraint_violation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -377,6 +412,9 @@ def _write_runtime_app(
     use_raw_router: bool = False,
     raw_response: bool = False,
     missing_response_model: bool = False,
+    streaming_response: bool = False,
+    file_response: bool = False,
+    json_response_class: bool = False,
     bad_tenant_model: bool = False,
     lifecycle_hooks: bool = False,
     invalid_lifecycle_signature: bool = False,
@@ -455,6 +493,44 @@ def _write_runtime_app(
             "@router.get('/ping')\n"
             "async def ping():\n"
             "    return ok({'status': 'ok'})\n",
+        )
+    elif streaming_response:
+        _write(
+            app_dir / "router.py",
+            "from io import BytesIO\n"
+            "from fastapi.responses import StreamingResponse\n"
+            "from core.base import create_router\n\n"
+            "router = create_router('/runtime')\n\n"
+            "@router.get('/download', response_class=StreamingResponse)\n"
+            "async def download():\n"
+            "    return StreamingResponse(\n"
+            "        BytesIO(b'demo'),\n"
+            "        media_type='application/octet-stream',\n"
+            "    )\n",
+        )
+    elif file_response:
+        _write(
+            app_dir / "router.py",
+            "from fastapi.responses import FileResponse\n"
+            "from core.base import create_router\n\n"
+            "router = create_router('/runtime')\n\n"
+            "@router.get('/file', response_class=FileResponse)\n"
+            "async def file_download():\n"
+            "    return FileResponse(\n"
+            "        __file__,\n"
+            "        media_type='application/octet-stream',\n"
+            "        filename='router.py',\n"
+            "    )\n",
+        )
+    elif json_response_class:
+        _write(
+            app_dir / "router.py",
+            "from fastapi.responses import JSONResponse\n"
+            "from core.base import create_router\n\n"
+            "router = create_router('/runtime')\n\n"
+            "@router.get('/json', response_class=JSONResponse)\n"
+            "async def json_response():\n"
+            "    return JSONResponse({'name': 'ok'})\n",
         )
     else:
         decorator = "@router.get('/ping')"

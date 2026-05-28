@@ -166,7 +166,7 @@ apps.foo -> platform_apps.tenants.models
 - 每个 app 的外部接口必须遵守 API conventions。
 - 每个 app 必须使用标准文件名：`schemas.py`、`models.py`、`router.py`、`services.py`。
 - 每个 app router 必须通过 `core.base.create_router()` 创建；匿名公开接口必须显式声明 `public=True`。
-- 每个进入 OpenAPI 的 JSON route 必须声明 `response_model=Envelope[ReadSchema]` 或 `response_model=ListEnvelope[ReadSchema]`。
+- 每个进入 OpenAPI 的 JSON route 必须声明 `response_model=Envelope[ReadSchema]` 或 `response_model=ListEnvelope[ReadSchema]`；文件下载和流式响应必须显式声明 `response_class=FileResponse` 或 `response_class=StreamingResponse` 才能跳过 JSON envelope。
 - 每个 app 的 migrations、tasks、events、schedules 必须通过 `AppModule` 注册。
 - 需要参与启动或关闭流程的 app 必须通过 `LifecycleHookSpec` 注册 startup/shutdown hook，不能在 core app factory 中硬编码业务 app 初始化逻辑。
 - 提供账号会话事实的 app 必须通过 `auth_session_store` 声明 `AuthSessionStore` factory，不允许在 core app factory 中硬编码具体账号 app。

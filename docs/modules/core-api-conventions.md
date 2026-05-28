@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: response envelope、标准/兼容 HTTP status、错误码 registry、headers、OpenAPI response_model gate，以及分页/过滤/排序 query schema contract 已落地。
-- Next:
-  - [ ] 将非 JSON/binary response 的例外路径纳入 conformance 白名单。
+- Done: response envelope、标准/兼容 HTTP status、错误码 registry、headers、OpenAPI response_model gate、非 JSON/binary response conformance 白名单，以及分页/过滤/排序 query schema contract 已落地。
+- Next: _none_
 
 ## 职责
 
@@ -182,4 +181,4 @@ deprecated
 - 所有 router 返回值必须通过 core response helpers 包装。
 - 禁止业务 router 直接返回裸 dict、裸 list 或未封装 Pydantic schema。
 
-当前 app conformance 会在启动期扫描 app 的 `router.py`，发现 route handler 直接 `return {}` 或 `return []` 时拒绝装载。业务 JSON 返回必须使用 `ok()` 或 `ok_list()`；二进制下载等非 JSON 响应需要通过明确的 response class 处理。
+当前 app conformance 会在启动期扫描 app 的 `router.py`，发现 route handler 直接 `return {}` 或 `return []` 时拒绝装载。业务 JSON 返回必须使用 `ok()` 或 `ok_list()`，并声明 `response_model=Envelope[...]` 或 `response_model=ListEnvelope[...]`。二进制下载等非 JSON 成功响应必须显式使用 `response_class=FileResponse` 或 `response_class=StreamingResponse`，此类 route 可以不声明 JSON envelope；失败响应仍必须走统一 JSON envelope。

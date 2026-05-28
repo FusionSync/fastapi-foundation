@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: `to_jsonable()`、`ok()`、`ok_list()`、`fail()`、Envelope/ListEnvelope 和复杂类型序列化规则已落地。
+- Done: `to_jsonable()`、`ok()`、`ok_list()`、`fail()`、Envelope/ListEnvelope、复杂类型序列化规则，以及 streaming/binary response 与 envelope 的例外边界已落地。
 - Next:
   - [ ] 补复杂类型 golden examples 和 OpenAPI schema regression。
-  - [ ] 明确 streaming/binary response 与 envelope 的例外边界。
 
 ## 职责
 
@@ -82,4 +81,4 @@ fail(code, message=None, details=None, status_code=None, headers=None)
 - 业务 router 禁止直接返回裸 dict/list。
 - 所有 JSON 响应必须经过 response helper。
 - router 应声明 `response_model=Envelope[ReadSchema]` 或 `response_model=ListEnvelope[ReadSchema]`，避免 OpenAPI 退化为裸 object。
-- 文件下载、流式响应不走 JSON envelope，但失败时仍走 JSON envelope。
+- 文件下载、流式响应不走 JSON envelope，route 必须显式声明 `response_class=FileResponse` 或 `response_class=StreamingResponse`；失败时仍走 JSON envelope。
