@@ -92,6 +92,15 @@ BaseAPIRouter
 router = create_router(prefix="/examples", tags=["examples"])
 ```
 
+`create_router()` 默认创建受保护 router：请求必须已经具备认证主体和租户上下文，否则返回
+`AUTH_INVALID_TOKEN` 或 `TENANT_ACCESS_DENIED`。公开接口必须显式声明：
+
+```python
+router = create_router(prefix="/health", tags=["health"], public=True)
+```
+
+app conformance 会拒绝裸 `APIRouter`，避免业务 app 绕过统一认证、租户和后续权限/限流装配。
+
 ## Service 基类
 
 建议提供：

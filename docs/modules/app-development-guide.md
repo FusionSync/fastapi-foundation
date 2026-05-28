@@ -67,6 +67,6 @@ models
 
 - ORM 模型继承 core 提供的 model 基类或 mixin。
 - Pydantic schema 继承 core 提供的 schema 基类。
-- router 使用 core 提供的 router 工厂或 router 基类。
+- router 使用 core 提供的 router 工厂或 router 基类。默认 router 需要认证和租户上下文；登录、健康检查、公开回调等接口必须显式 `public=True`。
 - service 继承 core 提供的 service 基类。
 - app 不直接构造响应 envelope，统一调用 core response helpers。

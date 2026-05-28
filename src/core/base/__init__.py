@@ -1,5 +1,5 @@
 from core.base.repositories import BaseRepository, CrossTenantRepository, TenantScopedRepository
-from core.base.routers import create_router
+from core.base.routers import RouteSecurityPolicy, create_router, get_router_security_policy
 from core.base.schemas import BaseSchema, CreateSchema, ListQuerySchema, ReadSchema, UpdateSchema
 from core.base.services import BaseService
 
@@ -11,7 +11,9 @@ __all__ = [
     "CreateSchema",
     "ListQuerySchema",
     "ReadSchema",
+    "RouteSecurityPolicy",
     "TenantScopedRepository",
     "UpdateSchema",
     "create_router",
+    "get_router_security_policy",
 ]

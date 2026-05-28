@@ -158,6 +158,7 @@ deprecated
 ## 设计要求
 
 - router 只做入参、依赖和响应，不放复杂业务逻辑。
+- 业务 router 必须通过 `core.base.create_router()` 创建；默认受保护，公开接口必须显式 `public=True`。
 - service 抛出领域异常，由 core 异常处理器转换为 API 错误。
 - 所有响应都应带 request_id。
 - 所有 router 返回值必须通过 core response helpers 包装。

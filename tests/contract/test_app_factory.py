@@ -68,6 +68,18 @@ def test_create_app_rejects_non_conforming_installed_app(
         create_app(Settings(installed_apps=["runtime_apps.bad_runtime.module"]))
 
 
+def test_create_app_rejects_router_without_core_security_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "raw_router", use_raw_router=True)
+
+    with pytest.raises(ValueError, match="router must be created with core.base.create_router"):
+        create_app(Settings(installed_apps=["runtime_apps.raw_router.module"]))
+
+
 def test_create_app_assembles_runtime_registries_and_imports_models(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -88,11 +100,28 @@ def test_create_app_assembles_runtime_registries_and_imports_models(
     assert app.state.admin_registry.to_dict()["admin_permissions"] == []
 
 
+def test_default_app_router_rejects_anonymous_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "protected_runtime")
+    app = create_app(Settings(installed_apps=["runtime_apps.protected_runtime.module"]))
+    client = TestClient(app)
+
+    response = client.get("/api/v1/runtime/ping")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "AUTH_INVALID_TOKEN"
+
+
 def _write_runtime_app(
     root: Path,
     name: str,
     *,
     declare_permissions: bool = True,
+    use_raw_router: bool = False,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -105,10 +134,26 @@ def _write_runtime_app(
     )
     _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
     _write(app_dir / "services.py", "class RuntimeService:\n    pass\n")
-    _write(
-        app_dir / "router.py",
-        "from core.base import create_router\n\nrouter = create_router('/runtime')\n",
-    )
+    if use_raw_router:
+        _write(
+            app_dir / "router.py",
+            "from fastapi import APIRouter\n"
+            "from core.serialization import ok\n\n"
+            "router = APIRouter(prefix='/runtime')\n\n"
+            "@router.get('/ping')\n"
+            "async def ping():\n"
+            "    return ok({'status': 'ok'})\n",
+        )
+    else:
+        _write(
+            app_dir / "router.py",
+            "from core.base import create_router\n"
+            "from core.serialization import ok\n\n"
+            "router = create_router('/runtime')\n\n"
+            "@router.get('/ping')\n"
+            "async def ping():\n"
+            "    return ok({'status': 'ok'})\n",
+        )
     _write(
         app_dir / "permissions.py",
         "from core.permissions import PermissionSpec\n\n"
