@@ -139,6 +139,51 @@ async def test_audit_hash_chain_is_partitioned_by_tenant(
 
 
 @pytest.mark.asyncio
+async def test_audit_hash_chain_verifier_detects_tampering(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant.first",
+            resource_type="tenant",
+            resource_id="tenant-a-first",
+            result="success",
+            payload={"field": "original"},
+        )
+        await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant.second",
+            resource_type="tenant",
+            resource_id="tenant-a-second",
+            result="success",
+        )
+
+    async with session_factory() as session:
+        verification = await AuditService(session).verify_hash_chain("tenant-a")
+
+    assert verification.valid is True
+    assert verification.checked == 2
+    assert verification.errors == ()
+
+    async with session_factory() as session:
+        audit_log = await session.scalar(
+            select(AuditLog).where(AuditLog.resource_id == "tenant-a-first")
+        )
+        assert audit_log is not None
+        audit_log.payload = {"field": "tampered"}
+        await session.commit()
+
+    async with session_factory() as session:
+        verification = await AuditService(session).verify_hash_chain("tenant-a")
+
+    assert verification.valid is False
+    assert verification.checked == 2
+    assert any(error.startswith("hash_mismatch:") for error in verification.errors)
+
+
+@pytest.mark.asyncio
 async def test_audit_record_rejects_invalid_required_fields(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

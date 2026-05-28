@@ -59,6 +59,7 @@ AuditLog
 - `AuditService` 会从 `RequestContext` 补齐 `tenant_id`、`actor_id`、`request_id`、`ip_address`、`user_agent`。
 - 入库前通过 `core.security.redact_sensitive_data()` 脱敏 password、token、secret、authorization 等字段。
 - 每条记录写入 `hash_prev` 和 `hash`，hash chain 按 `tenant_id` 分区；平台级 `tenant_id=None` 记录使用独立链路，避免租户级导出或校验引用其他租户记录。
+- `AuditService.verify_hash_chain(tenant_id)` 可按租户校验本库内审计链路，发现 hash 不匹配、前驱缺失、分叉、多根和断链。
 - `core.permissions.AuthorizationService` 会在权限拒绝时写入 `authorization.denied` 审计。
 - `RoleGrantService` 可注入 `AuditService`，角色授予和撤销会写 `role.granted` / `role.revoked` 审计。
 - `AccountsService` 可注入 `AuditService`，禁用用户会写 `user.disabled` 审计。

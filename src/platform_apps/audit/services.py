@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -13,6 +14,14 @@ from core.security import redact_sensitive_data
 from platform_apps.audit.models import AuditLog
 
 AuditResult = Literal["success", "failure", "denied"]
+
+
+@dataclass(frozen=True, slots=True)
+class AuditChainVerificationResult:
+    tenant_id: str | None
+    checked: int
+    valid: bool
+    errors: tuple[str, ...]
 
 
 class AuditService:
@@ -78,6 +87,22 @@ class AuditService:
         )
         return result.scalar_one_or_none()
 
+    async def verify_hash_chain(self, tenant_id: str | None) -> AuditChainVerificationResult:
+        statement = select(AuditLog)
+        if tenant_id is None:
+            statement = statement.where(AuditLog.tenant_id.is_(None))
+        else:
+            statement = statement.where(AuditLog.tenant_id == tenant_id)
+        result = await self.session.execute(statement)
+        audit_logs = list(result.scalars().all())
+        errors = _verify_hash_chain(audit_logs)
+        return AuditChainVerificationResult(
+            tenant_id=tenant_id,
+            checked=len(audit_logs),
+            valid=not errors,
+            errors=tuple(errors),
+        )
+
     def _validate_required(
         self,
         *,
@@ -91,6 +116,55 @@ class AuditService:
             raise AppError("VALIDATION_ERROR", "audit resource_type is required", status_code=400)
         if result not in {"success", "failure", "denied"}:
             raise AppError("VALIDATION_ERROR", "audit result is invalid", status_code=400)
+
+
+def _verify_hash_chain(audit_logs: list[AuditLog]) -> list[str]:
+    if not audit_logs:
+        return []
+
+    errors: list[str] = []
+    by_hash: dict[str, AuditLog] = {}
+    children_by_prev: dict[str, list[AuditLog]] = {}
+    roots: list[AuditLog] = []
+
+    for audit_log in audit_logs:
+        if audit_log.hash != audit_hash(audit_log):
+            errors.append(f"hash_mismatch:{audit_log.id}")
+        if audit_log.hash in by_hash:
+            errors.append(f"duplicate_hash:{audit_log.hash}")
+        else:
+            by_hash[audit_log.hash] = audit_log
+
+        if audit_log.hash_prev is None:
+            roots.append(audit_log)
+        else:
+            children_by_prev.setdefault(audit_log.hash_prev, []).append(audit_log)
+
+    for audit_log in audit_logs:
+        if audit_log.hash_prev is not None and audit_log.hash_prev not in by_hash:
+            errors.append(f"missing_prev:{audit_log.id}")
+
+    for prev_hash, children in children_by_prev.items():
+        if len(children) > 1:
+            errors.append(f"branch:{prev_hash}")
+
+    if len(roots) != 1:
+        errors.append(f"invalid_root_count:{len(roots)}")
+        return errors
+
+    visited: set[str] = set()
+    current = roots[0]
+    while current.hash not in visited:
+        visited.add(current.hash)
+        children = children_by_prev.get(current.hash, [])
+        if len(children) != 1:
+            break
+        current = children[0]
+
+    if len(visited) != len(audit_logs):
+        errors.append(f"disconnected_chain:{len(audit_logs) - len(visited)}")
+
+    return errors
 
 
 def audit_hash(audit_log: AuditLog) -> str:
