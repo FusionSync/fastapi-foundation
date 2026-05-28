@@ -24,6 +24,7 @@ src/apps/example_domain/
 ## module.py
 
 ```python
+from core.admin import AdminModelSpec, AdminPermissionSpec
 from core.apps.module import AppModule, EventHandlerSpec, MigrationSpec, ScheduleSpec, TaskHandlerSpec
 from core.permissions import PermissionSpec
 from .router import router
@@ -65,6 +66,18 @@ module = AppModule(
             misfire_policy="skip",
         )
     ],
+    admin_models=[
+        AdminModelSpec(
+            admin_id="example.items",
+            model_path="apps.example_domain.models.ExampleItem",
+            label="Example Items",
+            permissions=[
+                AdminPermissionSpec(resource="example_items", action="read"),
+            ],
+            tenant_scoped=True,
+            read_only=True,
+        )
+    ],
     public_api=[],
 )
 ```
@@ -76,8 +89,13 @@ module = AppModule(
 - `EventHandlerSpec(event_type, event_version, handler_path)`
 - `TaskHandlerSpec(task_type, handler_path, queue)`
 - `ScheduleSpec(schedule_id, task_type, trigger, trigger_config, misfire_policy)`
+- `AdminModelSpec(admin_id, model_path, label, permissions, tenant_scoped, read_only)`
+- `AdminRouteSpec(route_id, path, handler_path, permissions, methods)`
+- `AdminDashboardWidgetSpec(widget_id, title, provider_path, permissions)`
+- `AdminPermissionSpec(resource, action, description, risk_level)`
 
 这样 app contract check 可以在启动前发现拼写错误、空 handler path 和不合法版本。
+后台相关 spec 还会校验 `/admin` 路由边界、平台级权限边界和重复注册风险。
 
 ## 依赖方向
 

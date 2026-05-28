@@ -69,6 +69,7 @@ permissions=[
 ```
 
 core 启动时可收集权限点用于初始化、校验和后台展示。
+权限目录同时会收集 `AppModule` 中的 admin metadata，并把 `AdminPermissionSpec` 转换为 `resource=admin:<resource>`、`scope=platform` 的 `PermissionSpec`。
 
 CLI 可查看权限目录：
 
@@ -77,7 +78,8 @@ core permissions catalog --installed-app apps.example_domain.module --json
 core permissions reconcile --installed-app apps.example_domain.module --json
 ```
 
-`catalog` 来自 app module 的 `PermissionSpec`。`reconcile` 的数据库修复能力由 `PolicyProjector.reconcile(repair=True)` 提供，CLI 当前先提供 metadata contract，用于部署前检查权限目录是否可收集。
+`catalog` 来自 app module 的 `PermissionSpec` 和 admin metadata 转换后的平台权限。
+`reconcile` 的数据库修复能力由 `PolicyProjector.reconcile(repair=True)` 提供，CLI 当前先提供 metadata contract，用于部署前检查权限目录是否可收集。
 
 ## 角色建议
 

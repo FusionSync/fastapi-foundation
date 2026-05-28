@@ -28,9 +28,13 @@ event_handlers
 task_handlers
 schedules
 public_api
+admin_models
+admin_routes
+dashboard_widgets
+admin_permissions
 ```
 
-`AppModule` 是 app 集成的单一事实源。迁移、权限、事件、任务和调度不能再各自发明一套注册字段。
+`AppModule` 是 app 集成的单一事实源。迁移、权限、事件、任务、调度和后台能力不能再各自发明一套注册字段。
 
 字段说明：
 
@@ -45,6 +49,10 @@ public_api
 - `task_handlers`：任务 handler 列表。
 - `schedules`：调度定义列表。
 - `public_api`：允许其他 app 调用的公开 service/interface。
+- `admin_models`：后台模型视图声明。
+- `admin_routes`：后台专用路由声明。
+- `dashboard_widgets`：后台面板组件声明。
+- `admin_permissions`：不绑定具体模型或路由的后台权限声明。
 
 ## 加载流程
 
@@ -58,6 +66,7 @@ public_api
   -> 收集 migrations 和依赖
   -> 收集 permissions
   -> 收集 event/task handlers/schedules
+  -> 收集 admin metadata
 ```
 
 `installed_apps` 推荐填写包路径或 `module.py` 路径，例如：

@@ -6,6 +6,12 @@ from typing import Literal
 
 from fastapi import APIRouter
 
+from core.admin.specs import (
+    AdminDashboardWidgetSpec,
+    AdminModelSpec,
+    AdminPermissionSpec,
+    AdminRouteSpec,
+)
 from core.permissions.specs import PermissionSpec
 
 _LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -55,6 +61,10 @@ class AppModule:
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
     schedules: list[ScheduleSpec] = field(default_factory=list)
     public_api: list[str] = field(default_factory=list)
+    admin_models: list[AdminModelSpec] = field(default_factory=list)
+    admin_routes: list[AdminRouteSpec] = field(default_factory=list)
+    dashboard_widgets: list[AdminDashboardWidgetSpec] = field(default_factory=list)
+    admin_permissions: list[AdminPermissionSpec] = field(default_factory=list)
 
 
 def validate_app_module(module: AppModule) -> AppModule:
@@ -111,6 +121,22 @@ def validate_app_module(module: AppModule) -> AppModule:
     for public_api in module.public_api:
         if not isinstance(public_api, str) or not public_api:
             raise TypeError(f"App {module.label!r} public_api path must be a non-empty string")
+    for admin_model in module.admin_models:
+        if not isinstance(admin_model, AdminModelSpec):
+            raise TypeError(f"App {module.label!r} admin_model must be AdminModelSpec")
+    for admin_route in module.admin_routes:
+        if not isinstance(admin_route, AdminRouteSpec):
+            raise TypeError(f"App {module.label!r} admin_route must be AdminRouteSpec")
+    for dashboard_widget in module.dashboard_widgets:
+        if not isinstance(dashboard_widget, AdminDashboardWidgetSpec):
+            raise TypeError(
+                f"App {module.label!r} dashboard_widget must be AdminDashboardWidgetSpec"
+            )
+    for admin_permission in module.admin_permissions:
+        if not isinstance(admin_permission, AdminPermissionSpec):
+            raise TypeError(
+                f"App {module.label!r} admin_permission must be AdminPermissionSpec"
+            )
     if module.migrations is not None and not isinstance(module.migrations, MigrationSpec):
         raise TypeError(f"App {module.label!r} migrations must be MigrationSpec")
     return module
