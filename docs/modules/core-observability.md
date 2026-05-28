@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: metrics middleware、低基数字段、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
+- Done: metrics middleware、低基数字段、外部 HTTP client 指标和 trace header 传播、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
 - Next:
-  - [ ] 接结构化日志、trace propagation 和 audit/security 关键字段。
+  - [ ] 接请求结构化日志、非 HTTP 链路 trace propagation 和 audit/security 关键字段。
   - [ ] 输出 private/cloud 部署 profile 的监控面板和告警契约。
 
 ## 职责
@@ -95,6 +95,8 @@ external_http_requests_total
 HTTP middleware 已记录 `http_requests_total{method,route,status_class}`，rate limit 和 quota 拒绝路径已分别记录
 `rate_limit_hits_total{reason,route,rule}`、`quota_exceeded_total{metric,scope}`。Outbox dispatcher 可注入
 `MetricsRegistry`，记录 `outbox_dispatch_events_total{outcome}` 并刷新 pending/publishing/dead_letter gauge。
+Core HTTP client 可注入 `MetricsRegistry`，记录 `external_http_requests_total{service_name,method,outcome,status_class|error_type}`，
+并从 `RequestContext` 透传 `X-Request-ID`、`X-Trace-ID` 和 `traceparent`。
 其他 task、migration 指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
 
 ## 设计要求

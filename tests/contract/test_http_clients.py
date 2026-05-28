@@ -6,10 +6,13 @@ from core.http_clients import (
     CoreHttpClient,
     ExternalServiceAppError,
     HttpClientConfig,
+    HttpRequest,
     HttpResponse,
+    HttpTransport,
     MockHttpTransport,
     RetryConfig,
 )
+from core.observability import MetricsRegistry
 
 
 @pytest.mark.asyncio
@@ -47,6 +50,77 @@ async def test_core_http_client_injects_context_headers_timeout_and_user_agent()
     assert request.headers["User-Agent"] == "service-core/0.1"
     assert request.headers["X-Request-ID"] == "req-1"
     assert request.headers["X-Trace-ID"] == "trace-1"
+    assert request.headers["traceparent"] == "trace-1"
+
+
+@pytest.mark.asyncio
+async def test_core_http_client_shares_timeout_budget_across_retries() -> None:
+    clock = _ManualClock()
+    transport = _AdvancingTransport(
+        clock,
+        advance_seconds=2.0,
+        responses=[
+            HttpResponse(status_code=503, headers={}, text="try later"),
+            HttpResponse(status_code=200, headers={}, json_body={"ok": True}),
+        ],
+    )
+    client = CoreHttpClient(
+        HttpClientConfig(
+            service_name="webhook",
+            base_url="https://hooks.example",
+            timeout_seconds=5.0,
+            timeout_budget_seconds=3.0,
+            retry=RetryConfig(max_attempts=2, retry_statuses=(503,)),
+        ),
+        transport=transport,
+        clock=clock,
+    )
+
+    response = await client.get("/deliver")
+
+    assert response.status_code == 200
+    assert [request.timeout_seconds for request in transport.requests] == [3.0, 1.0]
+
+
+@pytest.mark.asyncio
+async def test_core_http_client_records_external_request_metrics() -> None:
+    metrics = MetricsRegistry()
+    transport = MockHttpTransport(
+        responses=[
+            HttpResponse(status_code=200, headers={}, json_body={"ok": True}),
+            HttpResponse(status_code=500, headers={}, text="failed"),
+            TimeoutError("network timeout"),
+        ]
+    )
+    client = CoreHttpClient(
+        HttpClientConfig(
+            service_name="oidc",
+            base_url="https://oidc.example",
+            retry=RetryConfig(max_attempts=1),
+        ),
+        transport=transport,
+        metrics=metrics,
+    )
+
+    await client.get("/metadata")
+    with pytest.raises(ExternalServiceAppError):
+        await client.get("/metadata")
+    with pytest.raises(ExternalServiceAppError):
+        await client.get("/metadata")
+
+    rendered = metrics.render()
+    assert (
+        'external_http_requests_total{method="GET",outcome="success",'
+        'service_name="oidc",status_class="2xx"} 1'
+    ) in rendered
+    assert (
+        'external_http_requests_total{method="GET",outcome="http_error",'
+        'service_name="oidc",status_class="5xx"} 1'
+    ) in rendered
+    assert (
+        'external_http_requests_total{error_type="TimeoutError",method="GET",'
+        'outcome="transport_error",service_name="oidc"} 1'
+    ) in rendered
 
 
 @pytest.mark.asyncio
@@ -152,3 +226,47 @@ def test_mock_http_transport_requires_enough_scripted_responses() -> None:
         transport.next_response()
 
     assert exhausted.value.code == "VALIDATION_ERROR"
+
+
+class _ManualClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _AdvancingTransport(HttpTransport):
+    def __init__(
+        self,
+        clock: _ManualClock,
+        *,
+        advance_seconds: float,
+        responses: list[HttpResponse | BaseException],
+    ) -> None:
+        self.clock = clock
+        self.advance_seconds = advance_seconds
+        self._transport = MockHttpTransport(responses=responses)
+
+    @property
+    def requests(self) -> list[HttpRequest]:
+        return self._transport.requests
+
+    async def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json_body: object | None,
+        timeout_seconds: float,
+    ) -> HttpResponse:
+        response = await self._transport.request(
+            method,
+            url,
+            headers=headers,
+            json_body=json_body,
+            timeout_seconds=timeout_seconds,
+        )
+        self.clock.now += self.advance_seconds
+        return response

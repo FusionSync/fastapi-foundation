@@ -32,6 +32,7 @@ class HttpClientConfig:
     service_name: str
     base_url: str
     timeout_seconds: float = 5.0
+    timeout_budget_seconds: float | None = None
     retry: RetryConfig = field(default_factory=RetryConfig)
     user_agent: str = "service-core/0.1"
 
@@ -44,6 +45,12 @@ class HttpClientConfig:
             raise AppError(
                 "VALIDATION_ERROR",
                 "HTTP timeout_seconds must be greater than zero",
+                status_code=400,
+            )
+        if self.timeout_budget_seconds is not None and self.timeout_budget_seconds <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "HTTP timeout_budget_seconds must be greater than zero",
                 status_code=400,
             )
         if not self.user_agent.strip():

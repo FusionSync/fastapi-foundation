@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: resilient HTTP client、retry config、错误类型和 transport 抽象已落地。
+- Done: resilient HTTP client、retry config、错误类型、transport 抽象、timeout budget、metrics 和 trace propagation 已落地。
 - Next:
-  - [ ] 接 timeout budget、metrics 和 trace propagation。
   - [ ] 增加按外部服务声明 credential/secret 的 provider 契约。
 
 ## 职责
@@ -50,12 +49,12 @@ src/core/http_clients/
 
 已落地 `CoreHttpClient`、`HttpClientConfig`、`RetryConfig`、`ExternalServiceAppError` 和 transport 抽象：
 
-- `HttpClientConfig` 要求 `service_name`、`base_url` 和正数 `timeout_seconds`，默认 timeout 为 5 秒。
-- `CoreHttpClient` 自动注入 `User-Agent`、`X-Request-ID` 和 `X-Trace-ID`。
+- `HttpClientConfig` 要求 `service_name`、`base_url` 和正数 `timeout_seconds`，默认 timeout 为 5 秒；可选 `timeout_budget_seconds` 会在重试间共享总超时预算。
+- `CoreHttpClient` 自动注入 `User-Agent`、`X-Request-ID`、`X-Trace-ID` 和 `traceparent`。
 - `RetryConfig` 支持按状态码重试和 transport 异常重试，默认只尝试一次。
 - HTTP 4xx/5xx 或 transport 异常会转换为 `EXTERNAL_SERVICE_ERROR`，HTTP status 为 502。
 - 错误 details 包含 service、method、url、request_id、upstream status 或 error type，并通过 `redact_sensitive_data()` 脱敏 request/response body。
+- 可注入 `MetricsRegistry`，记录 `external_http_requests_total{service_name,method,outcome,status_class|error_type}`，标签保持低基数。
 - `MockHttpTransport` 可记录请求并按脚本返回响应或异常，方便 app contract/integration 测试。
-- 指标契约已预留 `external_http_requests_total`。
 
 第一版没有直接绑定 `httpx`，而是先固定 core 侧 transport 协议。后续接真实 `HttpxTransport` 时，业务 app 不需要改变调用方式。
