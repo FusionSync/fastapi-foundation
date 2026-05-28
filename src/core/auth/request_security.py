@@ -11,7 +11,7 @@ from core.auth.session import AuthSessionStore, AuthSessionValidator
 from core.base import RouteSecurityPolicy
 from core.context import RequestContext
 from core.exceptions import AppError
-from core.permissions import AuthorizationService
+from core.permissions import AuthorizationDecision, AuthorizationService
 from core.tenancy import DatabaseTenantContextResolver
 
 SessionStoreFactory = Callable[[AsyncSession], AuthSessionStore]
@@ -49,9 +49,9 @@ class DatabaseRequestSecurityPipeline:
         self,
         context: RequestContext | None,
         policy: RouteSecurityPolicy,
-    ) -> None:
+    ) -> tuple[AuthorizationDecision, ...]:
         if not policy.permissions:
-            return
+            return ()
         if context is None or not context.user_id or not context.tenant_id:
             raise AppError(
                 "TENANT_ACCESS_DENIED",
@@ -60,15 +60,19 @@ class DatabaseRequestSecurityPipeline:
             )
         async with self.session_factory() as session:
             authorization = AuthorizationService(session)
+            decisions: list[AuthorizationDecision] = []
             for permission in policy.permissions:
                 resource, action = parse_route_permission(permission)
-                await authorization.require(
-                    user_id=context.user_id,
-                    tenant_id=context.tenant_id,
-                    resource=resource,
-                    action=action,
-                    request_id=context.request_id,
+                decisions.append(
+                    await authorization.require(
+                        user_id=context.user_id,
+                        tenant_id=context.tenant_id,
+                        resource=resource,
+                        action=action,
+                        request_id=context.request_id,
+                    )
                 )
+            return tuple(decisions)
 
 
 def parse_route_permission(permission: str) -> tuple[str, str]:

@@ -1,9 +1,12 @@
-from fastapi import FastAPI
+from typing import Annotated
+
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from core.base import RouteSecurityPolicy, create_router
 from core.context import RequestContext
 from core.exceptions import AppError, register_exception_handlers
+from core.permissions import AuthorizationDecision, route_authorization_decision
 from core.serialization import ok
 
 
@@ -62,3 +65,72 @@ def test_route_permission_authorizer_can_reject_request() -> None:
     assert response.status_code == 403
     assert response.json()["code"] == "PERMISSION_DENIED"
     assert response.json()["details"] == {"permissions": ["runtime:read"]}
+
+
+def test_route_dependency_exposes_authorization_decision() -> None:
+    app = FastAPI()
+    router = create_router(
+        "/secure",
+        auth_required=False,
+        tenant_required=False,
+        permissions=["runtime:write"],
+        tenant_operation="write",
+    )
+
+    @router.post("/mutate")
+    async def mutate(
+        decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+    ) -> dict[str, object]:
+        return ok(
+            {
+                "tenant_id": decision.tenant_id,
+                "user_id": decision.user_id,
+                "resource": decision.resource,
+                "action": decision.action,
+                "policy_version": decision.policy_version,
+            }
+        )
+
+    app.state.route_authorizer = lambda _context, _policy: AuthorizationDecision(
+        allowed=True,
+        tenant_id="tenant-a",
+        user_id="user-1",
+        resource="runtime",
+        action="write",
+        reason="matched_projected_policy",
+        policy_version=3,
+    )
+    app.include_router(router)
+    client = TestClient(app)
+
+    response = client.post("/secure/mutate")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "tenant_id": "tenant-a",
+        "user_id": "user-1",
+        "resource": "runtime",
+        "action": "write",
+        "policy_version": 3,
+    }
+
+
+def test_route_dependency_rejects_missing_authorization_decision() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+    router = create_router("/secure", auth_required=False, tenant_required=False)
+
+    @router.post("/mutate")
+    async def mutate(
+        decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+    ) -> dict[str, object]:
+        return ok({"resource": decision.resource})
+
+    app.include_router(router)
+    client = TestClient(app)
+
+    response = client.post("/secure/mutate")
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "PERMISSION_DENIED"
+    assert response.json()["details"] == {"reason": "missing_route_authorization_decision"}

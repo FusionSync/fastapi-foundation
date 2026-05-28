@@ -89,6 +89,44 @@ def test_request_security_pipeline_rejects_missing_route_permission(
     assert response.json()["code"] == "PERMISSION_DENIED"
 
 
+def test_request_security_pipeline_exposes_route_authorization_decision(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'security-pipeline-decision.db'}"
+    asyncio.run(_seed_security_facts(database_url, include_policy=True))
+    token = _token()
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_protected_runtime_app(tmp_path, use_decision_dependency=True)
+
+    session_factory = _session_factory(database_url)
+    pipeline = DatabaseRequestSecurityPipeline(
+        session_factory=session_factory,
+        jwt_provider=LocalJwtProvider(LocalJwtConfig(secret="test-secret")),
+        session_store_factory=AccountsAuthSessionStore,
+    )
+    app = create_app(
+        Settings(
+            database={"url": database_url},
+            security={"jwt_secret": "test-secret"},
+            installed_apps=["runtime_apps.secure_runtime.module"],
+        ),
+        request_security_pipeline=pipeline,
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/secure/mutate",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "name": "secure:read:tenant-a:user-1:1",
+    }
+
+
 def _session_factory(database_url: str) -> async_sessionmaker:
     engine = create_async_engine(database_url)
     return async_sessionmaker(engine, expire_on_commit=False)
@@ -160,7 +198,7 @@ def _token() -> str:
     )
 
 
-def _write_protected_runtime_app(root: Path) -> None:
+def _write_protected_runtime_app(root: Path, *, use_decision_dependency: bool = False) -> None:
     app_dir = root / "runtime_apps" / "secure_runtime"
     migrations_dir = app_dir / "migrations"
     migrations_dir.mkdir(parents=True)
@@ -172,16 +210,43 @@ def _write_protected_runtime_app(root: Path) -> None:
     )
     _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
     _write(app_dir / "services.py", "class RuntimeService:\n    pass\n")
-    _write(
-        app_dir / "router.py",
-        "from runtime_apps.secure_runtime.schemas import RuntimeSchema\n"
-        "from core.base import create_router\n"
-        "from core.serialization import Envelope, ok\n\n"
-        "router = create_router('/secure', permissions=['secure:read'])\n\n"
-        "@router.get('/ping', response_model=Envelope[RuntimeSchema])\n"
-        "async def ping():\n"
-        "    return ok({'name': 'ok'})\n",
-    )
+    if use_decision_dependency:
+        router_source = (
+            "from typing import Annotated\n"
+            "from fastapi import Depends\n"
+            "from runtime_apps.secure_runtime.schemas import RuntimeSchema\n"
+            "from core.base import create_router\n"
+            "from core.permissions import AuthorizationDecision, route_authorization_decision\n"
+            "from core.serialization import Envelope, ok\n\n"
+            "router = create_router('/secure', permissions=['secure:read'])\n\n"
+            "@router.post('/mutate', response_model=Envelope[RuntimeSchema])\n"
+            "async def mutate(\n"
+            "    decision: Annotated[\n"
+            "        AuthorizationDecision,\n"
+            "        Depends(route_authorization_decision),\n"
+            "    ],\n"
+            "):\n"
+            "    return ok(\n"
+            "        {\n"
+            "            'name': (\n"
+            "                f'{decision.resource}:{decision.action}:'\n"
+            "                f'{decision.tenant_id}:{decision.user_id}:'\n"
+            "                f'{decision.policy_version}'\n"
+            "            )\n"
+            "        }\n"
+            "    )\n"
+        )
+    else:
+        router_source = (
+            "from runtime_apps.secure_runtime.schemas import RuntimeSchema\n"
+            "from core.base import create_router\n"
+            "from core.serialization import Envelope, ok\n\n"
+            "router = create_router('/secure', permissions=['secure:read'])\n\n"
+            "@router.get('/ping', response_model=Envelope[RuntimeSchema])\n"
+            "async def ping():\n"
+            "    return ok({'name': 'ok'})\n"
+        )
+    _write(app_dir / "router.py", router_source)
     _write(
         app_dir / "permissions.py",
         "from core.permissions import PermissionSpec\n\n"

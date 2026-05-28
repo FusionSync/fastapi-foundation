@@ -6,6 +6,7 @@ from core.permissions.decisions import (
     assert_authorization_decision,
     assert_platform_decision,
 )
+from core.permissions.deps import route_authorization_decision, route_authorization_decisions
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
 from core.permissions.policies import (
     PolicyRule,
@@ -37,4 +38,6 @@ __all__ = [
     "RoleTemplate",
     "assert_authorization_decision",
     "assert_platform_decision",
+    "route_authorization_decision",
+    "route_authorization_decisions",
 ]

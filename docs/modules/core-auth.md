@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: `CurrentUser`、local JWT provider、session validator、request security pipeline 和 app 声明式 `auth_session_store` 已接入。
+- Done: `CurrentUser`、local JWT provider、session validator、request security pipeline、route authorization decision 传递和 app 声明式 `auth_session_store` 已接入。
 - Next:
   - [ ] 接 Logto/Keycloak 等外部 provider adapter。
   - [ ] 补 token refresh、session revocation API 和安全审计联动。
@@ -85,7 +85,7 @@ token_version
 - 认证失败统一抛 `AUTH_INVALID_TOKEN`，并带 `WWW-Authenticate: Bearer`。
 - `LocalJwtProvider` 提供本地 HS256 JWT 签发和校验，校验签名、issuer、audience 和过期时间，并把 `session_id`、`token_version`、`tenant_id` 转换为统一 `TokenClaims`。
 - `platform_apps.accounts.AccountsAuthSessionStore` 是当前 SQLAlchemy 适配器，读取 `UserSession` 和 `User`。
-- `DatabaseRequestSecurityPipeline` 串联 HTTP Bearer token、`AuthSessionValidator`、`DatabaseTenantContextResolver` 和 route permission authorization。安装声明了 `AppModule.auth_session_store` 的账号 app 时，`create_app()` 会自动装配该 pipeline；也可通过 `create_app(..., request_security_pipeline=...)` 显式覆盖。
+- `DatabaseRequestSecurityPipeline` 串联 HTTP Bearer token、`AuthSessionValidator`、`DatabaseTenantContextResolver` 和 route permission authorization。权限校验通过后返回 `AuthorizationDecision`，由 router dependency 写入当前 request，供业务 mutation 继续传给 service 层。安装声明了 `AppModule.auth_session_store` 的账号 app 时，`create_app()` 会自动装配该 pipeline；也可通过 `create_app(..., request_security_pipeline=...)` 显式覆盖。
 
 当前先由 `platform_apps.accounts` 落地会话事实：
 
@@ -106,6 +106,7 @@ token.token_version == User.token_version
 User.status == active
 DatabaseTenantContextResolver 校验 Tenant/TenantMember
 RouteSecurityPolicy.permissions 通过 AuthorizationService.require() 校验 ProjectedPolicy
+  -> AuthorizationDecision 写入 request state
 ```
 
 这样本地 JWT、后续 OIDC/Logto 或 Keycloak 适配都能复用同一套撤销事实。

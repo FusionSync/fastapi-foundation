@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、projection cache invalidation、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
+- Done: permission registry、authorization decision、platform/tenant scope 校验、route authorization dependency、projection cache invalidation、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
 - Next:
-  - [ ] 接 route dependency，让业务 mutation 默认拿到 `AuthorizationDecision`。
   - [ ] 补资源 owner adapter 和跨租户平台权限统一 gate。
 
 ## 职责
@@ -67,6 +66,23 @@ decision = await AuthorizationService(session).authorize(
 
 第一版已接入的强制门禁包括 role grant mutation、tenant lifecycle mutation、user disable 和 session revoke。仅传 `actor_id`、`request_id` 或裸布尔值都不能作为授权证明。
 router 层的 `RouteSecurityPolicy.permissions` 使用 `resource:action` 字符串格式。它会强制调用 `app.state.route_authorizer`；如果 route 声明了权限但运行时没有挂载授权器，请求会被拒绝。挂载 `DatabaseRequestSecurityPipeline` 后，route permission 会调用 `AuthorizationService.require()` 校验 `ProjectedPolicy`。
+授权通过后，route authorizer 返回的 `AuthorizationDecision` 会写入当前 request state。业务 mutation 可以通过标准 dependency 读取它，并把它作为 service 层的授权证明继续向下传：
+
+```python
+from typing import Annotated
+
+from fastapi import Depends
+
+from core.permissions import AuthorizationDecision, route_authorization_decision
+
+
+async def mutate_workspace(
+    decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+) -> dict[str, object]:
+    ...
+```
+
+如果 handler 声明了 `route_authorization_decision`，但当前 route 未声明权限或 authorizer 没有返回 `AuthorizationDecision`，请求会被拒绝为 `PERMISSION_DENIED`。声明多个 route permissions 时，可用 `route_authorization_decisions()` 读取完整 decision 列表；默认单 decision dependency 返回第一个 decision。
 
 当前实现提供 `AuthorizationService`：
 

@@ -12,6 +12,7 @@ from core.context import RequestContext, get_current_context
 from core.exceptions import AppError
 
 CORE_ROUTE_SECURITY_POLICY_ATTR = "_core_route_security_policy"
+CORE_ROUTE_AUTHORIZATION_RESULT_ATTR = "_core_route_authorization_result"
 RouteAuthorizer = Callable[[RequestContext | None, "RouteSecurityPolicy"], object]
 RequestSecurityResolver = Callable[[Request, "RouteSecurityPolicy"], object]
 
@@ -68,9 +69,9 @@ async def enforce_route_security(
     policy: RouteSecurityPolicy,
     *,
     authorizer: RouteAuthorizer | None = None,
-) -> None:
+) -> object | None:
     if policy.public:
-        return
+        return None
     context = get_current_context()
     if policy.auth_required and (context is None or not context.user_id):
         raise AppError(
@@ -85,7 +86,7 @@ async def enforce_route_security(
             status_code=403,
         )
     if not policy.permissions:
-        return
+        return None
     if authorizer is None:
         raise AppError(
             "PERMISSION_DENIED",
@@ -95,7 +96,8 @@ async def enforce_route_security(
         )
     result = authorizer(context, policy)
     if inspect.isawaitable(result):
-        await result
+        result = await result
+    return result
 
 
 def _build_route_security_policy(
@@ -132,9 +134,15 @@ def _route_security_dependency(policy: RouteSecurityPolicy):
             resolved = resolver(request, policy)
             if inspect.isawaitable(resolved):
                 await resolved
-        await enforce_route_security(
+        authorization_result = await enforce_route_security(
             policy,
             authorizer=getattr(request.app.state, "route_authorizer", None),
         )
+        if authorization_result is not None:
+            setattr(
+                request.state,
+                CORE_ROUTE_AUTHORIZATION_RESULT_ATTR,
+                authorization_result,
+            )
 
     return dependency
