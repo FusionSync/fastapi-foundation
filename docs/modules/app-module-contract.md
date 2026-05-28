@@ -24,7 +24,7 @@ src/apps/example_domain/
 ## module.py
 
 ```python
-from core.apps.module import AppModule, MigrationSpec
+from core.apps.module import AppModule, EventHandlerSpec, MigrationSpec, ScheduleSpec, TaskHandlerSpec
 from core.permissions import PermissionSpec
 from .router import router
 
@@ -42,12 +42,42 @@ module = AppModule(
         PermissionSpec(resource="example", action="read", scope="tenant"),
         PermissionSpec(resource="example", action="write", scope="tenant"),
     ],
-    event_handlers=[],
-    task_handlers=[],
-    schedules=[],
+    event_handlers=[
+        EventHandlerSpec(
+            event_type="example.created",
+            event_version=1,
+            handler_path="apps.example_domain.events.handle_example_created",
+        )
+    ],
+    task_handlers=[
+        TaskHandlerSpec(
+            task_type="example.refresh",
+            handler_path="apps.example_domain.tasks.refresh_example",
+            queue="default",
+        )
+    ],
+    schedules=[
+        ScheduleSpec(
+            schedule_id="example.refresh.daily",
+            task_type="example.refresh",
+            trigger="cron",
+            trigger_config={"hour": "1"},
+            misfire_policy="skip",
+        )
+    ],
     public_api=[],
 )
 ```
+
+## 注册项类型
+
+`AppModule` 不接受裸 `dict` 或任意对象注册事件、任务和调度。必须使用：
+
+- `EventHandlerSpec(event_type, event_version, handler_path)`
+- `TaskHandlerSpec(task_type, handler_path, queue)`
+- `ScheduleSpec(schedule_id, task_type, trigger, trigger_config, misfire_policy)`
+
+这样 app contract check 可以在启动前发现拼写错误、空 handler path 和不合法版本。
 
 ## 依赖方向
 
