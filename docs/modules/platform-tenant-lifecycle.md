@@ -103,3 +103,13 @@ TenantLifecycleService
 ```
 
 创建、暂停、恢复、删除和归档流程都会写入租户生命周期 outbox event。暂停和删除流程会调用 session revocation hook。`TenantLifecycleService` 可注入 `AuditService`，在同一事务写租户状态流转审计，记录 from/to 状态、事件类型和是否撤销 session。API 层、任务执行、文件下载和后台清理应统一调用 lifecycle gate，而不是各自判断 `status` 字段。
+
+Tenant lifecycle mutation 是高权限写操作，不能只依赖 `actor_id`。`provision_tenant()`、`suspend_tenant()`、`reactivate_tenant()`、`begin_delete_tenant()` 和 `finish_delete_tenant()` 都需要 platform scope 的 `tenant.manage` / 对应 mutation `AuthorizationDecision`。service 会校验 decision 已允许、actor 与 decision user 一致、tenant domain 为 `__platform__`，并且 resource/action 覆盖当前操作。
+
+`platform_apps.tenants.module` 注册 tenant lifecycle 相关权限点：
+
+- `tenant.manage`
+- `tenant.provision`
+- `tenant.suspend`
+- `tenant.reactivate`
+- `tenant.delete`

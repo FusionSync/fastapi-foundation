@@ -107,7 +107,7 @@ core -> no app imports
 
 业务 app 可以依赖平台 app 的公开 service，不能导入其他 app 的内部 repository、models 实现。
 平台 app 也必须按标准结构提供 `module.py`、`schemas.py`、`models.py`、`router.py`、`services.py`、`permissions.py` 和 `migrations/`。
-当前底座内置的 `platform_apps.accounts.module`、`platform_apps.audit.module`、`platform_apps.files.module` 都可被 `AppRegistry` 直接加载。
+当前底座内置的 `platform_apps.accounts.module`、`platform_apps.audit.module`、`platform_apps.files.module`、`platform_apps.tenants.module` 都可被 `AppRegistry` 直接加载。
 
 允许的跨 app 调用：
 

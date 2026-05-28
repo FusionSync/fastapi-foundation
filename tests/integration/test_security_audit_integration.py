@@ -8,7 +8,13 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.outbox import OutboxEvent, OutboxRepository
-from core.permissions import AuthorizationDecision, RoleGrant, RoleGrantService, RoleTemplate
+from core.permissions import (
+    PLATFORM_TENANT_ID,
+    AuthorizationDecision,
+    RoleGrant,
+    RoleGrantService,
+    RoleTemplate,
+)
 from core.tenancy import TENANT_CREATED_EVENT, Tenant, TenantLifecycleService, TenantMember
 from platform_apps.accounts import AccountsService, User
 from platform_apps.audit import AuditLog, AuditService
@@ -185,6 +191,7 @@ async def test_disable_user_writes_security_audit_and_revokes_sessions(
             reason="security incident",
             actor_id="admin-1",
             request_id="req-disable",
+            authorization_decision=_user_manage_decision(user_id="admin-1"),
         )
 
     disabled_user = await _user(session_factory, user.id)
@@ -231,6 +238,7 @@ async def test_tenant_suspend_writes_lifecycle_audit(
             actor_id="admin-1",
             request_id="req-suspend",
             reason="billing hold",
+            authorization_decision=_tenant_manage_decision(user_id="admin-1"),
         )
 
     audit_logs = await _audit_logs(session_factory)
@@ -268,6 +276,7 @@ async def test_tenant_provision_writes_lifecycle_audit(
             owner_user_id="owner-1",
             actor_id="owner-1",
             request_id="req-provision",
+            authorization_decision=_tenant_manage_decision(user_id="owner-1"),
         )
 
     audit_logs = await _audit_logs(session_factory)
@@ -318,6 +327,7 @@ async def test_tenant_reactivate_writes_lifecycle_audit_and_outbox_event(
             actor_id="admin-1",
             request_id="req-reactivate",
             reason="billing cleared",
+            authorization_decision=_tenant_manage_decision(user_id="admin-1"),
         )
 
     audit_logs = await _audit_logs(session_factory)
@@ -366,6 +376,30 @@ def _role_grant_decision() -> AuthorizationDecision:
         tenant_id="tenant-a",
         user_id="owner-1",
         resource="role_grant",
+        action="manage",
+        reason="matched_projected_policy",
+        policy_version=1,
+    )
+
+
+def _user_manage_decision(*, user_id: str) -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=True,
+        tenant_id=PLATFORM_TENANT_ID,
+        user_id=user_id,
+        resource="user",
+        action="manage",
+        reason="matched_projected_policy",
+        policy_version=1,
+    )
+
+
+def _tenant_manage_decision(*, user_id: str) -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=True,
+        tenant_id=PLATFORM_TENANT_ID,
+        user_id=user_id,
+        resource="tenant",
         action="manage",
         reason="matched_projected_policy",
         policy_version=1,

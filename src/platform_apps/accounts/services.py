@@ -8,6 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.audit import AuditRecorder
 from core.auth import invalid_auth_token
 from core.exceptions import AppError
+from core.permissions import (
+    PLATFORM_TENANT_ID,
+    AuthorizationDecision,
+    assert_authorization_decision,
+)
 from core.security import PasswordHasher
 from core.tenancy import Tenant, TenantMember, assert_tenant_operation_allowed
 from platform_apps.accounts.models import ExternalIdentity, User, UserCredential, UserSession
@@ -164,12 +169,20 @@ class AccountsService:
         reason: str,
         actor_id: str | None = None,
         request_id: str | None = None,
+        authorization_decision: AuthorizationDecision | None = None,
     ) -> User:
+        _assert_accounts_mutation_authorized(
+            authorization_decision=authorization_decision,
+            actor_id=actor_id,
+            resource="user",
+            mutation="disable",
+            operation="User disable",
+        )
         user = await self._get_user(user_id)
         if user.status != "disabled":
             user.status = "disabled"
             user.token_version += 1
-        revoked_sessions = await self.revoke_user_sessions(user_id, reason)
+        revoked_sessions = await self._revoke_user_sessions(user_id, reason)
         if self.audit is not None:
             await self.audit.record(
                 action="user.disabled",
@@ -187,13 +200,76 @@ class AccountsService:
         await self.session.flush()
         return user
 
-    async def revoke_user_sessions(self, user_id: str, reason: str) -> int:
+    async def revoke_user_sessions(
+        self,
+        user_id: str,
+        reason: str,
+        *,
+        actor_id: str | None = None,
+        request_id: str | None = None,
+        authorization_decision: AuthorizationDecision | None = None,
+    ) -> int:
+        _assert_accounts_mutation_authorized(
+            authorization_decision=authorization_decision,
+            actor_id=actor_id,
+            resource="session",
+            mutation="revoke",
+            operation="Session revoke",
+        )
+        revoked_sessions = await self._revoke_user_sessions(user_id, reason)
+        if self.audit is not None:
+            await self.audit.record(
+                action="session.revoked",
+                resource_type="user_session",
+                resource_id=user_id,
+                result="success",
+                actor_id=actor_id,
+                reason=reason,
+                request_id=request_id,
+                payload={"scope": "user", "revoked_sessions": revoked_sessions},
+            )
+        return revoked_sessions
+
+    async def revoke_tenant_sessions(
+        self,
+        tenant_id: str,
+        reason: str,
+        *,
+        actor_id: str | None = None,
+        request_id: str | None = None,
+        authorization_decision: AuthorizationDecision | None = None,
+    ) -> int:
+        _assert_accounts_mutation_authorized(
+            authorization_decision=authorization_decision,
+            actor_id=actor_id,
+            resource="session",
+            mutation="revoke",
+            operation="Session revoke",
+        )
+        revoked_sessions = await self._revoke_tenant_sessions(tenant_id, reason)
+        if self.audit is not None:
+            await self.audit.record(
+                action="session.revoked",
+                resource_type="tenant_session",
+                resource_id=tenant_id,
+                result="success",
+                actor_id=actor_id,
+                reason=reason,
+                request_id=request_id,
+                payload={"scope": "tenant", "revoked_sessions": revoked_sessions},
+            )
+        return revoked_sessions
+
+    async def revoke_tenant_sessions_for_lifecycle(self, tenant_id: str, reason: str) -> int:
+        return await self._revoke_tenant_sessions(tenant_id, reason)
+
+    async def _revoke_user_sessions(self, user_id: str, reason: str) -> int:
         sessions = await self._active_sessions(user_id=user_id)
         self._revoke_sessions(sessions, reason)
         await self.session.flush()
         return len(sessions)
 
-    async def revoke_tenant_sessions(self, tenant_id: str, reason: str) -> int:
+    async def _revoke_tenant_sessions(self, tenant_id: str, reason: str) -> int:
         sessions = await self._active_sessions(tenant_id=tenant_id)
         self._revoke_sessions(sessions, reason)
         await self.session.flush()
@@ -239,3 +315,22 @@ class AccountsService:
             raise AppError("VALIDATION_ERROR", "display_name is required", status_code=400)
         if not auth_provider.strip():
             raise AppError("VALIDATION_ERROR", "auth_provider is required", status_code=400)
+
+
+def _assert_accounts_mutation_authorized(
+    *,
+    authorization_decision: AuthorizationDecision | None,
+    actor_id: str | None,
+    resource: str,
+    mutation: str,
+    operation: str,
+) -> None:
+    assert_authorization_decision(
+        authorization_decision,
+        tenant_id=PLATFORM_TENANT_ID,
+        actor_id=actor_id or "",
+        resource=resource,
+        actions={"manage", mutation},
+        operation=operation,
+        allow_platform=False,
+    )

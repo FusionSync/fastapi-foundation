@@ -50,6 +50,14 @@ decision = await AuthorizationService(session).authorize(
 平台级授权使用固定 domain `__platform__`，由 `AuthorizationService.require_platform()` 返回 `AuthorizationDecision`。
 跨租户 SQL 和 repository 入口只接受这个 decision，不接受调用方传入的裸布尔值。
 角色授予和撤销同样只接受 `AuthorizationDecision` 作为授权证明，不能只传 `actor_id`；service 会校验 decision 已允许、scope 匹配目标租户或 platform scope，并且 actor 与 decision user 一致。
+高权限写操作统一使用 `assert_authorization_decision()` 校验授权证明，校验项包括：
+
+- decision 必须存在且 `allowed=True`。
+- `actor_id` 必须等于 decision 的 `user_id`。
+- decision 的 tenant domain 必须等于目标 tenant，或在允许 platform scope 时等于 `__platform__`。
+- decision 的 resource/action 必须覆盖当前操作，例如 `manage` 或当前 mutation action。
+
+第一版已接入的强制门禁包括 role grant mutation、tenant lifecycle mutation、user disable 和 session revoke。仅传 `actor_id`、`request_id` 或裸布尔值都不能作为授权证明。
 
 当前实现提供 `AuthorizationService`：
 

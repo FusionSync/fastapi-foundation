@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
 from core.outbox import OutboxRepository
+from core.permissions import (
+    PLATFORM_TENANT_ID,
+    AuthorizationDecision,
+    assert_authorization_decision,
+)
 from core.tenancy.events import (
     TENANT_ARCHIVED_EVENT,
     TENANT_CREATED_EVENT,
@@ -43,7 +48,13 @@ class TenantLifecycleService:
         actor_id: str,
         request_id: str,
         deployment_mode: str = "local",
+        authorization_decision: AuthorizationDecision | None = None,
     ) -> Tenant:
+        _assert_tenant_mutation_authorized(
+            authorization_decision=authorization_decision,
+            actor_id=actor_id,
+            mutation="provision",
+        )
         tenant = Tenant(
             id=tenant_id,
             name=name,
@@ -95,6 +106,7 @@ class TenantLifecycleService:
         actor_id: str,
         request_id: str,
         reason: str,
+        authorization_decision: AuthorizationDecision | None = None,
     ) -> Tenant:
         await self._transition(
             tenant,
@@ -104,6 +116,8 @@ class TenantLifecycleService:
             request_id=request_id,
             reason=reason,
             revoke_sessions=True,
+            mutation="suspend",
+            authorization_decision=authorization_decision,
         )
         return tenant
 
@@ -114,6 +128,7 @@ class TenantLifecycleService:
         actor_id: str,
         request_id: str,
         reason: str,
+        authorization_decision: AuthorizationDecision | None = None,
     ) -> Tenant:
         await self._transition(
             tenant,
@@ -123,6 +138,8 @@ class TenantLifecycleService:
             request_id=request_id,
             reason=reason,
             revoke_sessions=False,
+            mutation="reactivate",
+            authorization_decision=authorization_decision,
         )
         return tenant
 
@@ -133,6 +150,7 @@ class TenantLifecycleService:
         actor_id: str,
         request_id: str,
         reason: str,
+        authorization_decision: AuthorizationDecision | None = None,
     ) -> Tenant:
         await self._transition(
             tenant,
@@ -142,6 +160,8 @@ class TenantLifecycleService:
             request_id=request_id,
             reason=reason,
             revoke_sessions=True,
+            mutation="delete",
+            authorization_decision=authorization_decision,
         )
         return tenant
 
@@ -153,6 +173,7 @@ class TenantLifecycleService:
         actor_id: str,
         request_id: str,
         reason: str,
+        authorization_decision: AuthorizationDecision | None = None,
     ) -> Tenant:
         if target not in {"archived", "deleted"}:
             raise ValueError("finish_delete_tenant target must be archived or deleted")
@@ -165,6 +186,8 @@ class TenantLifecycleService:
             request_id=request_id,
             reason=reason,
             revoke_sessions=False,
+            mutation="delete",
+            authorization_decision=authorization_decision,
         )
         return tenant
 
@@ -178,7 +201,14 @@ class TenantLifecycleService:
         request_id: str,
         reason: str,
         revoke_sessions: bool,
+        mutation: str,
+        authorization_decision: AuthorizationDecision | None,
     ) -> None:
+        _assert_tenant_mutation_authorized(
+            authorization_decision=authorization_decision,
+            actor_id=actor_id,
+            mutation=mutation,
+        )
         from_status = _status(tenant)
         validate_tenant_transition(from_status, target)
         tenant.status = target
@@ -220,3 +250,20 @@ class TenantLifecycleService:
 
 def _status(tenant: Tenant) -> TenantStatus:
     return tenant.status  # type: ignore[return-value]
+
+
+def _assert_tenant_mutation_authorized(
+    *,
+    authorization_decision: AuthorizationDecision | None,
+    actor_id: str,
+    mutation: str,
+) -> None:
+    assert_authorization_decision(
+        authorization_decision,
+        tenant_id=PLATFORM_TENANT_ID,
+        actor_id=actor_id,
+        resource="tenant",
+        actions={"manage", mutation},
+        operation="Tenant lifecycle mutation",
+        allow_platform=False,
+    )

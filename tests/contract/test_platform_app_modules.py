@@ -7,6 +7,7 @@ PLATFORM_APP_MODULES = [
     "platform_apps.accounts.module",
     "platform_apps.audit.module",
     "platform_apps.files.module",
+    "platform_apps.tenants.module",
 ]
 
 
@@ -26,6 +27,7 @@ def test_platform_apps_register_permissions_and_migrations() -> None:
         "platform_accounts",
         "platform_audit",
         "platform_files",
+        "platform_tenants",
     ]
     assert permission_registry.errors == []
     assert migration_registry.errors == []
@@ -36,4 +38,5 @@ def test_platform_apps_register_permissions_and_migrations() -> None:
         ("platform_accounts", "user", "manage"),
         ("platform_audit", "audit_log", "read"),
         ("platform_files", "file", "download"),
+        ("platform_tenants", "tenant", "manage"),
     }

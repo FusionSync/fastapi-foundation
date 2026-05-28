@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.audit import AuditRecorder
 from core.exceptions import AppError
 from core.outbox import OutboxRepository
-from core.permissions.decisions import PLATFORM_TENANT_ID, AuthorizationDecision
+from core.permissions.decisions import AuthorizationDecision, assert_authorization_decision
 from core.permissions.models import ProjectedPolicy, RoleGrant
 from core.permissions.projector import ROLE_GRANT_CHANGED_EVENT
 
@@ -147,63 +147,11 @@ def _assert_role_grant_mutation_authorized(
     actor_id: str,
     mutation: str,
 ) -> None:
-    if authorization_decision is None:
-        _raise_role_grant_denied(
-            "Role grant mutation requires an authorization decision",
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-        )
-    if not authorization_decision.allowed:
-        _raise_role_grant_denied(
-            "Role grant mutation requires an allowed authorization decision",
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            reason=authorization_decision.reason,
-        )
-    if authorization_decision.user_id != actor_id:
-        _raise_role_grant_denied(
-            "Role grant actor must match authorization decision user",
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            reason=authorization_decision.reason,
-        )
-    if authorization_decision.tenant_id not in {tenant_id, PLATFORM_TENANT_ID}:
-        _raise_role_grant_denied(
-            "Role grant mutation decision tenant does not match target tenant",
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            reason=authorization_decision.reason,
-        )
-    if authorization_decision.resource != "role_grant":
-        _raise_role_grant_denied(
-            "Role grant mutation requires role_grant permission",
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            reason=authorization_decision.reason,
-        )
-    if authorization_decision.action not in {"manage", mutation}:
-        _raise_role_grant_denied(
-            "Role grant mutation decision action is not sufficient",
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            reason=authorization_decision.reason,
-        )
-
-
-def _raise_role_grant_denied(
-    message: str,
-    *,
-    tenant_id: str,
-    actor_id: str,
-    reason: str | None = None,
-) -> None:
-    raise AppError(
-        "PERMISSION_DENIED",
-        message,
-        status_code=403,
-        details={
-            "tenant_id": tenant_id,
-            "actor_id": actor_id,
-            "reason": reason,
-        },
+    assert_authorization_decision(
+        authorization_decision,
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        resource="role_grant",
+        actions={"manage", mutation},
+        operation="Role grant mutation",
     )

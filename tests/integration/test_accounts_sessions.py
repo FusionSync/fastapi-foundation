@@ -10,6 +10,7 @@ from core.db import unit_of_work
 from core.events import EventRegistry
 from core.exceptions import AppError
 from core.outbox import OutboxRepository
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.security import PasswordHasher
 from core.tenancy import Tenant, TenantLifecycleService, TenantMember
 from platform_apps.accounts import (
@@ -78,7 +79,12 @@ async def test_disabled_user_cannot_create_new_session_and_existing_sessions_are
             tenant_id="tenant-a",
             auth_provider="local",
         )
-        await accounts.disable_user(user.id, reason="security incident")
+        await accounts.disable_user(
+            user.id,
+            reason="security incident",
+            actor_id="admin-1",
+            authorization_decision=_user_manage_decision(user_id="admin-1"),
+        )
 
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
@@ -135,12 +141,15 @@ async def test_tenant_lifecycle_can_revoke_tenant_sessions_through_hook(
         await TenantLifecycleService(
             uow.session,
             OutboxRepository(uow.session, registry=registry),
-            session_revocation_hook=AccountsService(uow.session).revoke_tenant_sessions,
+            session_revocation_hook=AccountsService(
+                uow.session
+            ).revoke_tenant_sessions_for_lifecycle,
         ).suspend_tenant(
             tenant,
             actor_id="owner-1",
             request_id="req-1",
             reason="billing hold",
+            authorization_decision=_tenant_manage_decision(user_id="owner-1"),
         )
 
     sessions = await _sessions(session_factory)
@@ -216,7 +225,12 @@ async def test_auth_session_validator_rejects_revoked_session_and_disabled_user(
             tenant_id="tenant-a",
             auth_provider="local",
         )
-        await accounts.disable_user(user.id, reason="security incident")
+        await accounts.disable_user(
+            user.id,
+            reason="security incident",
+            actor_id="admin-1",
+            authorization_decision=_user_manage_decision(user_id="admin-1"),
+        )
         with pytest.raises(AppError) as rejected:
             await AuthSessionValidator(AccountsAuthSessionStore(uow.session)).authenticate(
                 TokenClaims(
@@ -299,6 +313,59 @@ async def test_create_session_requires_tenant_login_allowed(
     assert rejected.value.code == "TENANT_STATE_FORBIDDEN"
 
 
+@pytest.mark.asyncio
+async def test_disable_user_requires_authorization_decision(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(uow.session)
+        user = await accounts.create_user(
+            email="owner@example.com",
+            display_name="Owner",
+            auth_provider="local",
+            external_id="owner@example.com",
+        )
+
+        with pytest.raises(AppError) as exc_info:
+            await accounts.disable_user(
+                user.id,
+                reason="security incident",
+                actor_id="admin-1",
+            )
+
+    assert exc_info.value.code == "PERMISSION_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_revoke_tenant_sessions_requires_authorization_decision(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(uow.session)
+        user = await accounts.create_user(
+            email="owner@example.com",
+            display_name="Owner",
+            auth_provider="local",
+            external_id="owner@example.com",
+        )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
+        await accounts.create_session(
+            user_id=user.id,
+            tenant_id="tenant-a",
+            auth_provider="local",
+        )
+
+        with pytest.raises(AppError) as exc_info:
+            await accounts.revoke_tenant_sessions(
+                "tenant-a",
+                "security incident",
+            )
+
+    assert exc_info.value.code == "PERMISSION_DENIED"
+
+
 async def _user(session_factory: async_sessionmaker[AsyncSession], user_id: str) -> User:
     async with session_factory() as session:
         user = await session.get(User, user_id)
@@ -353,4 +420,36 @@ def _add_tenant(
             status=status,
             deployment_mode="local",
         )
+    )
+
+
+def _user_manage_decision(
+    *,
+    user_id: str = "admin-1",
+    allowed: bool = True,
+) -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=allowed,
+        tenant_id=PLATFORM_TENANT_ID,
+        user_id=user_id,
+        resource="user",
+        action="manage",
+        reason="matched_projected_policy" if allowed else "missing_projected_policy",
+        policy_version=1 if allowed else None,
+    )
+
+
+def _tenant_manage_decision(
+    *,
+    user_id: str = "owner-1",
+    allowed: bool = True,
+) -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=allowed,
+        tenant_id=PLATFORM_TENANT_ID,
+        user_id=user_id,
+        resource="tenant",
+        action="manage",
+        reason="matched_projected_policy" if allowed else "missing_projected_policy",
+        policy_version=1 if allowed else None,
     )

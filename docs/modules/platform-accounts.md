@@ -68,9 +68,10 @@ PATCH /api/v1/me
 - `AccountsService.create_session()` 只允许 active user 创建 session；如果 session 绑定 tenant，必须先验证 Tenant 存在、用户是 active member，并通过 tenant lifecycle 的 `login` gate。
 - `AccountsService.create_local_user()` 创建 local user 并写 `UserCredential.password_hash`。
 - `AccountsService.verify_local_password()` 使用 `core.security.PasswordHasher` 校验本地密码。
-- `AccountsService.disable_user()` 会把 user 标记为 disabled、递增 token_version，并撤销该用户所有 active sessions。
+- `AccountsService.disable_user()` 需要 platform scope 的 `user.manage` / `user.disable` `AuthorizationDecision`；通过后会把 user 标记为 disabled、递增 token_version，并撤销该用户所有 active sessions。
 - `AccountsService.disable_user()` 可注入 `AuditService` 写 `user.disabled` 强一致审计，记录撤销 session 数和新的 token_version。
-- `AccountsService.revoke_tenant_sessions()` 可作为 `TenantLifecycleService` 的 `session_revocation_hook`，在租户暂停/删除时撤销对应 tenant 的 active sessions。
+- `AccountsService.revoke_user_sessions()` 和 `AccountsService.revoke_tenant_sessions()` 需要 platform scope 的 `session.revoke` / `session.manage` `AuthorizationDecision`。
+- `AccountsService.revoke_tenant_sessions_for_lifecycle()` 可作为 `TenantLifecycleService` 的内部 `session_revocation_hook`，在租户暂停/删除已经通过 lifecycle 授权后撤销对应 tenant 的 active sessions。
 - `AccountsAuthSessionStore` 适配 `core.auth.AuthSessionValidator`，把 UserSession/User fact 转换为 core 统一认证主体。
 - `platform_apps.accounts.permissions.PERMISSIONS` 注册 `user.manage` 和 `session.revoke` 平台权限。
 

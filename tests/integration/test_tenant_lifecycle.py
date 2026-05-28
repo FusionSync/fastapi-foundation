@@ -9,6 +9,7 @@ from core.db import unit_of_work
 from core.events import EventRegistry
 from core.exceptions import AppError
 from core.outbox import OutboxEvent, OutboxRepository
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.tenancy import (
     TENANT_CREATED_EVENT,
     TENANT_DELETED_EVENT,
@@ -81,6 +82,7 @@ async def test_provisioning_creates_active_tenant_owner_member_and_created_event
             owner_user_id="owner-1",
             actor_id="owner-1",
             request_id="req_test",
+            authorization_decision=_tenant_manage_decision(user_id="owner-1"),
         )
 
     tenants = await _all(session_factory, Tenant)
@@ -118,6 +120,7 @@ async def test_suspending_tenant_revokes_sessions_and_blocks_writes(
             actor_id="admin-1",
             request_id="req_test",
             reason="billing hold",
+            authorization_decision=_tenant_manage_decision(user_id="admin-1"),
         )
 
     suspended = (await _all(session_factory, Tenant))[0]
@@ -155,6 +158,7 @@ async def test_delete_workflow_enters_deleting_and_emits_outbox_event(
             actor_id="admin-1",
             request_id="req_test",
             reason="tenant requested deletion",
+            authorization_decision=_tenant_manage_decision(user_id="admin-1"),
         )
 
     deleting = (await _all(session_factory, Tenant))[0]
@@ -190,6 +194,7 @@ async def test_delete_workflow_can_finish_as_deleted(
             actor_id="admin-1",
             request_id="req_test",
             reason="cleanup",
+            authorization_decision=_tenant_manage_decision(user_id="admin-1"),
         )
         await service.finish_delete_tenant(
             current,
@@ -197,12 +202,39 @@ async def test_delete_workflow_can_finish_as_deleted(
             actor_id="admin-1",
             request_id="req_test",
             reason="cleanup complete",
+            authorization_decision=_tenant_manage_decision(user_id="admin-1"),
         )
 
     deleted = (await _all(session_factory, Tenant))[0]
     events = await _all(session_factory, OutboxEvent)
     assert deleted.status == "deleted"
     assert events[-1].event_type == TENANT_DELETED_EVENT
+
+
+@pytest.mark.asyncio
+async def test_tenant_lifecycle_mutation_requires_authorization_decision(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    event_registry = _tenant_event_registry()
+    tenant = await _create_active_tenant(session_factory)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        current = await uow.session.get(Tenant, tenant.id)
+        assert current is not None
+        service = TenantLifecycleService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+        )
+        with pytest.raises(AppError) as exc_info:
+            await service.suspend_tenant(
+                current,
+                actor_id="admin-1",
+                request_id="req_test",
+                reason="billing hold",
+            )
+
+    assert exc_info.value.code == "PERMISSION_DENIED"
 
 
 async def _create_active_tenant(
@@ -243,3 +275,20 @@ def _tenant_event_registry() -> EventRegistry:
     ):
         registry.register(event_type, 1, lambda event: None)
     return registry
+
+
+def _tenant_manage_decision(
+    *,
+    user_id: str = "owner-1",
+    tenant_id: str = PLATFORM_TENANT_ID,
+    allowed: bool = True,
+) -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=allowed,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        resource="tenant",
+        action="manage",
+        reason="matched_projected_policy" if allowed else "missing_projected_policy",
+        policy_version=1 if allowed else None,
+    )

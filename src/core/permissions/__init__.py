@@ -3,6 +3,7 @@ from core.permissions.cache import PermissionCache
 from core.permissions.decisions import (
     PLATFORM_TENANT_ID,
     AuthorizationDecision,
+    assert_authorization_decision,
     assert_platform_decision,
 )
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
@@ -34,5 +35,6 @@ __all__ = [
     "RoleGrant",
     "RoleGrantService",
     "RoleTemplate",
+    "assert_authorization_decision",
     "assert_platform_decision",
 ]
