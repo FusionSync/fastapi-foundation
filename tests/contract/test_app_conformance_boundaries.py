@@ -1,20 +1,24 @@
 import sys
 from collections.abc import Iterable
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from core.apps.conformance import check_app, check_apps
 
+REAL_APPS_DIR = Path(__file__).resolve().parents[2] / "src" / "apps"
 REAL_PLATFORM_APPS_DIR = Path(__file__).resolve().parents[2] / "src" / "platform_apps"
 
 
 @pytest.fixture
 def isolated_apps(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    real_app_modules = _snapshot_real_app_modules()
     _purge_imported_apps()
     monkeypatch.syspath_prepend(str(tmp_path))
     yield tmp_path
     _purge_imported_apps()
+    sys.modules.update(real_app_modules)
 
 
 def test_check_app_rejects_missing_standard_file(isolated_apps: Path) -> None:
@@ -240,3 +244,14 @@ def _purge_imported_apps() -> None:
             if module_file and Path(module_file).resolve().is_relative_to(REAL_PLATFORM_APPS_DIR):
                 continue
             del sys.modules[name]
+
+
+def _snapshot_real_app_modules() -> dict[str, ModuleType]:
+    modules: dict[str, ModuleType] = {}
+    for name, module in sys.modules.items():
+        if name != "apps" and not name.startswith("apps."):
+            continue
+        module_file = getattr(module, "__file__", None)
+        if module_file and Path(module_file).resolve().is_relative_to(REAL_APPS_DIR):
+            modules[name] = module
+    return modules

@@ -145,6 +145,18 @@ def test_create_app_rejects_route_without_typed_envelope_response_model(
         create_app(Settings(installed_apps=["runtime_apps.untyped_response.module"]))
 
 
+def test_create_app_rejects_tenant_scoped_model_constraint_violation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "bad_tenant_model", bad_tenant_model=True)
+
+    with pytest.raises(ValueError, match="tenant scoped constraint violation"):
+        create_app(Settings(installed_apps=["runtime_apps.bad_tenant_model.module"]))
+
+
 def test_create_app_assembles_runtime_registries_and_imports_models(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -210,6 +222,7 @@ def _write_runtime_app(
     use_raw_router: bool = False,
     raw_response: bool = False,
     missing_response_model: bool = False,
+    bad_tenant_model: bool = False,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -220,7 +233,18 @@ def _write_runtime_app(
         app_dir / "schemas.py",
         "from core.base import BaseSchema\n\nclass RuntimeSchema(BaseSchema):\n    name: str\n",
     )
-    _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
+    if bad_tenant_model:
+        _write(
+            app_dir / "models.py",
+            "from sqlalchemy import String\n"
+            "from sqlalchemy.orm import Mapped, mapped_column\n"
+            "from core.base.models import IdMixin, TenantScopedModel\n\n"
+            "class BadTenantRecord(IdMixin, TenantScopedModel):\n"
+            "    __tablename__ = 'bad_tenant_model_records'\n\n"
+            "    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)\n",
+        )
+    else:
+        _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
     _write(app_dir / "services.py", "class RuntimeService:\n    pass\n")
     if raw_response:
         _write(

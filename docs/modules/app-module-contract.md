@@ -144,4 +144,5 @@ apps.foo -> platform_apps.tenants.models
 - 提供账号会话事实的 app 必须通过 `auth_session_store` 声明 `AuthSessionStore` factory，不允许在 core app factory 中硬编码具体账号 app。
 - app contract check 必须拒绝循环依赖、非法导入和缺失标准文件。
 - app contract check 必须拒绝未声明 dependency 的 `apps.*.public_api` 和 `platform_apps.*.public_api` 导入。
+- app contract check 必须扫描 `AppModule.models` 中的 `TenantScopedModel` 约束，拒绝全局唯一键等会破坏租户隔离的数据模型。
 - app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

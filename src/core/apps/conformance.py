@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import inspect
 from dataclasses import dataclass, field
 from importlib import util
 from pathlib import Path
@@ -12,6 +13,8 @@ from core.apps.boundaries import check_public_api_boundaries
 from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
 from core.base import get_router_security_policy
+from core.base.models import TenantScopedModel
+from core.db.constraints import check_tenant_scoped_model
 from core.serialization import Envelope, ListEnvelope
 
 REQUIRED_APP_FILES = (
@@ -76,6 +79,7 @@ def check_app(module_path: str) -> AppCheckResult:
     package_dir = Path(module_file).resolve().parent
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
+    _check_model_constraints(app_module, result)
     _check_router_security(app_module, result)
     _check_router_response_envelopes(package_dir, result)
     _check_router_openapi_envelopes(app_module, result)
@@ -118,6 +122,27 @@ def _check_migration_metadata(app_module: AppModule, result: AppCheckResult) -> 
         return
     if util.find_spec(app_module.migrations.path) is None:
         result.errors.append(f"migrations.path cannot be imported: {app_module.migrations.path}")
+
+
+def _check_model_constraints(app_module: AppModule, result: AppCheckResult) -> None:
+    for model_path in app_module.models:
+        try:
+            model_module = importlib.import_module(model_path)
+        except Exception as exc:
+            result.errors.append(f"{model_path}: model import failed: {type(exc).__name__}: {exc}")
+            continue
+        for _, model in inspect.getmembers(model_module, inspect.isclass):
+            if model.__module__ != model_module.__name__:
+                continue
+            if model is TenantScopedModel or not issubclass(model, TenantScopedModel):
+                continue
+            if not hasattr(model, "__table__"):
+                continue
+            for violation in check_tenant_scoped_model(model):
+                result.errors.append(
+                    f"{model_path}.{model.__name__} tenant scoped constraint violation: "
+                    f"{violation}"
+                )
 
 
 def _check_router_security(app_module: AppModule, result: AppCheckResult) -> None:

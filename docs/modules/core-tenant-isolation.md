@@ -93,6 +93,7 @@ core testing 必须提供租户隔离契约测试：
 - 软删除数据默认不可见。
 - raw SQL 未声明租户范围时测试失败。
 - 跨租户查询没有 reason 时测试失败。
+- app conformance 必须扫描 `AppModule.models` 中继承 `TenantScopedModel` 的模型，启动期拒绝缺失租户索引或业务唯一约束未包含 `tenant_id` 的模型。
 
 ## Lint 要求
 
@@ -103,6 +104,8 @@ core testing 必须提供租户隔离契约测试：
 - router 中直接执行复杂查询。
 - Repository 未继承租户基类。
 - 跨租户方法未带审计 reason。
+
+当前 app conformance 已在启动期导入 `AppModule.models`，对 `TenantScopedModel` 执行 `check_tenant_scoped_model()`；发现 `tenant_id` 可空、未覆盖索引/约束，或业务 `UniqueConstraint` 未包含 `tenant_id` 时，app 装载失败。
 
 ## 数据库级兜底
 
