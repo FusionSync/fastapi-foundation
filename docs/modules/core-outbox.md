@@ -148,6 +148,7 @@ dispatcher 需要：
 - 使用条件更新领取事件，条件至少包含 `status in (pending, failed)`、`next_retry_at <= now`、`locked_until is null or locked_until < now`。
 - PostgreSQL profile 可使用 `FOR UPDATE SKIP LOCKED` 优化领取；SQLite/local profile 可使用单 worker。
 - 领取成功后设置 `status=publishing`、`locked_by`、`locked_until`。
+- 标记 `published` 或 `failed/dead_letter` 时必须再次校验 dispatcher lease：事件仍为 `publishing`、`locked_by` 等于当前 dispatcher，并且 `locked_until` 存在；未领取、已完成、死信或非当前 dispatcher 持有的事件不得被完成。
 - 支持指数退避或固定退避。
 - 达到最大重试后进入 dead letter。
 - 提供 dead letter 重放命令。

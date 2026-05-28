@@ -48,13 +48,17 @@ class OutboxDispatcher:
                 await self.repository.mark_failed(
                     event,
                     exc,
+                    dispatcher_id=self.dispatcher_id,
                     retry_delay_seconds=self.retry_delay_seconds,
                 )
                 failed += 1
                 if event.status == "dead_letter":
                     dead_lettered += 1
             else:
-                await self.repository.mark_published(event)
+                await self.repository.mark_published(
+                    event,
+                    dispatcher_id=self.dispatcher_id,
+                )
                 published += 1
         stats = DispatchStats(
             claimed=len(events),

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
+from core.exceptions import AppError
 from core.observability import MetricsRegistry
 from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
 
@@ -218,6 +219,90 @@ async def test_claim_batch_recovers_expired_publishing_lock(
     event = await _first_event(session_factory)
     assert len(recovered_claim) == 1
     assert event.locked_by == "dispatcher-2"
+
+
+@pytest.mark.asyncio
+async def test_mark_published_rejects_unclaimed_event(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        event = await uow.session.get(OutboxEvent, (await _first_event(session_factory)).id)
+        assert event is not None
+        with pytest.raises(AppError) as exc_info:
+            await OutboxRepository(uow.session, registry=registry).mark_published(
+                event,
+                dispatcher_id="dispatcher-1",
+            )
+
+    current = await _first_event(session_factory)
+    assert exc_info.value.code == "CONFLICT"
+    assert current.status == "pending"
+    assert current.published_at is None
+
+
+@pytest.mark.asyncio
+async def test_mark_published_rejects_non_owner_dispatcher(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        claimed = await OutboxRepository(uow.session, registry=registry).claim_batch(
+            dispatcher_id="dispatcher-1",
+            batch_size=1,
+        )
+        assert len(claimed) == 1
+        with pytest.raises(AppError) as exc_info:
+            await OutboxRepository(uow.session, registry=registry).mark_published(
+                claimed[0],
+                dispatcher_id="dispatcher-2",
+            )
+
+    current = await _first_event(session_factory)
+    assert exc_info.value.code == "CONFLICT"
+    assert current.status == "publishing"
+    assert current.locked_by == "dispatcher-1"
+    assert current.published_at is None
+
+
+@pytest.mark.asyncio
+async def test_mark_failed_rejects_completed_event(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        repository = OutboxRepository(uow.session, registry=registry)
+        claimed = await repository.claim_batch(dispatcher_id="dispatcher-1", batch_size=1)
+        assert len(claimed) == 1
+        await repository.mark_published(claimed[0], dispatcher_id="dispatcher-1")
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        event = await uow.session.get(OutboxEvent, (await _first_event(session_factory)).id)
+        assert event is not None
+        with pytest.raises(AppError) as exc_info:
+            await OutboxRepository(uow.session, registry=registry).mark_failed(
+                event,
+                RuntimeError("late failure"),
+                dispatcher_id="dispatcher-1",
+            )
+
+    current = await _first_event(session_factory)
+    assert exc_info.value.code == "CONFLICT"
+    assert current.status == "published"
+    assert current.attempt_count == 0
 
 
 async def _add_event(

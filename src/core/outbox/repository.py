@@ -65,7 +65,18 @@ class OutboxRepository:
         await self.session.flush()
         return events
 
-    async def mark_published(self, event: OutboxEvent, *, now: datetime | None = None) -> None:
+    async def mark_published(
+        self,
+        event: OutboxEvent,
+        *,
+        dispatcher_id: str,
+        now: datetime | None = None,
+    ) -> None:
+        self._assert_dispatch_lease(
+            event,
+            dispatcher_id=dispatcher_id,
+            operation="published",
+        )
         event.status = "published"
         event.published_at = now or datetime.now(UTC)
         event.locked_by = None
@@ -78,9 +89,15 @@ class OutboxRepository:
         event: OutboxEvent,
         error: BaseException,
         *,
+        dispatcher_id: str,
         retry_delay_seconds: int = 30,
         now: datetime | None = None,
     ) -> None:
+        self._assert_dispatch_lease(
+            event,
+            dispatcher_id=dispatcher_id,
+            operation="failed",
+        )
         resolved_now = now or datetime.now(UTC)
         event.attempt_count += 1
         event.last_error = f"{type(error).__name__}: {error}"
@@ -195,3 +212,28 @@ class OutboxRepository:
                 "Event payload tenant_id must match outbox tenant_id",
                 status_code=403,
             )
+
+    def _assert_dispatch_lease(
+        self,
+        event: OutboxEvent,
+        *,
+        dispatcher_id: str,
+        operation: str,
+    ) -> None:
+        if (
+            event.status == "publishing"
+            and event.locked_by == dispatcher_id
+            and event.locked_until is not None
+        ):
+            return
+        raise AppError(
+            "CONFLICT",
+            f"Outbox event cannot be marked {operation} without an active dispatcher lease",
+            status_code=409,
+            details={
+                "event_id": event.id,
+                "status": event.status,
+                "locked_by": event.locked_by,
+                "dispatcher_id": dispatcher_id,
+            },
+        )
