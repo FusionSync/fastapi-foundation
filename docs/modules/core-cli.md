@@ -24,6 +24,12 @@ check-config
 list-apps
 init-db
 migrate
+serve
+worker
+scheduler
+outbox-dispatcher
+smoke
+backup-check
 create-superuser
 seed-permissions
 show-routes

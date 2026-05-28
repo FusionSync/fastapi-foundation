@@ -82,6 +82,7 @@ finished_at
 - task_type 全局唯一，重复注册启动前失败。
 - `SyncTaskProvider` 用于 local/profile 和单机版，可同步执行普通函数或 async handler。
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。
+- scheduler 通过 `TaskEnvelope` 提交任务，不绕过 `SyncTaskProvider` 或未来队列 provider，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
 
 后续接入 RQ 或 Celery 时，provider 必须复用 `TaskEnvelope`、`TaskRegistry` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。
 

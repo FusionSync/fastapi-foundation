@@ -82,6 +82,7 @@ manual
 - 从 `AppModule.schedules` 收集 schedule definition。
 - schedule_id 全局唯一。
 - 每个 schedule 的 task_type 必须能在 `TaskRegistry` 中找到。
-- registry 只负责定义校验，不执行具体调度。
+- `ManualScheduleProvider` 提供本地/运维触发入口，读取 `ScheduleRegistry`，构造带 `schedule_id + tenant_id + planned_at` 幂等键的 `TaskEnvelope`，再提交给 Tasks provider。
+- scheduler provider 不直接调用业务函数，tenant lifecycle gate 仍由 task provider 执行。
 
-后续 APScheduler 或 Celery Beat provider 必须读取 `ScheduleRegistry`，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。
+后续 APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。
