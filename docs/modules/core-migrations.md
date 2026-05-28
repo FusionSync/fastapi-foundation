@@ -54,6 +54,7 @@ load app modules
 ```text
 app_label
 migration_id
+alembic_revision
 phase
 classification
 depends_on
@@ -70,6 +71,7 @@ approved_at
 
 - `phase`：`expand`、`backfill`、`contract`、`maintenance`。
 - `classification`：`reversible`、`forward_only`、`destructive`、`requires_backup_restore`。
+- `alembic_revision`：必须绑定真实 Alembic revision id，后续 runner 只能执行已进入 manifest 的 revision。
 - destructive 和 requires_backup_restore 必须有 approval 和备份检查。
 - 大表变更必须声明 lock_risk 和 backfill_plan。
 - 兼容性变更必须说明支持的新旧代码版本范围。
@@ -185,6 +187,7 @@ core migrate drift-check
 已落地迁移 metadata 治理闭环：
 
 - `MigrationManifest` 定义 app、migration_id、phase、classification、依赖、行数、锁风险、backfill、rollback、审批和 destructive operations。
+- `MigrationManifest.validate()` 要求每条 migration 显式声明 `alembic_revision`，并在 CLI JSON 中输出该绑定。
 - `MigrationRegistry.from_app_registry()` 从 `AppModule.migrations.path` 收集 `manifest.py` 中的 `MIGRATIONS`。
 - `plan_migrations()` 按 migration 依赖和 app dependency graph 输出顺序计划。
 - `run_preflight()` 校验 manifest、schema drift、destructive/backup readiness、high lock risk 和 forward-only warning。

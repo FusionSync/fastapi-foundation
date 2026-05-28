@@ -5,6 +5,7 @@ def test_preflight_blocks_destructive_migration_without_approval() -> None:
     manifest = MigrationManifest(
         app_label="alpha",
         migration_id="0002_drop_legacy",
+        alembic_revision="alpha_0002_drop_legacy",
         phase="contract",
         classification="destructive",
         destructive_operations=["drop column legacy_name"],
@@ -21,6 +22,7 @@ def test_preflight_blocks_destructive_migration_without_backup_readiness() -> No
     manifest = MigrationManifest(
         app_label="alpha",
         migration_id="0002_drop_legacy",
+        alembic_revision="alpha_0002_drop_legacy",
         phase="contract",
         classification="destructive",
         destructive_operations=["drop column legacy_name"],
@@ -39,6 +41,7 @@ def test_preflight_allows_approved_destructive_migration_with_backup_readiness()
     manifest = MigrationManifest(
         app_label="alpha",
         migration_id="0002_drop_legacy",
+        alembic_revision="alpha_0002_drop_legacy",
         phase="contract",
         classification="destructive",
         destructive_operations=["drop column legacy_name"],
@@ -57,6 +60,7 @@ def test_preflight_blocks_schema_drift() -> None:
     manifest = MigrationManifest(
         app_label="alpha",
         migration_id="0001_initial",
+        alembic_revision="alpha_0001_initial",
         phase="expand",
         classification="reversible",
     )
@@ -75,6 +79,7 @@ def test_preflight_blocks_high_lock_risk_without_backfill_plan() -> None:
     manifest = MigrationManifest(
         app_label="alpha",
         migration_id="0003_add_not_null",
+        alembic_revision="alpha_0003_add_not_null",
         phase="expand",
         classification="reversible",
         estimated_rows=1_000_000,

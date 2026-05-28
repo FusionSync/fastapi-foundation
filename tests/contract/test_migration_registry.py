@@ -16,6 +16,7 @@ def test_migration_registry_collects_app_manifests(monkeypatch) -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
                 phase="expand",
                 classification="reversible",
             )
@@ -38,6 +39,7 @@ def test_migration_plan_sorts_by_app_dependencies(monkeypatch) -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
                 phase="expand",
                 classification="reversible",
             )
@@ -52,6 +54,7 @@ def test_migration_plan_sorts_by_app_dependencies(monkeypatch) -> None:
             MigrationManifest(
                 app_label="beta",
                 migration_id="0001_initial",
+                alembic_revision="beta_0001_initial",
                 phase="expand",
                 classification="reversible",
             )
@@ -75,6 +78,7 @@ def test_migration_plan_rejects_missing_dependency() -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0002_next",
+                alembic_revision="alpha_0002_next",
                 phase="expand",
                 classification="reversible",
                 depends_on=["0001_initial"],
@@ -92,6 +96,7 @@ def test_migration_plan_rejects_circular_dependency() -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
                 phase="expand",
                 classification="reversible",
                 depends_on=["0002_next"],
@@ -99,6 +104,7 @@ def test_migration_plan_rejects_circular_dependency() -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0002_next",
+                alembic_revision="alpha_0002_next",
                 phase="expand",
                 classification="reversible",
                 depends_on=["0001_initial"],
@@ -110,6 +116,17 @@ def test_migration_plan_rejects_circular_dependency() -> None:
     assert any("Circular migration dependency" in error for error in plan.errors)
 
 
+def test_migration_manifest_requires_alembic_revision_binding() -> None:
+    manifest = MigrationManifest(
+        app_label="alpha",
+        migration_id="0001_initial",
+        phase="expand",
+        classification="reversible",
+    )
+
+    assert "alpha:0001_initial requires alembic_revision" in manifest.validate()
+
+
 def test_migrate_plan_cli_outputs_stable_json(monkeypatch, capsys) -> None:
     _install_app(
         monkeypatch,
@@ -119,6 +136,7 @@ def test_migrate_plan_cli_outputs_stable_json(monkeypatch, capsys) -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
                 phase="expand",
                 classification="reversible",
             )
@@ -131,6 +149,7 @@ def test_migrate_plan_cli_outputs_stable_json(monkeypatch, capsys) -> None:
     assert exit_code == 0
     assert payload["ok"] is True
     assert payload["migrations"][0]["key"] == "alpha:0001_initial"
+    assert payload["migrations"][0]["alembic_revision"] == "alpha_0001_initial"
 
 
 def test_migrate_drift_check_cli_blocks_mismatch(capsys) -> None:
@@ -161,6 +180,7 @@ def test_migrate_apply_requires_yes(monkeypatch, capsys) -> None:
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
                 phase="expand",
                 classification="reversible",
             )
@@ -186,6 +206,7 @@ def test_migrate_apply_runs_preflight_before_metadata_apply(monkeypatch, capsys)
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0002_drop_legacy",
+                alembic_revision="alpha_0002_drop_legacy",
                 phase="contract",
                 classification="destructive",
                 destructive_operations=["drop column legacy_name"],
@@ -223,12 +244,14 @@ def test_migrate_apply_outputs_metadata_apply_plan_when_gates_pass(monkeypatch, 
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
                 phase="expand",
                 classification="reversible",
             ),
             MigrationManifest(
                 app_label="alpha",
                 migration_id="0002_drop_legacy",
+                alembic_revision="alpha_0002_drop_legacy",
                 phase="contract",
                 classification="destructive",
                 depends_on=["0001_initial"],

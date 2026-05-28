@@ -19,6 +19,7 @@ class MigrationManifest:
     migration_id: str
     phase: MigrationPhase
     classification: MigrationClassification
+    alembic_revision: str | None = None
     depends_on: list[str] = field(default_factory=list)
     estimated_rows: int = 0
     lock_risk: LockRisk = "low"
@@ -39,6 +40,10 @@ class MigrationManifest:
             errors.append("app_label is required")
         if not self.migration_id:
             errors.append("migration_id is required")
+        if not self.alembic_revision or not self.alembic_revision.strip():
+            errors.append(f"{self.key} requires alembic_revision")
+        elif ":" in self.alembic_revision:
+            errors.append(f"{self.key} alembic_revision must not contain ':'")
         if self.estimated_rows < 0:
             errors.append("estimated_rows cannot be negative")
         if self.backfill_required and not self.backfill_plan:
@@ -60,6 +65,7 @@ class MigrationManifest:
         return {
             "app_label": self.app_label,
             "migration_id": self.migration_id,
+            "alembic_revision": self.alembic_revision,
             "key": self.key,
             "phase": self.phase,
             "classification": self.classification,
