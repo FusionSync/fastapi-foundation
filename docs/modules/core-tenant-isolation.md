@@ -46,7 +46,7 @@ core.db.sql.execute_cross_tenant()
 - `TenantScopedRepository.get()` 自动过滤当前 `tenant_id`。
 - `TenantScopedRepository.create()` 自动写入当前 `tenant_id`。
 - 默认过滤 `deleted_at is null`。
-- raw SQL 必须声明租户范围，并且 tenant-scoped SQL 必须包含可验证的 `tenant_id = :tenant_id` 谓词。
+- raw SQL 必须声明租户范围，并且 tenant-scoped SQL 必须包含可验证的 `tenant_id = :tenant_id` 谓词。校验必须忽略注释和字符串字面量，并拒绝 `organization_tenant_id` 这类子串列名绕过。
 
 ## 跨租户访问
 

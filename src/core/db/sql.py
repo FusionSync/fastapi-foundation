@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -9,6 +10,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.context import get_current_context
 from core.exceptions import AppError
 from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
+
+_SQL_COMMENT_PATTERN = re.compile(r"(--[^\r\n]*(?:\r?\n|$))|(/\*.*?\*/)", re.DOTALL)
+_SQL_SINGLE_QUOTED_STRING_PATTERN = re.compile(r"'(?:''|[^'])*'")
+_TENANT_COLUMN_PATTERN = r'(?:(?:[a-z_][a-z0-9_]*|"[^"]+")\s*\.\s*)?(?:"tenant_id"|tenant_id)'
+_TENANT_BIND_PATTERN = r":tenant_id\b"
+_TENANT_PREDICATE_PATTERN = re.compile(
+    rf"(?<![a-z0-9_])(?:"
+    rf"{_TENANT_COLUMN_PATTERN}\s*=\s*{_TENANT_BIND_PATTERN}"
+    rf"|{_TENANT_BIND_PATTERN}\s*=\s*{_TENANT_COLUMN_PATTERN}"
+    rf")",
+    re.IGNORECASE,
+)
 
 
 async def execute_tenant_scoped(
@@ -33,14 +46,19 @@ async def execute_tenant_scoped(
 
 
 def _validate_tenant_predicate(statement: str) -> None:
-    normalized = " ".join(statement.lower().split())
-    if "tenant_id" in normalized and ":tenant_id" in normalized:
+    normalized = _strip_sql_comments_and_literals(statement)
+    if _TENANT_PREDICATE_PATTERN.search(normalized):
         return
     raise AppError(
         "TENANT_ACCESS_DENIED",
         "Tenant-scoped SQL must include an explicit tenant_id predicate",
         status_code=403,
     )
+
+
+def _strip_sql_comments_and_literals(statement: str) -> str:
+    without_comments = _SQL_COMMENT_PATTERN.sub(" ", statement)
+    return _SQL_SINGLE_QUOTED_STRING_PATTERN.sub(" ", without_comments)
 
 
 async def execute_cross_tenant(

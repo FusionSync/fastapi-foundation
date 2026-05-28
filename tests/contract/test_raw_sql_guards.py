@@ -68,6 +68,52 @@ async def test_tenant_scoped_sql_rejects_missing_tenant_predicate() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tenant_scoped_sql_rejects_tenant_predicate_in_comment() -> None:
+    token = set_current_context(RequestContext(request_id="req_test", tenant_id="tenant-a"))
+    try:
+        with pytest.raises(AppError) as exc_info:
+            await execute_tenant_scoped(
+                _FakeSession(),  # type: ignore[arg-type]
+                "select * from records where status = :status -- tenant_id = :tenant_id",
+                {"status": "active"},
+            )
+
+        assert exc_info.value.code == "TENANT_ACCESS_DENIED"
+    finally:
+        reset_current_context(token)
+
+
+@pytest.mark.asyncio
+async def test_tenant_scoped_sql_rejects_tenant_id_substring_column() -> None:
+    token = set_current_context(RequestContext(request_id="req_test", tenant_id="tenant-a"))
+    try:
+        with pytest.raises(AppError) as exc_info:
+            await execute_tenant_scoped(
+                _FakeSession(),  # type: ignore[arg-type]
+                "select * from records where organization_tenant_id = :tenant_id",
+            )
+
+        assert exc_info.value.code == "TENANT_ACCESS_DENIED"
+    finally:
+        reset_current_context(token)
+
+
+@pytest.mark.asyncio
+async def test_tenant_scoped_sql_accepts_alias_qualified_tenant_predicate() -> None:
+    session = _FakeSession()
+    token = set_current_context(RequestContext(request_id="req_test", tenant_id="tenant-a"))
+    try:
+        await execute_tenant_scoped(
+            session,  # type: ignore[arg-type]
+            "select * from records r where r.tenant_id = :tenant_id",
+        )
+
+        assert session.parameters == {"tenant_id": "tenant-a"}
+    finally:
+        reset_current_context(token)
+
+
+@pytest.mark.asyncio
 async def test_cross_tenant_sql_requires_reason_and_platform_decision() -> None:
     decision = _platform_decision()
     with pytest.raises(AppError) as missing_reason:
