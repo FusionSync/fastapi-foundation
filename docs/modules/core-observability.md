@@ -10,6 +10,7 @@ Observability 模块负责日志、指标、追踪和运行诊断。
 src/core/observability/
   logging.py
   metrics.py
+  middleware.py
   tracing.py
   health.py
 ```
@@ -77,7 +78,9 @@ quota_exceeded_total
 external_http_requests_total
 ```
 
-`GET /metrics` 先暴露这些名称的 Prometheus contract，后续接入真实采集时必须沿用这些名称，避免看板和告警反复迁移。
+`GET /metrics` 暴露 Prometheus text/plain 响应。底座启动时会创建进程内 `MetricsRegistry`，
+HTTP middleware 已记录 `http_requests_total{method,route,status_class}`。其他 task、outbox、
+migration 指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
 
 ## 设计要求
 

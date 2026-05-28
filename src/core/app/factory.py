@@ -1,11 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.apps import AppRegistry
 from core.config import Settings, get_settings, validate_startup_settings
 from core.context import RequestContextMiddleware
 from core.exceptions import register_exception_handlers
-from core.observability import render_metrics_contract
+from core.observability import HttpMetricsMiddleware, MetricsRegistry, render_metrics_contract
 from core.security import (
     RequestBodySizeLimitMiddleware,
     SecretProvider,
@@ -26,9 +26,11 @@ def create_app(
 
     app = FastAPI(title=resolved_settings.app.name, version=resolved_settings.app.version)
     app.state.settings = resolved_settings
+    app.state.metrics_registry = MetricsRegistry()
 
     _register_security_middleware(app, resolved_settings)
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(HttpMetricsMiddleware)
     register_exception_handlers(app)
     _register_system_routes(app, resolved_settings)
     _register_app_modules(app, resolved_settings)
@@ -76,8 +78,11 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
         )
 
     @app.get("/metrics", include_in_schema=False)
-    async def metrics() -> str:
-        return render_metrics_contract()
+    async def metrics() -> Response:
+        return Response(
+            render_metrics_contract(app.state.metrics_registry),
+            media_type="text/plain; version=0.0.4",
+        )
 
 
 def _register_app_modules(app: FastAPI, settings: Settings) -> None:
