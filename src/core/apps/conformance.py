@@ -6,10 +6,13 @@ from dataclasses import dataclass, field
 from importlib import util
 from pathlib import Path
 
+from fastapi.routing import APIRoute
+
 from core.apps.boundaries import check_public_api_boundaries
 from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
 from core.base import get_router_security_policy
+from core.serialization import Envelope, ListEnvelope
 
 REQUIRED_APP_FILES = (
     "module.py",
@@ -75,6 +78,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_migration_metadata(app_module, result)
     _check_router_security(app_module, result)
     _check_router_response_envelopes(package_dir, result)
+    _check_router_openapi_envelopes(app_module, result)
     result.errors.extend(check_public_api_boundaries(package_dir, module_path, app_module))
     return result
 
@@ -151,6 +155,23 @@ def _check_router_response_envelopes(package_dir: Path, result: AppCheckResult) 
                     f"router.py:{node.name} route handler must return core response "
                     "envelope, not raw dict/list"
                 )
+
+
+def _check_router_openapi_envelopes(app_module: AppModule, result: AppCheckResult) -> None:
+    for router in app_module.routers:
+        for route in router.routes:
+            if not isinstance(route, APIRoute) or not route.include_in_schema:
+                continue
+            response_model = route.response_model
+            if isinstance(response_model, type) and issubclass(
+                response_model,
+                (Envelope, ListEnvelope),
+            ):
+                continue
+            result.errors.append(
+                f"{route.path} route must declare response_model=Envelope[...] "
+                "or ListEnvelope[...]"
+            )
 
 
 def _is_route_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:

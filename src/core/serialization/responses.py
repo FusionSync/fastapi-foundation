@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.context.context import get_current_context
 from core.messages import resolve_message
 from core.serialization.encoders import to_jsonable
+
+EnvelopeDataT = TypeVar("EnvelopeDataT")
+EnvelopeItemT = TypeVar("EnvelopeItemT")
 
 
 class Pagination(BaseModel):
@@ -16,13 +19,25 @@ class Pagination(BaseModel):
     has_next: bool
 
 
-class Envelope(BaseModel):
+class Envelope(BaseModel, Generic[EnvelopeDataT]):
     model_config = ConfigDict(populate_by_name=True)
 
     code: str
     message: str
-    data: Any | None = None
+    data: EnvelopeDataT | None = None
     items: list[Any] | None = Field(default=None, alias="list")
+    pagination: Pagination | None = None
+    details: dict[str, Any] | None = None
+    request_id: str
+
+
+class ListEnvelope(BaseModel, Generic[EnvelopeItemT]):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    message: str
+    data: None = None
+    items: list[EnvelopeItemT] | None = Field(default=None, alias="list")
     pagination: Pagination | None = None
     details: dict[str, Any] | None = None
     request_id: str
@@ -62,7 +77,7 @@ def ok_list(
     pagination_model = (
         pagination if isinstance(pagination, Pagination) else Pagination(**pagination)
     )
-    return Envelope(
+    return ListEnvelope(
         code="OK",
         message=message,
         data=None,

@@ -46,6 +46,7 @@ src/core/serialization/
 - aware `datetime` 输出 `isoformat()`，naive `datetime` 抛 `SYSTEM_ERROR`。
 - `date`、`Decimal`、`UUID`、`Enum` 和嵌套 list/dict 会递归编码。
 - Pydantic model 先 `model_dump(mode="python", by_alias=True)`，再经过统一编码。
+- OpenAPI 响应模型使用 `Envelope[T]` 和 `ListEnvelope[T]` 泛型绑定具体 payload schema；运行时仍通过 `ok()` / `ok_list()` 输出同一 envelope 字段。
 
 ## BaseSchema 关系
 
@@ -72,4 +73,5 @@ fail(code, message=None, details=None, status_code=None, headers=None)
 - 业务 router 禁止直接返回裸 ORM model。
 - 业务 router 禁止直接返回裸 dict/list。
 - 所有 JSON 响应必须经过 response helper。
+- router 应声明 `response_model=Envelope[ReadSchema]` 或 `response_model=ListEnvelope[ReadSchema]`，避免 OpenAPI 退化为裸 object。
 - 文件下载、流式响应不走 JSON envelope，但失败时仍走 JSON envelope。

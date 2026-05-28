@@ -133,6 +133,18 @@ def test_create_app_rejects_route_returning_raw_dict(
         create_app(Settings(installed_apps=["runtime_apps.raw_response.module"]))
 
 
+def test_create_app_rejects_route_without_typed_envelope_response_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "untyped_response", missing_response_model=True)
+
+    with pytest.raises(ValueError, match="route must declare response_model=Envelope"):
+        create_app(Settings(installed_apps=["runtime_apps.untyped_response.module"]))
+
+
 def test_create_app_assembles_runtime_registries_and_imports_models(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -176,6 +188,7 @@ def _write_runtime_app(
     declare_permissions: bool = True,
     use_raw_router: bool = False,
     raw_response: bool = False,
+    missing_response_model: bool = False,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -208,14 +221,18 @@ def _write_runtime_app(
             "    return ok({'status': 'ok'})\n",
         )
     else:
+        decorator = "@router.get('/ping')"
+        if not missing_response_model:
+            decorator = "@router.get('/ping', response_model=Envelope[RuntimeSchema])"
         _write(
             app_dir / "router.py",
+            f"from runtime_apps.{name}.schemas import RuntimeSchema\n"
             "from core.base import create_router\n"
-            "from core.serialization import ok\n\n"
+            "from core.serialization import Envelope, ok\n\n"
             "router = create_router('/runtime')\n\n"
-            "@router.get('/ping')\n"
+            f"{decorator}\n"
             "async def ping():\n"
-            "    return ok({'status': 'ok'})\n",
+            "    return ok({'name': 'ok'})\n",
         )
     _write(
         app_dir / "permissions.py",
