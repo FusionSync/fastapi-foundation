@@ -1,8 +1,10 @@
-from core.permissions.authorization import (
-    AuthorizationDecision,
-    AuthorizationService,
-)
+from core.permissions.authorization import AuthorizationService
 from core.permissions.cache import PermissionCache
+from core.permissions.decisions import (
+    PLATFORM_TENANT_ID,
+    AuthorizationDecision,
+    assert_platform_decision,
+)
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
 from core.permissions.policies import (
     PolicyRule,
@@ -19,6 +21,7 @@ from core.permissions.specs import PermissionSpec
 __all__ = [
     "AuthorizationDecision",
     "AuthorizationService",
+    "PLATFORM_TENANT_ID",
     "ROLE_GRANT_CHANGED_EVENT",
     "PermissionCache",
     "PermissionRegistry",
@@ -31,4 +34,5 @@ __all__ = [
     "RoleGrant",
     "RoleGrantService",
     "RoleTemplate",
+    "assert_platform_decision",
 ]

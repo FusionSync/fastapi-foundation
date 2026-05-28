@@ -55,7 +55,7 @@ core.db.sql.execute_cross_tenant()
 必须满足：
 
 - 使用显式 `CrossTenantRepository` 或 `execute_cross_tenant()`。
-- 当前用户具备 platform permission。
+- 当前用户具备 platform permission，并且调用方必须传入 `AuthorizationService.require_platform()` 返回的 `AuthorizationDecision`；禁止用裸布尔值绕过授权链路。
 - 调用方提供 reason。
 - 写入审计日志。
 - 返回结果必须限制字段，避免无意暴露敏感数据。

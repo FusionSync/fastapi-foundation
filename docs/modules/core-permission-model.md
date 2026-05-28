@@ -95,7 +95,7 @@ viewer
 
 平台角色和租户角色必须分离。
 
-`is_platform_admin` 不能作为 `CurrentUser` 上的绕过开关。平台管理员必须来自 platform scope 的 `RoleGrant` 或外部身份 claim 到 RoleGrant 的可审计映射。
+`is_platform_admin` 不能作为 `CurrentUser` 上的绕过开关。平台管理员必须来自 platform scope 的 `RoleGrant` 或外部身份 claim 到 RoleGrant 的可审计映射。第一版使用固定 platform domain `__platform__` 表达平台级授权事实。
 
 ## Policy 投影
 

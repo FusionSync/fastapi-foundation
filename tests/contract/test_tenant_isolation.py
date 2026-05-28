@@ -9,6 +9,7 @@ from core.base.repositories import CrossTenantRepository, TenantScopedRepository
 from core.context import RequestContext, reset_current_context, set_current_context
 from core.db.constraints import check_tenant_scoped_model
 from core.exceptions import AppError
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 
 
 class TenantThing(IdMixin, SoftDeleteMixin, TimestampMixin, TenantScopedModel):
@@ -73,29 +74,52 @@ async def test_tenant_scoped_create_rejects_cross_tenant_payload() -> None:
         reset_current_context(token)
 
 
-def test_cross_tenant_repository_requires_reason_and_platform_permission() -> None:
+def test_cross_tenant_repository_requires_reason_and_platform_decision() -> None:
+    decision = _platform_decision()
     with pytest.raises(AppError) as missing_reason:
         TenantThingCrossRepository(
             _FakeSession(),  # type: ignore[arg-type]
             reason="",
-            platform_permission_granted=True,
+            platform_decision=decision,
         )
     with pytest.raises(AppError) as missing_permission:
         TenantThingCrossRepository(
             _FakeSession(),  # type: ignore[arg-type]
             reason="support export",
-            platform_permission_granted=False,
+            platform_decision=AuthorizationDecision(
+                allowed=False,
+                tenant_id=PLATFORM_TENANT_ID,
+                user_id="admin-1",
+                resource="cross_tenant",
+                action="read",
+                reason="missing_projected_policy",
+            ),
+        )
+    with pytest.raises(AppError) as tenant_decision:
+        TenantThingCrossRepository(
+            _FakeSession(),  # type: ignore[arg-type]
+            reason="support export",
+            platform_decision=AuthorizationDecision(
+                allowed=True,
+                tenant_id="tenant-a",
+                user_id="admin-1",
+                resource="cross_tenant",
+                action="read",
+                reason="matched_projected_policy",
+            ),
         )
 
     repo = TenantThingCrossRepository(
         _FakeSession(),  # type: ignore[arg-type]
         reason="support export",
-        platform_permission_granted=True,
+        platform_decision=decision,
     )
 
     assert missing_reason.value.code == "PERMISSION_DENIED"
     assert missing_permission.value.code == "PERMISSION_DENIED"
+    assert tenant_decision.value.code == "PERMISSION_DENIED"
     assert repo.reason == "support export"
+    assert repo.platform_decision == decision
 
 
 def test_tenant_scoped_model_constraints_detect_global_unique_keys() -> None:
@@ -112,3 +136,15 @@ class _FakeSession:
 
     def add(self, record: Any) -> None:
         self.added.append(record)
+
+
+def _platform_decision() -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=True,
+        tenant_id=PLATFORM_TENANT_ID,
+        user_id="admin-1",
+        resource="cross_tenant",
+        action="read",
+        reason="matched_projected_policy",
+        policy_version=1,
+    )

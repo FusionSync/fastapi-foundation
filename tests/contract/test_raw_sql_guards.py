@@ -5,6 +5,7 @@ import pytest
 from core.context import RequestContext, reset_current_context, set_current_context
 from core.db.sql import execute_cross_tenant, execute_tenant_scoped
 from core.exceptions import AppError
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 
 
 @pytest.mark.asyncio
@@ -67,24 +68,68 @@ async def test_tenant_scoped_sql_rejects_missing_tenant_predicate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cross_tenant_sql_requires_reason_and_platform_permission() -> None:
+async def test_cross_tenant_sql_requires_reason_and_platform_decision() -> None:
+    decision = _platform_decision()
     with pytest.raises(AppError) as missing_reason:
         await execute_cross_tenant(
             _FakeSession(),  # type: ignore[arg-type]
             "select * from records",
             reason="",
-            platform_permission_granted=True,
+            platform_decision=decision,
         )
-    with pytest.raises(AppError) as missing_permission:
+    with pytest.raises(AppError) as denied_decision:
         await execute_cross_tenant(
             _FakeSession(),  # type: ignore[arg-type]
             "select * from records",
             reason="support export",
-            platform_permission_granted=False,
+            platform_decision=AuthorizationDecision(
+                allowed=False,
+                tenant_id=PLATFORM_TENANT_ID,
+                user_id="admin-1",
+                resource="cross_tenant",
+                action="read",
+                reason="missing_projected_policy",
+            ),
+        )
+    with pytest.raises(AppError) as tenant_decision:
+        await execute_cross_tenant(
+            _FakeSession(),  # type: ignore[arg-type]
+            "select * from records",
+            reason="support export",
+            platform_decision=AuthorizationDecision(
+                allowed=True,
+                tenant_id="tenant-a",
+                user_id="admin-1",
+                resource="cross_tenant",
+                action="read",
+                reason="matched_projected_policy",
+            ),
         )
 
+    session = _FakeSession()
+    await execute_cross_tenant(
+        session,  # type: ignore[arg-type]
+        "select * from records",
+        reason="support export",
+        platform_decision=decision,
+    )
+
     assert missing_reason.value.code == "PERMISSION_DENIED"
-    assert missing_permission.value.code == "PERMISSION_DENIED"
+    assert denied_decision.value.code == "PERMISSION_DENIED"
+    assert tenant_decision.value.code == "PERMISSION_DENIED"
+    assert session.parameters == {}
+
+
+def _platform_decision() -> AuthorizationDecision:
+    return AuthorizationDecision(
+        allowed=True,
+        tenant_id=PLATFORM_TENANT_ID,
+        user_id="admin-1",
+        resource="cross_tenant",
+        action="read",
+        reason="matched_projected_policy",
+        policy_version=1,
+    )
 
 
 class _FakeSession:

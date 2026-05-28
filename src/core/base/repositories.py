@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.base.models import BaseModel
 from core.context import get_current_context
 from core.exceptions import AppError
+from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -114,7 +115,7 @@ class CrossTenantRepository(BaseRepository[ModelT]):
         session: AsyncSession,
         *,
         reason: str,
-        platform_permission_granted: bool,
+        platform_decision: AuthorizationDecision,
     ) -> None:
         if not reason.strip():
             raise AppError(
@@ -122,11 +123,7 @@ class CrossTenantRepository(BaseRepository[ModelT]):
                 "Cross-tenant access requires an audit reason",
                 status_code=403,
             )
-        if not platform_permission_granted:
-            raise AppError(
-                "PERMISSION_DENIED",
-                "Cross-tenant access requires platform permission",
-                status_code=403,
-            )
+        assert_platform_decision(platform_decision)
         super().__init__(session)
         self.reason = reason
+        self.platform_decision = platform_decision

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.exceptions import AppError
-from core.permissions import AuthorizationService, ProjectedPolicy
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationService, ProjectedPolicy
 from platform_apps.audit import AuditLog, AuditService
 
 
@@ -136,6 +136,72 @@ async def test_require_authorized_raises_after_recording_denied_audit(
     }
     assert len(audit_logs) == 1
     assert audit_logs[0].action == "authorization.denied"
+
+
+@pytest.mark.asyncio
+async def test_require_platform_uses_platform_domain_policy(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(
+            ProjectedPolicy(
+                tenant_id=PLATFORM_TENANT_ID,
+                subject="user:admin-1",
+                resource="cross_tenant",
+                action="read",
+                effect="allow",
+                role_grant_id="grant-platform",
+                policy_version=7,
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        decision = await AuthorizationService(uow.session).require_platform(
+            user_id="admin-1",
+            resource="cross_tenant",
+            action="read",
+            request_id="req-platform",
+        )
+
+    assert decision.allowed is True
+    assert decision.tenant_id == PLATFORM_TENANT_ID
+    assert decision.policy_version == 7
+    assert decision.reason == "matched_projected_policy"
+
+
+@pytest.mark.asyncio
+async def test_require_platform_denies_missing_platform_policy_and_audits(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        with pytest.raises(AppError) as denied:
+            authorization = AuthorizationService(
+                uow.session,
+                audit=AuditService(uow.session),
+            )
+            await authorization.require_platform(
+                user_id="admin-1",
+                resource="cross_tenant",
+                action="read",
+                resource_id="tenant-export",
+                request_id="req-platform-denied",
+            )
+
+    audit_logs = await _audit_logs(session_factory)
+    assert denied.value.code == "PERMISSION_DENIED"
+    assert denied.value.details == {
+        "tenant_id": PLATFORM_TENANT_ID,
+        "user_id": "admin-1",
+        "resource": "cross_tenant",
+        "action": "read",
+    }
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == "authorization.denied"
+    assert audit_logs[0].tenant_id == PLATFORM_TENANT_ID
+    assert audit_logs[0].resource_id == "tenant-export"
 
 
 async def _audit_logs(session_factory: async_sessionmaker[AsyncSession]) -> list[AuditLog]:

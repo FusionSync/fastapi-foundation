@@ -47,11 +47,14 @@ decision = await AuthorizationService(session).authorize(
 
 禁止业务 app 直接操作 Casbin enforcer。
 平台级权限使用 `scope=platform` 的 RoleGrant，不允许通过 `CurrentUser.is_platform_admin` 绕过授权接口。
+平台级授权使用固定 domain `__platform__`，由 `AuthorizationService.require_platform()` 返回 `AuthorizationDecision`。
+跨租户 SQL 和 repository 入口只接受这个 decision，不接受调用方传入的裸布尔值。
 
 当前实现提供 `AuthorizationService`：
 
 - `authorize()` 查询 `ProjectedPolicy`，返回 `AuthorizationDecision`，不抛异常。
 - `require()` 查询并在拒绝时抛 `PERMISSION_DENIED`。
+- `authorize_platform()` / `require_platform()` 使用 `__platform__` domain 查询 platform scope 投影。
 - 拒绝时如果传入 `AuditService`，会在同一个数据库 session 中写入 `authorization.denied` 审计。
 - 第一版 subject 固定为 `user:{user_id}`，tenant domain 固定为 `tenant_id`。
 - 业务 app 不直接查询 `ProjectedPolicy`；文件、任务、业务资源等入口应接入 `AuthorizationService`。

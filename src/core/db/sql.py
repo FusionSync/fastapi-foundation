@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.context import get_current_context
 from core.exceptions import AppError
+from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
 
 
 async def execute_tenant_scoped(
@@ -48,7 +49,7 @@ async def execute_cross_tenant(
     parameters: Mapping[str, Any] | None = None,
     *,
     reason: str,
-    platform_permission_granted: bool,
+    platform_decision: AuthorizationDecision,
 ) -> Any:
     if not reason.strip():
         raise AppError(
@@ -56,12 +57,7 @@ async def execute_cross_tenant(
             "Cross-tenant SQL requires an audit reason",
             status_code=403,
         )
-    if not platform_permission_granted:
-        raise AppError(
-            "PERMISSION_DENIED",
-            "Cross-tenant SQL requires platform permission",
-            status_code=403,
-        )
+    assert_platform_decision(platform_decision)
     return await session.execute(text(statement), dict(parameters or {}))
 
 

@@ -1,24 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
 from core.exceptions import AppError
+from core.permissions.decisions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.permissions.models import ProjectedPolicy
-
-
-@dataclass(frozen=True, slots=True)
-class AuthorizationDecision:
-    allowed: bool
-    tenant_id: str
-    user_id: str
-    resource: str
-    action: str
-    reason: str
-    policy_version: int | None = None
 
 
 class AuthorizationService:
@@ -115,6 +103,42 @@ class AuthorizationService:
                 "resource": resource,
                 "action": action,
             },
+        )
+
+    async def authorize_platform(
+        self,
+        *,
+        user_id: str,
+        resource: str,
+        action: str,
+        resource_id: str | None = None,
+        request_id: str | None = None,
+    ) -> AuthorizationDecision:
+        return await self.authorize(
+            user_id=user_id,
+            tenant_id=PLATFORM_TENANT_ID,
+            resource=resource,
+            action=action,
+            resource_id=resource_id,
+            request_id=request_id,
+        )
+
+    async def require_platform(
+        self,
+        *,
+        user_id: str,
+        resource: str,
+        action: str,
+        resource_id: str | None = None,
+        request_id: str | None = None,
+    ) -> AuthorizationDecision:
+        return await self.require(
+            user_id=user_id,
+            tenant_id=PLATFORM_TENANT_ID,
+            resource=resource,
+            action=action,
+            resource_id=resource_id,
+            request_id=request_id,
         )
 
     async def _matching_policy(
