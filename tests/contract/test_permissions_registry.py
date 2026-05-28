@@ -4,6 +4,7 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -85,6 +86,21 @@ def test_permission_registry_collects_admin_permissions(
         ("ops", "admin:audit_logs", "read", "platform"),
         ("ops", "admin:search_index", "rebuild", "platform"),
     ]
+
+
+def test_permission_spec_rejects_invalid_fields() -> None:
+    with pytest.raises(ValueError, match="resource"):
+        PermissionSpec(resource="", action="read")
+    with pytest.raises(ValueError, match="action"):
+        PermissionSpec(resource="file", action=" ")
+    with pytest.raises(ValueError, match="scope"):
+        PermissionSpec(resource="file", action="read", scope="global")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="risk_level"):
+        PermissionSpec(
+            resource="file",
+            action="read",
+            risk_level="dangerous",  # type: ignore[arg-type]
+        )
 
 
 def test_permissions_catalog_cli_outputs_stable_json(capsys) -> None:

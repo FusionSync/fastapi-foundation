@@ -36,6 +36,12 @@ scope = tenant
 risk_level = normal
 ```
 
+运行时约束：
+
+- `resource` 和 `action` 必须非空，且不能包含首尾空白。
+- `scope` 只能是 `tenant`、`own`、`resource`、`platform`。
+- `risk_level` 只能是 `low`、`normal`、`high`、`critical`。
+
 ## Scope
 
 第一版支持：
