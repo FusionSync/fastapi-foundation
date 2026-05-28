@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security 和 system routes。
+- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes 和 `serve --run` 启动计划。
 - Next:
-  - [ ] 按 server/worker/scheduler/outbox-dispatcher/migrate 拆分启动 profile。
+  - [ ] 将 server/worker/scheduler/outbox-dispatcher/migrate 启动参数沉淀为 profile 模板。
   - [ ] 为 app lifecycle startup/shutdown hook 定义注册和失败策略。
 
 ## 职责
@@ -68,6 +68,8 @@ app = create_app(
 ```python
 app = create_app(settings, request_security_pipeline=pipeline)
 ```
+
+`core serve --run --dry-run` 会走同一个 `create_app()` 装配路径，输出启动计划、route_count 和 server `ProcessHealth`；去掉 `--dry-run` 后由 CLI 使用同一配置启动 Uvicorn。
 
 ## 稳定性要求
 

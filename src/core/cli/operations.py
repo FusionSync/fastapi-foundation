@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from core.app import create_app
 from core.apps import AppRegistry
 from core.cli.common import installed_apps, print_payload
 from core.config import get_settings
@@ -54,6 +55,15 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
     for role in ("serve", "worker", "scheduler", "outbox-dispatcher"):
         role_parser = subparsers.add_parser(role)
         role_parser.add_argument("--json", action="store_true", dest="as_json")
+        if role == "serve":
+            role_parser.add_argument("--run", action="store_true")
+            role_parser.add_argument("--host", default="0.0.0.0")
+            role_parser.add_argument("--port", type=int, default=8000)
+            role_parser.add_argument("--reload", action="store_true")
+            role_parser.add_argument("--workers", type=int, default=1)
+            role_parser.add_argument("--installed-app", action="append", default=[])
+            role_parser.add_argument("--database-url")
+            role_parser.add_argument("--dry-run", action="store_true")
         if role == "worker":
             role_parser.add_argument("--run", action="store_true")
             role_parser.add_argument("--run-once", action="store_true")
@@ -117,6 +127,8 @@ def _handle_backup_check(args: argparse.Namespace) -> int:
 
 def _handle_process_role(args: argparse.Namespace) -> int:
     role = "server" if args.role == "serve" else args.role
+    if role == "server" and args.run:
+        return _handle_serve_run(args)
     if role == "worker" and args.run_once:
         return _handle_worker_run_once(args)
     if role == "worker" and args.run:
@@ -134,6 +146,56 @@ def _handle_process_role(args: argparse.Namespace) -> int:
     }
     print_payload(payload, as_json=args.as_json)
     return 0 if result.ok else 1
+
+
+def _handle_serve_run(args: argparse.Namespace) -> int:
+    settings = _runtime_settings(
+        installed_app_paths=installed_apps(args.installed_app),
+        database_url=args.database_url,
+    )
+    try:
+        app = create_app(settings)
+    except Exception as exc:
+        print_payload(
+            {
+                "ok": False,
+                "command": args.role,
+                "role": "server",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+            as_json=args.as_json,
+        )
+        return 1
+
+    health = check_process_health("server", settings=settings)
+    payload = {
+        "ok": health.ok,
+        "command": args.role,
+        "role": "server",
+        "mode": "dry-run" if args.dry_run else "serve",
+        "host": args.host,
+        "port": args.port,
+        "reload": args.reload,
+        "workers": args.workers,
+        "installed_apps": settings.installed_apps,
+        "checks": health.checks,
+        "details": {
+            **health.details,
+            "route_count": len(app.routes),
+            "app_name": settings.app.name,
+            "app_version": settings.app.version,
+        },
+    }
+    if args.dry_run:
+        print_payload(payload, as_json=args.as_json)
+        asyncio.run(app.state.database_engine.dispose())
+        return 0 if health.ok else 1
+
+    import uvicorn
+
+    print_payload(payload, as_json=args.as_json)
+    uvicorn.run(app, host=args.host, port=args.port, reload=args.reload, workers=args.workers)
+    return 0
 
 
 def _handle_worker_run_once(args: argparse.Namespace) -> int:
@@ -415,6 +477,14 @@ async def _run_scheduler_once(
 
 def _database_url(value: str | None) -> str:
     return value or get_settings().database.url
+
+
+def _runtime_settings(*, installed_app_paths: list[str], database_url: str | None):
+    settings = get_settings()
+    updates: dict[str, object] = {"installed_apps": installed_app_paths}
+    if database_url is not None:
+        updates["database"] = settings.database.model_copy(update={"url": database_url})
+    return settings.model_copy(update=updates)
 
 
 def _parse_datetime(value: str | None) -> datetime | None:

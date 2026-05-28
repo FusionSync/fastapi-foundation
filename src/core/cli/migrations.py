@@ -43,6 +43,19 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
     apply_parser.add_argument("--lock-ttl-seconds", type=int, default=300)
     apply_parser.set_defaults(handler=_handle_migrate)
 
+    run_parser = migrate_subparsers.add_parser("run")
+    run_parser.add_argument("--installed-app", action="append", default=[])
+    run_parser.add_argument("--json", action="store_true", dest="as_json")
+    run_parser.add_argument("--backup-ready", action="store_true")
+    run_parser.add_argument("--apply", action="store_true")
+    run_parser.add_argument("--yes", action="store_true")
+    run_parser.add_argument("--alembic-config")
+    run_parser.add_argument("--database-url")
+    run_parser.add_argument("--script-location")
+    run_parser.add_argument("--lock-owner")
+    run_parser.add_argument("--lock-ttl-seconds", type=int, default=300)
+    run_parser.set_defaults(handler=_handle_migrate_run)
+
     drift_parser = migrate_subparsers.add_parser("drift-check")
     drift_parser.add_argument("--expected", action="append", default=[])
     drift_parser.add_argument("--actual", action="append", default=[])
@@ -98,6 +111,64 @@ def _handle_migrate(args: argparse.Namespace) -> int:
     else:
         payload = _apply_migrations(args, migration_registry)
 
+    print_payload(payload, as_json=args.as_json)
+    return 0 if bool(payload.get("ok")) else 1
+
+
+def _handle_migrate_run(args: argparse.Namespace) -> int:
+    try:
+        app_registry = AppRegistry(installed_apps(args.installed_app)).load()
+        migration_registry = MigrationRegistry.from_app_registry(app_registry)
+    except Exception as exc:
+        print_payload(
+            {
+                "ok": False,
+                "command": "migrate",
+                "role": "migrate",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+            as_json=args.as_json,
+        )
+        return 1
+
+    plan = plan_migrations(migration_registry.manifests, app_registry=app_registry)
+    plan_payload = {
+        **plan.to_dict(),
+        "ok": not migration_registry.errors and plan.ok,
+        "registry_errors": migration_registry.errors,
+    }
+    preflight = run_preflight(
+        migration_registry.manifests,
+        backup_ready=args.backup_ready,
+    )
+    preflight_payload = {
+        **preflight.to_dict(),
+        "ok": not migration_registry.errors and preflight.ok,
+        "registry_errors": migration_registry.errors,
+    }
+    if args.apply:
+        final_stage = "apply"
+        final_payload = _apply_migrations(args, migration_registry)
+    else:
+        final_stage = "dry-run"
+        dry_run_result = dry_run_migration_metadata(preflight)
+        final_payload = {
+            **dry_run_result.to_dict(),
+            "ok": not migration_registry.errors and dry_run_result.ok,
+            "registry_errors": migration_registry.errors,
+        }
+    stages = [
+        {"name": "plan", "ok": bool(plan_payload.get("ok")), "result": plan_payload},
+        {"name": "preflight", "ok": bool(preflight_payload.get("ok")), "result": preflight_payload},
+        {"name": final_stage, "ok": bool(final_payload.get("ok")), "result": final_payload},
+    ]
+    payload = {
+        "ok": all(stage["ok"] for stage in stages),
+        "command": "migrate",
+        "role": "migrate",
+        "mode": "apply" if args.apply else "dry-run",
+        "stages": stages,
+    }
     print_payload(payload, as_json=args.as_json)
     return 0 if bool(payload.get("ok")) else 1
 

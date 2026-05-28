@@ -46,6 +46,62 @@ def test_process_role_commands_return_health_json(capsys) -> None:
         assert payload["checks"]["database_configured"] is True
 
 
+def test_serve_role_can_emit_startup_plan(capsys) -> None:
+    exit_code = main(
+        [
+            "serve",
+            "--run",
+            "--dry-run",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9080",
+            "--installed-app",
+            "apps.example_domain.module",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "serve"
+    assert payload["role"] == "server"
+    assert payload["mode"] == "dry-run"
+    assert payload["host"] == "127.0.0.1"
+    assert payload["port"] == 9080
+    assert payload["installed_apps"] == ["apps.example_domain.module"]
+    assert payload["checks"]["http_routes_configured"] is True
+    assert payload["details"]["route_count"] > 0
+
+
+def test_migrate_role_can_emit_pipeline_run_plan(capsys) -> None:
+    exit_code = main(
+        [
+            "migrate",
+            "run",
+            "--installed-app",
+            "apps.example_domain.module",
+            "--backup-ready",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "migrate"
+    assert payload["role"] == "migrate"
+    assert payload["mode"] == "dry-run"
+    assert [stage["name"] for stage in payload["stages"]] == [
+        "plan",
+        "preflight",
+        "dry-run",
+    ]
+    assert payload["stages"][0]["result"]["ok"] is True
+    assert payload["stages"][2]["result"]["mode"] == "metadata-dry-run"
+
+
 def test_outbox_dispatcher_role_can_run_one_iteration(tmp_path: Path, monkeypatch, capsys) -> None:
     delivered: list[str] = []
     _install_outbox_app(monkeypatch, delivered)
