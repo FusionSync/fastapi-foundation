@@ -1,13 +1,35 @@
 import sys
 import types
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.apps import AppModule, AppRegistry, ScheduleSpec, TaskHandlerSpec
+from core.base.models import BaseModel
+from core.db import unit_of_work
 from core.exceptions import AppError
-from core.scheduler import ManualScheduleProvider, ScheduleRegistry, ScheduleTriggerRequest
-from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry
+from core.scheduler import (
+    ManualScheduleProvider,
+    ScheduleRegistry,
+    ScheduleTriggerLog,
+    ScheduleTriggerRepository,
+    ScheduleTriggerRequest,
+)
+from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskRunRepository
+
+
+@pytest.fixture
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    try:
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -129,6 +151,93 @@ async def test_manual_schedule_provider_triggers_registered_task(
         "value": "ok",
     }
     assert result.task_result.metadata == {"provider": "sync", "queue": "maintenance"}
+
+
+@pytest.mark.asyncio
+async def test_manual_schedule_provider_records_trigger_history_and_replays_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    calls: list[str] = []
+
+    async def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        calls.append(envelope.task_id)
+        return {"task_id": envelope.task_id}
+
+    _install_handler_module(monkeypatch, refresh=refresh)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+                queue="maintenance",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1"},
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    planned_at = datetime(2026, 5, 28, 1, 0, tzinfo=UTC)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        first = await ManualScheduleProvider(
+            schedule_registry=schedule_registry,
+            task_provider=SyncTaskProvider(
+                task_registry,
+                task_repository=TaskRunRepository(uow.session),
+            ),
+            trigger_repository=ScheduleTriggerRepository(uow.session),
+        ).trigger(
+            ScheduleTriggerRequest(
+                schedule_id="example.refresh.daily",
+                tenant_id="tenant-a",
+                payload={"value": "ok"},
+                request_id="req-1",
+                planned_at=planned_at,
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        replayed = await ManualScheduleProvider(
+            schedule_registry=schedule_registry,
+            task_provider=SyncTaskProvider(
+                task_registry,
+                task_repository=TaskRunRepository(uow.session),
+            ),
+            trigger_repository=ScheduleTriggerRepository(uow.session),
+        ).trigger(
+            ScheduleTriggerRequest(
+                schedule_id="example.refresh.daily",
+                tenant_id="tenant-a",
+                payload={"value": "ok"},
+                request_id="req-2",
+                planned_at=planned_at,
+            )
+        )
+
+    logs = await _trigger_logs(session_factory)
+    assert calls == [first.task_id]
+    assert replayed.task_id == first.task_id
+    assert replayed.metadata["trigger_history"] == "replayed"
+    assert replayed.task_result.metadata["idempotency"] == "replayed"
+    assert [(log.schedule_id, log.tenant_id, log.task_id, log.status) for log in logs] == [
+        ("example.refresh.daily", "tenant-a", first.task_id, "succeeded")
+    ]
 
 
 @pytest.mark.asyncio
@@ -293,3 +402,14 @@ def _install_app(
         schedules=schedules or [],
     )
     monkeypatch.setitem(sys.modules, "fake_task_app", app)
+
+
+async def _trigger_logs(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> list[ScheduleTriggerLog]:
+    async with session_factory() as session:
+        result = await session.execute(select(ScheduleTriggerLog))
+        logs = list(result.scalars().all())
+        for log in logs:
+            session.expunge(log)
+        return logs

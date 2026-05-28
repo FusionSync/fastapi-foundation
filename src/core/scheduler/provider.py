@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from core.scheduler.registry import ScheduleRegistry
+from core.scheduler.repository import ScheduleTriggerRepository
 from core.tasks import TaskEnvelope, TaskResult
 from core.tenancy import TenantStatus
 
@@ -61,9 +62,11 @@ class ManualScheduleProvider:
         *,
         schedule_registry: ScheduleRegistry,
         task_provider: TaskSubmitter,
+        trigger_repository: ScheduleTriggerRepository | None = None,
     ) -> None:
         self.schedule_registry = schedule_registry
         self.task_provider = task_provider
+        self.trigger_repository = trigger_repository
 
     async def trigger(
         self,
@@ -91,6 +94,26 @@ class ManualScheduleProvider:
             ),
             tenant_status=tenant_status,
         )
+        metadata: dict[str, object] = {
+            "provider": "manual",
+            "trigger": registered.spec.trigger,
+            "misfire_policy": registered.spec.misfire_policy,
+        }
+        if self.trigger_repository is not None:
+            history = await self.trigger_repository.record_result(
+                schedule_id=request.schedule_id,
+                tenant_id=request.tenant_id,
+                task_id=task_id,
+                task_type=registered.spec.task_type,
+                planned_at=planned_at,
+                triggered_at=triggered_at,
+                request_id=request.request_id,
+                status=task_result.status,
+                error_message=task_result.error_message,
+                details={"task_ok": task_result.ok},
+            )
+            metadata["trigger_history"] = history.outcome
+            metadata["trigger_log_id"] = history.log.id
         return ScheduleTriggerResult(
             schedule_id=request.schedule_id,
             task_id=task_id,
@@ -98,11 +121,7 @@ class ManualScheduleProvider:
             planned_at=planned_at,
             triggered_at=triggered_at,
             task_result=task_result,
-            metadata={
-                "provider": "manual",
-                "trigger": registered.spec.trigger,
-                "misfire_policy": registered.spec.misfire_policy,
-            },
+            metadata=metadata,
         )
 
 
