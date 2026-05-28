@@ -155,6 +155,7 @@ class SyncTaskProvider:
                     task_type=envelope.task_type,
                     tenant_id=envelope.tenant_id,
                     request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
                 )
             ):
                 result = handler(envelope)

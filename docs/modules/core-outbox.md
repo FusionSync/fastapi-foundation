@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验和 handler 幂等执行保护已落地。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff 和 handler 幂等执行保护已落地。
 - Next:
   - [ ] 接跨进程锁和 handler schema/version 校验。
   - [ ] 补充 handler 外部 side-effect 幂等指南。
@@ -145,7 +145,7 @@ await service.run_in_transaction(
 要求：
 
 - outbox 写入必须与业务数据使用同一个事务连接。
-- event payload 必须包含 `tenant_id`、`actor_id`、`request_id`。
+- event payload 必须包含 `tenant_id`、`actor_id`、`request_id`；存在 `trace_id` 时 dispatcher 必须透传给 handler 背景上下文。
 - event_type 和 event_version 必须注册。
 - handler 必须以 `event_id` 做幂等；复杂业务可以额外使用业务唯一键。
 - 不要求第一版支持复杂事件溯源、全局顺序或跨服务 exactly-once。

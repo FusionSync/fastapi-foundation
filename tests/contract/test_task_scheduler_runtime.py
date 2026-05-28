@@ -220,6 +220,7 @@ async def test_manual_schedule_provider_sets_background_context_for_submit_and_r
                 schedule_id="example.refresh.daily",
                 tenant_id="tenant-a",
                 request_id="req-schedule",
+                trace_id="trace-schedule",
                 planned_at=datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
             )
         )
@@ -232,6 +233,7 @@ async def test_manual_schedule_provider_sets_background_context_for_submit_and_r
     context = seen_contexts[0]
     assert context is not None
     assert context.request_id == "req-schedule"
+    assert context.trace_id == "trace-schedule"
     assert context.tenant_id == "tenant-a"
     assert context.route == "scheduler:example.refresh.daily"
     assert context.method == "SCHEDULER"

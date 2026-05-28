@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、错误码和 message catalog metadata/app 注册检查、repository 继承检查、route permission conformance 与权限拒绝审计、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、security hardening checklist、rate-limit middleware、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、错误码和 message catalog metadata/app 注册检查、repository 继承检查、route permission conformance 与权限拒绝审计、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、security hardening checklist、rate-limit middleware、observability request logging、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler trace handoff、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
 
@@ -50,6 +50,7 @@ src/core/testing/
 - Release checkpoint contract test 必须覆盖 profile 参数矩阵、部署产物、按角色 drift gate、backup readiness、migrate dry-run 和 smoke 聚合输出。
 - App runtime contract test 必须覆盖 lifecycle startup/shutdown 执行顺序、handler 签名 conformance 和 startup 失败策略。
 - App runtime readiness contract test 必须覆盖 runtime registry counts、provider readiness 合并和 provider 失败时的统一 startup diagnostics。
+- Observability contract test 必须覆盖请求结构化日志字段；task/outbox/scheduler integration test 必须覆盖非 HTTP 背景上下文的 `trace_id` handoff。
 - App conformance contract test 必须覆盖 `FileResponse`/`StreamingResponse` 例外，以及 `JSONResponse` 不能绕过 typed envelope 的拒绝路径。
 - App conformance contract test 必须覆盖 admin metadata dotted path 诊断和 migration manifest metadata 诊断，错误消息要能定位 app、metadata 类型、id/path 和具体字段。
 - App conformance contract test 必须覆盖业务错误码 metadata、owner/app label 一致性、跨 app 重复声明和 runtime 注册。

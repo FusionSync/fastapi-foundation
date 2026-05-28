@@ -16,6 +16,9 @@ class AuditLogRead(BaseSchema):
     reason: str | None = None
     policy_version: int | None = None
     request_id: str | None = None
+    trace_id: str | None = None
+    route: str | None = None
+    method: str | None = None
     payload: dict[str, Any]
     hash_prev: str | None = None
     hash: str

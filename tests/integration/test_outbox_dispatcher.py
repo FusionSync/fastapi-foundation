@@ -100,6 +100,7 @@ async def test_dispatcher_sets_background_context_for_handler_and_resets(
     context = seen_contexts[0]
     assert context is not None
     assert context.request_id == "req_test"
+    assert context.trace_id == "trace_test"
     assert context.user_id == "user-1"
     assert context.tenant_id == "tenant-a"
     assert context.route == "outbox:business.created:v1"
@@ -477,6 +478,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "tenant_id": "tenant-a",
         "actor_id": "user-1",
         "request_id": "req_test",
+        "trace_id": "trace_test",
         **overrides,
     }
 

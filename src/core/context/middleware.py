@@ -15,7 +15,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID") or f"req_{uuid4().hex}"
         context = RequestContext(
             request_id=request_id,
-            trace_id=request.headers.get("traceparent"),
+            trace_id=request.headers.get("X-Trace-ID") or request.headers.get("traceparent"),
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
             route=request.url.path,

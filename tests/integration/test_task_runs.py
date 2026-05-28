@@ -100,6 +100,7 @@ async def test_sync_task_provider_sets_background_context_for_handler_and_resets
                     payload={},
                     idempotency_key="example.refresh:tenant-a:context",
                     request_id="req-task",
+                    trace_id="trace-task",
                 )
             )
 
@@ -111,6 +112,7 @@ async def test_sync_task_provider_sets_background_context_for_handler_and_resets
     context = seen_contexts[0]
     assert context is not None
     assert context.request_id == "req-task"
+    assert context.trace_id == "trace-task"
     assert context.tenant_id == "tenant-a"
     assert context.route == "task:example.refresh"
     assert context.method == "TASK"

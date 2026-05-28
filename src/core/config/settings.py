@@ -36,6 +36,7 @@ class DatabaseSettings(BaseModel):
 
 class ObservabilitySettings(BaseModel):
     service_role: str = "server"
+    instance_id: str | None = None
     metrics_enabled: bool = True
 
 

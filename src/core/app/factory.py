@@ -19,7 +19,12 @@ from core.db import DatabaseRuntime, create_database_runtime
 from core.events import EventRegistry
 from core.exceptions import register_exception_handlers
 from core.migrations import MigrationRegistry
-from core.observability import HttpMetricsMiddleware, MetricsRegistry, render_metrics_contract
+from core.observability import (
+    HttpMetricsMiddleware,
+    HttpRequestLoggingMiddleware,
+    MetricsRegistry,
+    render_metrics_contract,
+)
 from core.operations import DatabaseReadinessProbe, check_app_readiness
 from core.permissions import PermissionRegistry
 from core.rate_limit import RateLimitMiddleware
@@ -59,8 +64,9 @@ def create_app(
     app.state.readiness_database_probe = DatabaseReadinessProbe(resolved_settings.database.url)
 
     _register_security_middleware(app, resolved_settings)
-    app.add_middleware(RequestContextMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(HttpRequestLoggingMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.add_middleware(HttpMetricsMiddleware)
     register_exception_handlers(app)
     _register_system_routes(app, resolved_settings)

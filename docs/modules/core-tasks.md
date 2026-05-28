@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler 本地提交链路、worker 本地执行 loop 和 worker heartbeat 已落地。
+- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler 本地提交链路、worker 本地执行 loop、task trace_id handoff 和 worker heartbeat 已落地。
 - Next:
   - [ ] 接 RQ/Celery 或等价队列 provider。
   - [ ] 串通队列 ack/retry/backoff 和部署 profile 参数。
@@ -79,7 +79,7 @@ finished_at
 - 任务必须声明幂等键或业务唯一键，避免 API 重试重复提交。
 - 同一 tenant 下同一 `idempotency_key` 只能创建一个 `TaskRun`；重复提交相同 task_type 和 payload 时返回已有 TaskRun 的结果，不再次执行 handler；同 key 但 task_type/payload 不一致时返回 `TASK_IDEMPOTENCY_KEY_CONFLICT`。
 - 任务输出必须落库或落文件。
-- 任务日志关联 request_id、tenant_id 和 task_id。
+- 任务日志关联 request_id、trace_id、tenant_id 和 task_id。
 - worker 执行前必须检查 tenant lifecycle gate；`suspended/deleting` 租户按行为矩阵拒绝或跳过任务。
 - 任务失败先进入 `failed`，重试达到 `max_attempts` 后进入 `dead_letter`，并提供 CLI 重试。
 - worker 崩溃留下的长期 `running` 任务必须有恢复入口；恢复时未达重试上限的任务进入 `failed`，已达上限的任务进入 `dead_letter`。
@@ -95,8 +95,8 @@ finished_at
 - task_type 全局唯一，重复注册启动前失败。
 - `SyncTaskProvider` 用于 local/profile 和单机版，可同步执行普通函数或 async handler。
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。
-- task handler 执行期间会从 `TaskEnvelope` 注入冻结背景上下文，避免继承外层 HTTP/CLI ContextVar。
-- `TaskRun` 定义统一任务运行记录，保存 input、result、error、queue、request_id、attempt_count、started_at、finished_at。
+- task handler 执行期间会从 `TaskEnvelope` 注入冻结背景上下文，透传 `request_id`、`trace_id` 和 `tenant_id`，避免继承外层 HTTP/CLI ContextVar。
+- `TaskRun` 定义统一任务运行记录，保存 input、result、error、queue、request_id、trace_id、attempt_count、started_at、finished_at。
 - `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed/dead_letter` 状态，不注入时保持原有纯运行时模式。
 - `TaskRunRepository.start_once()` 使用 insert-first + 唯一约束处理 task idempotency；`SyncTaskProvider.submit()` 遇到 duplicate 时返回已有运行记录，不重新执行 handler。
 - `SyncTaskProvider.retry()` 可基于已落库 `TaskRun` 重新执行同一个 `TaskEnvelope`，并复用 tenant lifecycle gate。

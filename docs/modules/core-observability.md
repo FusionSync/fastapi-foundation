@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: metrics middleware、低基数字段、外部 HTTP client 指标和 trace header 传播、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
+- Done: metrics middleware、低基数字段、请求结构化日志、外部 HTTP client 指标和 trace header 传播、task/outbox/scheduler 非 HTTP trace propagation、audit/security 关键 context 字段、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
 - Next:
-  - [ ] 接请求结构化日志、非 HTTP 链路 trace propagation 和 audit/security 关键字段。
   - [ ] 输出 private/cloud 部署 profile 的监控面板和告警契约。
 
 ## 职责
@@ -104,6 +103,7 @@ Core HTTP client 可注入 `MetricsRegistry`，记录 `external_http_requests_to
 - 日志必须结构化。
 - 敏感字段必须脱敏。
 - 每个请求必须有 request_id。
+- 请求完成后 `core.observability.requests` logger 会输出 `http_request` 结构化字段，包含 `request_id`、`trace_id`、`tenant_id`、`user_id`、`route`、`method`、`status_code`、`status_class`、`app_code`、`duration_ms`、`deployment_mode`、`service_role`、`instance_id`、`version`、`ip_address` 和 `user_agent`；不要把请求体、Authorization、Cookie 或 URL query 原样写入日志。
 - 私有化部署也要能本地查看日志和健康状态。
 - 指标必须带有限标签，避免 tenant_id、user_id 等高基数字段进入 Prometheus labels。
-- trace 必须跨 HTTP、task、outbox handler 传播 `trace_id`。
+- trace 必须跨 HTTP、task、outbox handler 和 scheduler trigger 传播 `trace_id`。

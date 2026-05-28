@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: audit model、AuditService、result/reason/session/policy fields、hash chain、进程内链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
+- Done: audit model、AuditService、result/reason/session/policy fields、request/trace/route/method 默认 context 字段、hash chain、进程内链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
 - Next:
   - [ ] 接 WORM/SIEM export。
   - [ ] 为 private/cloud 多 worker 部署补分布式 hash chain 串行化。
@@ -30,6 +30,9 @@ AuditLog
   reason
   policy_version
   request_id
+  trace_id
+  route
+  method
   ip_address
   user_agent
   payload
@@ -65,7 +68,7 @@ AuditLog
 - `platform_apps.audit.models.AuditLog` 定义 append-oriented 审计表。
 - `platform_apps.audit.services.AuditService.record()` 绑定调用方传入的 `AsyncSession`，不自行打开连接或提交事务。
 - route/service 可通过同一个 unit-of-work 同时写业务数据和安全关键审计；业务事务 rollback 时审计同步 rollback。
-- `AuditService` 会从 `RequestContext` 补齐 `tenant_id`、`actor_id`、`request_id`、`ip_address`、`user_agent`。
+- `AuditService` 会从 `RequestContext` 补齐 `tenant_id`、`actor_id`、`request_id`、`trace_id`、`route`、`method`、`ip_address`、`user_agent`。
 - 入库前通过 `core.security.redact_sensitive_data()` 脱敏 password、token、secret、authorization 等字段。
 - 每条记录写入 `hash_prev` 和 `hash`，hash chain 按 `tenant_id` 分区；平台级 `tenant_id=None` 记录使用独立链路，避免租户级导出或校验引用其他租户记录。
 - `AuditService.record()` 对同一进程内的同一 tenant/platform 链路加锁，并持有到当前 SQLAlchemy session 外层事务结束，防止应用内并发写入形成 hash chain 分叉。

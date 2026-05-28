@@ -44,10 +44,12 @@ def task_background_context(
     task_type: str,
     tenant_id: str,
     request_id: str,
+    trace_id: str | None = None,
 ) -> BackgroundContext:
     return BackgroundContext(
         request_id=request_id or f"task:{task_id}",
         tenant_id=tenant_id,
+        trace_id=trace_id,
         route=f"task:{task_type}",
         method="TASK",
     )
@@ -58,10 +60,12 @@ def scheduler_background_context(
     schedule_id: str,
     tenant_id: str,
     request_id: str,
+    trace_id: str | None = None,
 ) -> BackgroundContext:
     return BackgroundContext(
         request_id=request_id or f"scheduler:{schedule_id}",
         tenant_id=tenant_id,
+        trace_id=trace_id,
         route=f"scheduler:{schedule_id}",
         method="SCHEDULER",
     )
@@ -79,6 +83,7 @@ def outbox_background_context(
         request_id=str(payload.get("request_id") or f"outbox:{event_id}"),
         tenant_id=tenant_id,
         user_id=_optional_str(payload.get("actor_id")),
+        trace_id=_optional_str(payload.get("trace_id")),
         route=f"outbox:{event_type}:v{event_version}",
         method="OUTBOX",
     )

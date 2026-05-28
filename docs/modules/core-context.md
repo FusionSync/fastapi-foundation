@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播、try/finally reset，以及 task/outbox/scheduler 背景上下文 handoff 已落地。
-- Next:
-  - [ ] 将 context 字段接入结构化日志和审计默认字段。
+- Done: 冻结 `RequestContext`、ContextVar 注入、request id/trace id 传播、try/finally reset、task/outbox/scheduler 背景上下文 handoff，以及 context 字段接入请求结构化日志和审计默认字段已落地。
+- Next: _none_
 
 ## 职责
 
@@ -57,9 +56,11 @@ started_at
 - RequestContext 在认证、租户解析和授权完成后必须冻结，业务 service 不允许修改 `user_id`、`tenant_id`、`request_id`。
 - middleware 必须使用 `try/finally` reset ContextVar token，避免请求间上下文污染。
 - 后台任务必须显式注入 `BackgroundContext`，不能隐式继承上一个 HTTP 请求上下文。
-- task handler 执行时由 `TaskEnvelope` 构造冻结背景上下文，route 为 `task:{task_type}`，method 为 `TASK`，执行后必须 reset。
-- outbox handler 执行时由 `EventEnvelope` 和 payload 中的 `request_id/actor_id/tenant_id` 构造冻结背景上下文，route 为 `outbox:{event_type}:v{event_version}`，method 为 `OUTBOX`，执行后必须 reset。
-- scheduler trigger 执行时由 `ScheduleTriggerRequest` 构造冻结背景上下文，route 为 `scheduler:{schedule_id}`，method 为 `SCHEDULER`，执行后必须 reset。
+- task handler 执行时由 `TaskEnvelope` 构造冻结背景上下文，透传 `request_id/trace_id/tenant_id`，route 为 `task:{task_type}`，method 为 `TASK`，执行后必须 reset。
+- outbox handler 执行时由 `EventEnvelope` 和 payload 中的 `request_id/trace_id/actor_id/tenant_id` 构造冻结背景上下文，route 为 `outbox:{event_type}:v{event_version}`，method 为 `OUTBOX`，执行后必须 reset。
+- scheduler trigger 执行时由 `ScheduleTriggerRequest` 构造冻结背景上下文，透传 `request_id/trace_id/tenant_id`，route 为 `scheduler:{schedule_id}`，method 为 `SCHEDULER`，执行后必须 reset。
+- HTTP 请求完成时会通过 `core.observability.requests` 输出结构化 `http_request` 日志，字段来自当前 `RequestContext`、settings 和响应状态。
+- `AuditService.record()` 会从当前 `RequestContext` 默认补齐 tenant、actor、request、trace、route、method、IP 和 user agent 字段。
 
 ## 风险
 

@@ -16,6 +16,7 @@ class TaskEnvelope:
     payload: dict[str, Any]
     idempotency_key: str
     request_id: str
+    trace_id: str | None = None
 
 
 TaskHandler = Callable[[TaskEnvelope], Awaitable[dict[str, Any] | None] | dict[str, Any] | None]

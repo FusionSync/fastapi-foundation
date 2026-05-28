@@ -36,6 +36,7 @@ class ScheduleTriggerRequest:
     schedule_id: str
     tenant_id: str
     request_id: str
+    trace_id: str | None = None
     planned_at: datetime | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
@@ -91,6 +92,7 @@ class ManualScheduleProvider:
                 schedule_id=request.schedule_id,
                 tenant_id=request.tenant_id,
                 request_id=request.request_id,
+                trace_id=request.trace_id,
             )
         ):
             registered = self.schedule_registry.get(request.schedule_id)
@@ -109,6 +111,7 @@ class ManualScheduleProvider:
                     payload=dict(request.payload),
                     idempotency_key=idempotency_key,
                     request_id=request.request_id,
+                    trace_id=request.trace_id,
                 ),
                 tenant_status=tenant_status,
             )

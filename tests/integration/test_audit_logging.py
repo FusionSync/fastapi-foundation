@@ -30,10 +30,13 @@ async def test_audit_record_uses_context_redacts_payload_and_sets_hash_chain(
     token = set_current_context(
         RequestContext(
             request_id="req-1",
+            trace_id="trace-1",
             user_id="user-1",
             tenant_id="tenant-a",
             ip_address="127.0.0.1",
             user_agent="pytest",
+            route="/api/v1/workspaces/{workspace_id}",
+            method="POST",
         ).freeze()
     )
     try:
@@ -69,6 +72,9 @@ async def test_audit_record_uses_context_redacts_payload_and_sets_hash_chain(
     assert audit_logs[0].tenant_id == "tenant-a"
     assert audit_logs[0].actor_id == "user-1"
     assert audit_logs[0].request_id == "req-1"
+    assert audit_logs[0].trace_id == "trace-1"
+    assert audit_logs[0].route == "/api/v1/workspaces/{workspace_id}"
+    assert audit_logs[0].method == "POST"
     assert audit_logs[0].ip_address == "127.0.0.1"
     assert audit_logs[0].user_agent == "pytest"
     assert audit_logs[0].payload["password"] == "***REDACTED***"

@@ -63,6 +63,7 @@ class TaskRunRepository:
             attempt_count=1,
             max_attempts=max_attempts,
             request_id=envelope.request_id,
+            trace_id=envelope.trace_id,
             started_at=resolved_now,
         )
         try:
@@ -243,6 +244,7 @@ class TaskRunRepository:
             payload=task_run.input_payload,
             idempotency_key=task_run.idempotency_key,
             request_id=task_run.request_id or "",
+            trace_id=task_run.trace_id,
         )
 
     def _assert_same_idempotent_request(
