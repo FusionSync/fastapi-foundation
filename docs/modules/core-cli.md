@@ -28,6 +28,8 @@ create-superuser
 seed-permissions
 show-routes
 health-check
+outbox dead-letter list
+outbox dead-letter replay
 ```
 
 ## 设计要求

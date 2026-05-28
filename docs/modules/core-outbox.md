@@ -58,6 +58,7 @@ src/core/outbox/
   models.py
   repository.py
   dispatcher.py
+  replay.py
   handlers.py
   registry.py
 ```
@@ -156,6 +157,22 @@ dispatcher 需要：
 - dispatcher 崩溃后，`locked_until` 到期的 `publishing` 事件可重新领取。
 - 如果副作用已经执行但未标记 `published`，handler 必须通过 `event_id` 幂等表或业务唯一约束避免重复副作用。
 - 第一版不追求 exactly-once；目标是 at-least-once delivery + idempotent handler。
+
+## Dead Letter CLI
+
+已提供最小运维闭环：
+
+```bash
+core outbox dead-letter list --database-url sqlite+aiosqlite:///./data/local.db --json
+core outbox dead-letter replay --event-id <event_id> --database-url sqlite+aiosqlite:///./data/local.db --yes --json
+```
+
+行为：
+
+- `list` 输出 `dead_letter` 事件的稳定 JSON，包含 tenant、event type、aggregate、attempt、last_error 和 dead_letter_reason。
+- `replay` 必须显式传 `--yes`，避免误操作。
+- `replay` 只允许重放 `dead_letter` 事件，成功后把状态改回 `pending`，清理 `dead_letter_reason`、`last_error`、`next_retry_at` 和锁字段。
+- CLI 不直接执行 handler；重放后的事件仍由 outbox dispatcher 按正常领取规则处理。
 
 ## 与审计的关系
 
