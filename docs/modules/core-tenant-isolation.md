@@ -113,7 +113,7 @@ core testing 必须提供租户隔离契约测试：
 - Repository 未继承租户基类。
 - 跨租户方法未带审计 reason。
 
-当前 app conformance 已在启动期导入 `AppModule.models`，对 `TenantScopedModel` 执行 `check_tenant_scoped_model()`；发现 `tenant_id` 可空、未覆盖索引/约束，或业务 `UniqueConstraint` 未包含 `tenant_id` 时，app 装载失败。
+当前 app conformance 已在启动期导入 `AppModule.models`，对 `TenantScopedModel` 执行 `check_tenant_scoped_model()`；发现 `tenant_id` 可空、未覆盖索引/约束，或业务 `UniqueConstraint` 未包含 `tenant_id` 时，app 装载失败。conformance 还会扫描 app 包内 `repository.py` / `repositories.py`，拒绝指向 tenant-scoped model 但未继承 `TenantScopedRepository` 或 `CrossTenantRepository` 的 repository。
 
 ## 数据库级兜底
 

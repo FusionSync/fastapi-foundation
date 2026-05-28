@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、业务错误码 metadata、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
+- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、业务错误码 metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
 - Next: _none_
 
 ## 目标
@@ -190,4 +190,5 @@ apps.foo -> platform_apps.tenants.models
 - app contract check 必须拒绝缺失 metadata、owner 与 app label 不一致或跨 app 重复声明的业务错误码。
 - app contract check 必须拒绝不可导入的 admin metadata dotted path，以及 app_label 不匹配、类型错误、重复 key 或 `MigrationManifest.validate()` 不通过的 migration metadata。
 - app contract check 必须扫描 `AppModule.models` 中的 `TenantScopedModel` 约束，拒绝全局唯一键等会破坏租户隔离的数据模型。
+- app contract check 必须扫描 `repository.py` / `repositories.py`，拒绝指向 tenant-scoped model 但未继承 `TenantScopedRepository` 或 `CrossTenantRepository` 的 repository。
 - app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

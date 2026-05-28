@@ -15,6 +15,7 @@ from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
 from core.base import get_router_security_policy
 from core.base.models import TenantScopedModel
+from core.base.repositories import CrossTenantRepository, TenantScopedRepository
 from core.db.constraints import check_tenant_scoped_model
 from core.exceptions.codes import validate_error_code_spec
 from core.migrations.manifest import MigrationManifest
@@ -88,6 +89,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_background_handler_signatures(app_module, result)
     _check_lifecycle_hook_signatures(app_module, result)
     _check_model_constraints(app_module, result)
+    _check_repository_inheritance(module_path, result)
     _check_router_security(app_module, result)
     _check_router_response_envelopes(package_dir, result)
     _check_router_openapi_envelopes(app_module, result)
@@ -418,6 +420,42 @@ def _check_model_constraints(app_module: AppModule, result: AppCheckResult) -> N
                 )
 
 
+def _check_repository_inheritance(
+    module_path: str,
+    result: AppCheckResult,
+) -> None:
+    package_module_path = _package_module_path(module_path)
+    for repository_module_name in ("repository", "repositories"):
+        repository_module_path = f"{package_module_path}.{repository_module_name}"
+        if util.find_spec(repository_module_path) is None:
+            continue
+        try:
+            repository_module = importlib.import_module(repository_module_path)
+        except Exception as exc:
+            result.errors.append(
+                f"{repository_module_name}.py: repository import failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        for _, repository_class in inspect.getmembers(repository_module, inspect.isclass):
+            if repository_class.__module__ != repository_module.__name__:
+                continue
+            if not repository_class.__name__.endswith("Repository"):
+                continue
+            model = getattr(repository_class, "model", None)
+            if not isinstance(model, type):
+                continue
+            if model is TenantScopedModel or not issubclass(model, TenantScopedModel):
+                continue
+            if issubclass(repository_class, (TenantScopedRepository, CrossTenantRepository)):
+                continue
+            result.errors.append(
+                f"{repository_module_name}.py:{repository_class.__name__} must inherit "
+                "TenantScopedRepository or CrossTenantRepository for tenant-scoped model "
+                f"{model.__name__}"
+            )
+
+
 def _check_router_security(app_module: AppModule, result: AppCheckResult) -> None:
     for router in app_module.routers:
         policy = get_router_security_policy(router)
@@ -498,3 +536,7 @@ def _load_checked_app_module(result: AppCheckResult) -> AppModule | None:
         return validate_app_module(imported.module)
     except Exception:
         return None
+
+
+def _package_module_path(module_path: str) -> str:
+    return module_path.removesuffix(".module")

@@ -130,6 +130,49 @@ def test_check_app_accepts_declared_error_codes(isolated_apps: Path) -> None:
     assert result.errors == []
 
 
+def test_check_app_rejects_tenant_repository_without_scoped_base(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "unsafe_repository_domain",
+        tenant_model=True,
+        repository_body=(
+            "from core.base import BaseRepository\n"
+            "from apps.unsafe_repository_domain.models import ExampleRecord\n\n"
+            "class ExampleRepository(BaseRepository[ExampleRecord]):\n"
+            "    model = ExampleRecord\n"
+        ),
+    )
+
+    result = check_app("apps.unsafe_repository_domain.module")
+
+    assert result.ok is False
+    assert (
+        "repository.py:ExampleRepository must inherit TenantScopedRepository "
+        "or CrossTenantRepository for tenant-scoped model ExampleRecord"
+    ) in result.errors
+
+
+def test_check_app_accepts_tenant_scoped_repository_base(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "safe_repository_domain",
+        tenant_model=True,
+        repository_body=(
+            "from core.base import TenantScopedRepository\n"
+            "from apps.safe_repository_domain.models import ExampleRecord\n\n"
+            "class ExampleRepository(TenantScopedRepository[ExampleRecord]):\n"
+            "    model = ExampleRecord\n"
+        ),
+    )
+
+    result = check_app("apps.safe_repository_domain.module")
+
+    assert result.ok is True
+    assert result.errors == []
+
+
 def test_check_app_rejects_error_code_owner_mismatch(isolated_apps: Path) -> None:
     _write_app(
         isolated_apps,
@@ -286,6 +329,8 @@ def _write_app(
     event_handler_body: str | None = None,
     task_handler_body: str | None = None,
     error_codes: str | None = None,
+    tenant_model: bool = False,
+    repository_body: str | None = None,
 ) -> None:
     app_dir = root / "apps" / name
     migrations_dir = app_dir / "migrations"
@@ -297,8 +342,22 @@ def _write_app(
         app_dir / "schemas.py",
         "from core.base import BaseSchema\n\nclass ExampleSchema(BaseSchema):\n    name: str\n",
     )
-    _write(app_dir / "models.py", "class ExampleModel:\n    pass\n")
+    if tenant_model:
+        table_name = f"{name}_{root.name}_records".replace("-", "_")
+        _write(
+            app_dir / "models.py",
+            "from sqlalchemy import String\n"
+            "from sqlalchemy.orm import Mapped, mapped_column\n"
+            "from core.base.models import IdMixin, TenantScopedModel\n\n"
+            "class ExampleRecord(IdMixin, TenantScopedModel):\n"
+            f"    __tablename__ = {table_name!r}\n\n"
+            "    name: Mapped[str] = mapped_column(String(64), nullable=False)\n",
+        )
+    else:
+        _write(app_dir / "models.py", "class ExampleModel:\n    pass\n")
     _write(app_dir / "services.py", f"{service_import}\n\nclass ExampleService:\n    pass\n")
+    if repository_body is not None:
+        _write(app_dir / "repository.py", repository_body)
     _write(
         app_dir / "router.py",
         "from core.base import create_router\n\nrouter = create_router('/examples')\n",
