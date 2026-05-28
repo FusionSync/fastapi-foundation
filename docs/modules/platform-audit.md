@@ -58,7 +58,7 @@ AuditLog
 - route/service 可通过同一个 unit-of-work 同时写业务数据和安全关键审计；业务事务 rollback 时审计同步 rollback。
 - `AuditService` 会从 `RequestContext` 补齐 `tenant_id`、`actor_id`、`request_id`、`ip_address`、`user_agent`。
 - 入库前通过 `core.security.redact_sensitive_data()` 脱敏 password、token、secret、authorization 等字段。
-- 每条记录写入 `hash_prev` 和 `hash`，为生产 profile 的 hash chain/WORM/SIEM 适配预留证据链。
+- 每条记录写入 `hash_prev` 和 `hash`，hash chain 按 `tenant_id` 分区；平台级 `tenant_id=None` 记录使用独立链路，避免租户级导出或校验引用其他租户记录。
 - `core.permissions.AuthorizationService` 会在权限拒绝时写入 `authorization.denied` 审计。
 - `RoleGrantService` 可注入 `AuditService`，角色授予和撤销会写 `role.granted` / `role.revoked` 审计。
 - `AccountsService` 可注入 `AuditService`，禁用用户会写 `user.disabled` 审计。

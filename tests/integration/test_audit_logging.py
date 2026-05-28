@@ -101,6 +101,44 @@ async def test_security_critical_audit_rolls_back_with_business_transaction(
 
 
 @pytest.mark.asyncio
+async def test_audit_hash_chain_is_partitioned_by_tenant(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        tenant_a_first = await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant-a.first",
+            resource_type="tenant",
+            resource_id="tenant-a-first",
+            result="success",
+        )
+        tenant_b_first = await AuditService(uow.session).record(
+            tenant_id="tenant-b",
+            action="tenant-b.first",
+            resource_type="tenant",
+            resource_id="tenant-b-first",
+            result="success",
+        )
+        tenant_a_second = await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant-a.second",
+            resource_type="tenant",
+            resource_id="tenant-a-second",
+            result="success",
+        )
+
+    audit_logs = {log.resource_id: log for log in await _audit_logs(session_factory)}
+
+    assert audit_logs["tenant-a-first"].hash_prev is None
+    assert audit_logs["tenant-b-first"].hash_prev is None
+    assert audit_logs["tenant-a-second"].hash_prev == audit_logs["tenant-a-first"].hash
+    assert tenant_a_first.hash == audit_logs["tenant-a-first"].hash
+    assert tenant_b_first.hash == audit_logs["tenant-b-first"].hash
+    assert tenant_a_second.hash == audit_logs["tenant-a-second"].hash
+
+
+@pytest.mark.asyncio
 async def test_audit_record_rejects_invalid_required_fields(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

@@ -40,10 +40,11 @@ class AuditService:
     ) -> AuditLog:
         self._validate_required(action=action, resource_type=resource_type, result=result)
         context = get_current_context()
-        previous_hash = await self._latest_hash()
+        resolved_tenant_id = tenant_id or (context.tenant_id if context else None)
+        previous_hash = await self._latest_hash(resolved_tenant_id)
         redacted_payload = redact_sensitive_data(payload or {})
         audit_log = AuditLog(
-            tenant_id=tenant_id or (context.tenant_id if context else None),
+            tenant_id=resolved_tenant_id,
             actor_id=actor_id or (context.user_id if context else None),
             actor_type=actor_type,
             auth_provider=auth_provider,
@@ -66,9 +67,14 @@ class AuditService:
         await self.session.flush()
         return audit_log
 
-    async def _latest_hash(self) -> str | None:
+    async def _latest_hash(self, tenant_id: str | None) -> str | None:
+        statement = select(AuditLog.hash)
+        if tenant_id is None:
+            statement = statement.where(AuditLog.tenant_id.is_(None))
+        else:
+            statement = statement.where(AuditLog.tenant_id == tenant_id)
         result = await self.session.execute(
-            select(AuditLog.hash).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(1)
+            statement.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(1)
         )
         return result.scalar_one_or_none()
 
