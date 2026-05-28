@@ -30,9 +30,22 @@ extend
 locked
 ```
 
+返回值必须包含：
+
+```text
+acquired
+lock_key
+owner_token
+expires_at
+fencing_token
+```
+
 ## 设计要求
 
 - 锁必须有 TTL，禁止永久锁。
 - 锁 value 必须包含 owner token，释放时校验 owner。
 - 加锁失败要返回统一业务 code。
 - 本地单机版可用 memory lock，生产必须用 Redis 或等价实现。
+- 长任务必须支持续租；续租失败后任务必须停止写入或进入补偿流程。
+- 对外部副作用或数据库写入，优先使用幂等记录/唯一约束作为持久保护，锁只作为并发优化。
+- 多实例调度使用锁时必须记录 `fencing_token`，避免旧 owner 在锁过期后继续写入。

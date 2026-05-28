@@ -1,0 +1,145 @@
+# Core Permission Model
+
+## 职责
+
+Permission Model 定义权限数据的事实源、权限点、角色模板、角色授予和策略投影。Casbin 只是授权执行引擎，不应成为唯一事实源。
+
+## 核心原则
+
+```text
+RoleGrant 是角色授予事实源
+TenantMember 是成员关系事实源
+Casbin policy 是投影
+PermissionSpec 是权限目录
+```
+
+角色变更应先写 RoleGrant，再通过 Outbox 同步到 Casbin policy。TenantMember 不再保存角色字段，只表达用户是否属于某租户以及成员状态。
+
+## PermissionSpec
+
+每个 app 在 module 中注册权限点时，应扩展为：
+
+```text
+resource
+action
+scope
+description
+risk_level
+```
+
+示例：
+
+```text
+resource = workspace
+action = write
+scope = tenant
+risk_level = normal
+```
+
+## Scope
+
+第一版支持：
+
+```text
+tenant
+own
+resource
+platform
+```
+
+含义：
+
+- `tenant`：租户内资源。
+- `own`：本人创建或负责的资源。
+- `resource`：具体资源实例授权。
+- `platform`：平台级跨租户权限。
+
+## 资源实例级授权
+
+权限校验分两步：
+
+```text
+1. 校验资源是否属于当前 tenant
+2. 校验当前用户是否有 action 权限
+```
+
+禁止只校验 `resource/action`，不校验资源实例归属。
+
+## 角色模型
+
+```text
+RoleTemplate
+  id
+  scope
+  name
+  version
+  permissions
+
+RoleGrant
+  id
+  tenant_id
+  subject_type
+  subject_id
+  role_template_id
+  policy_version
+```
+
+内置角色：
+
+```text
+owner
+admin
+editor
+viewer
+```
+
+平台角色和租户角色必须分离。
+
+`is_platform_admin` 不能作为 `CurrentUser` 上的绕过开关。平台管理员必须来自 platform scope 的 `RoleGrant` 或外部身份 claim 到 RoleGrant 的可审计映射。
+
+## Policy 投影
+
+角色或权限变更流程：
+
+```text
+写 RoleGrant 或 TenantMember
+  -> 同事务写 outbox event
+  -> policy projector 消费事件
+  -> 更新 Casbin policy
+  -> 更新 policy_version
+  -> 失效权限缓存
+```
+
+必须提供 reconciliation job：
+
+```text
+facts -> expected policies -> actual policies -> diff -> repair
+```
+
+当前实现落点：
+
+```text
+RoleTemplate / RoleGrant / ProjectedPolicy
+  src/core/permissions/models.py
+
+PermissionRegistry
+  src/core/permissions/registry.py
+
+PolicyProjector / reconciliation
+  src/core/permissions/projector.py
+
+RoleGrantService
+  写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
+```
+
+第一版的 `ProjectedPolicy` 是 Casbin policy 的可替换投影层。后续接入真实 Casbin adapter 时，事实源仍然是 `RoleGrant`，不能让业务代码直接写 Casbin policy。
+
+## 审计
+
+必须审计：
+
+- 角色授予。
+- 角色撤销。
+- 权限模板修改。
+- 跨租户权限使用。
+- platform admin 操作。

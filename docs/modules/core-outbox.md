@@ -1,0 +1,176 @@
+# Core Transactional Outbox
+
+## 为什么需要 Outbox
+
+普通事件发布有两个典型风险：
+
+```text
+场景 A：
+  1. 写入业务数据成功
+  2. 进程崩溃
+  3. 事件还没发出去
+  结果：业务数据存在，但下游任务/审计/通知丢失
+
+场景 B：
+  1. 事件先发出去了
+  2. 数据库事务回滚
+  结果：下游收到一个实际上不存在的数据变更
+```
+
+Transactional Outbox 的做法是：**业务数据和事件记录写入同一个数据库事务**。事务提交后，后台 dispatcher 再异步读取 outbox 表并投递事件。
+
+本项目的 outbox 只做可靠副作用的最小闭环，不设计成复杂消息平台。第一版目标是：
+
+- 同事务落库。
+- 简单状态机。
+- 多 worker 不重复领取。
+- 失败有限重试。
+- 死信可重放。
+- handler 以 `event_id` 幂等。
+
+## 核心流程
+
+```text
+service 开启数据库事务
+  -> 写业务表
+  -> 写 outbox_events 表
+  -> 提交事务
+
+outbox dispatcher
+  -> 扫描 pending 事件
+  -> 加锁领取事件
+  -> 投递到事件处理器/消息队列
+  -> 成功后标记 published
+  -> 失败后重试或进入 dead letter
+```
+
+这样可以保证：
+
+- 业务写入成功，事件一定有记录。
+- 业务写入回滚，事件也回滚。
+- 投递失败可以重试。
+- 进程崩溃后可以恢复扫描。
+
+## 目录建议
+
+```text
+src/core/outbox/
+  models.py
+  repository.py
+  dispatcher.py
+  handlers.py
+  registry.py
+```
+
+## 事务边界
+
+outbox 必须通过 core transaction/unit-of-work 写入：
+
+```text
+async with unit_of_work() as uow:
+  await resource_repo.create(..., session=uow.session)
+  await outbox_repo.add(..., session=uow.session)
+```
+
+规则：
+
+- repository 必须绑定同一个 `AsyncSession`。
+- `outbox_repo.add()` 禁止在已有事务外隐式打开新连接。
+- rollback 后不得留下 outbox event。
+- 后台任务没有 HTTP request 时，必须显式传入 TaskContext 和 unit-of-work。
+- nested transaction 第一版不做复杂编排；遇到嵌套调用时复用外层 unit-of-work。
+
+## outbox_events 表
+
+```text
+id
+tenant_id
+event_type
+event_version
+aggregate_type
+aggregate_id
+payload
+status
+attempt_count
+max_attempts
+next_retry_at
+locked_by
+locked_until
+last_error
+published_at
+dead_letter_reason
+created_at
+```
+
+## 状态机
+
+```text
+pending
+  -> publishing
+  -> published
+  -> failed
+  -> dead_letter
+```
+
+状态说明：
+
+- `pending`：等待领取。
+- `publishing`：某个 dispatcher 正在处理。
+- `published`：处理成功。
+- `failed`：本次处理失败，等待 `next_retry_at` 后重试。
+- `dead_letter`：超过最大重试次数，需要人工或 CLI 重放。
+
+## 写入规则
+
+service 不直接发可靠事件，而是在事务中写 outbox：
+
+```text
+await service.run_in_transaction(
+  write_business_data()
+  outbox.add(event)
+)
+```
+
+要求：
+
+- outbox 写入必须与业务数据使用同一个事务连接。
+- event payload 必须包含 `tenant_id`、`actor_id`、`request_id`。
+- event_type 和 event_version 必须注册。
+- handler 必须以 `event_id` 做幂等；复杂业务可以额外使用业务唯一键。
+- 不要求第一版支持复杂事件溯源、全局顺序或跨服务 exactly-once。
+
+## 投递规则
+
+dispatcher 需要：
+
+- 支持批量领取。
+- 使用条件更新领取事件，条件至少包含 `status in (pending, failed)`、`next_retry_at <= now`、`locked_until is null or locked_until < now`。
+- PostgreSQL profile 可使用 `FOR UPDATE SKIP LOCKED` 优化领取；SQLite/local profile 可使用单 worker。
+- 领取成功后设置 `status=publishing`、`locked_by`、`locked_until`。
+- 支持指数退避或固定退避。
+- 达到最大重试后进入 dead letter。
+- 提供 dead letter 重放命令。
+
+崩溃恢复：
+
+- dispatcher 崩溃后，`locked_until` 到期的 `publishing` 事件可重新领取。
+- 如果副作用已经执行但未标记 `published`，handler 必须通过 `event_id` 幂等表或业务唯一约束避免重复副作用。
+- 第一版不追求 exactly-once；目标是 at-least-once delivery + idempotent handler。
+
+## 与审计的关系
+
+安全关键审计可以强一致写审计表；一般派生审计可以通过 Outbox 异步写入。
+
+必须强一致的审计：
+
+- 权限拒绝。
+- 管理员配置变更。
+- 跨租户访问。
+- 安全策略变更。
+
+可以异步的事件：
+
+- 通知发送。
+- 派生统计。
+- 缓存刷新。
+- 非关键 Webhook。

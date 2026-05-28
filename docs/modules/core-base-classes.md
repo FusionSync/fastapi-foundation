@@ -108,9 +108,9 @@ BaseService
 
 service 默认从 ContextVar 读取请求上下文。需要后台任务或测试时，可以显式传入 context override。
 
-## Repository 基类
+## Repository / Query 基类
 
-Repository 可以作为建议项保留：
+Repository 不是建议项。凡是访问 tenant-scoped model 的业务代码，必须通过 `TenantScopedRepository`、`TenantScopedQuery` 或 core 认可的等价查询构造器。
 
 ```text
 BaseRepository
@@ -121,6 +121,20 @@ BaseRepository
   update
   soft_delete
   tenant_filter
+
+TenantScopedRepository
+  自动注入 tenant_id
+  自动过滤 deleted_at
+  create 时自动写 tenant_id
+
+CrossTenantRepository
+  仅 platform scope 使用
+  强制 reason、permission 和 audit
 ```
 
-简单 app 可以不写 repository，复杂查询必须从 service 中下沉到 repository。
+规则：
+
+- 简单 app 也可以复用 core 提供的 generic repository，但不能直接调用 ORM manager。
+- service 不直接写 tenant-scoped ORM 查询。
+- raw SQL 必须使用 `core.db.sql` wrapper。
+- app conformance test 和 lint 必须拒绝业务 app 绕过 tenant-safe repository/query。

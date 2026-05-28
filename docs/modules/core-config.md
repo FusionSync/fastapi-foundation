@@ -61,3 +61,7 @@ cloud
 - 生产环境必须校验关键密钥不可使用默认值。
 - 配置对象应可序列化为脱敏诊断信息。
 - 业务 app 的配置必须显式声明，不能动态散落。
+- 配置优先级必须固定：显式环境变量 > secret provider > profile 文件 > `.env` > 默认值。
+- `private` 和 `cloud` profile 必须通过 `core check-config --profile <name> --json` 校验后才能启动。
+- secret provider 第一版至少支持 env/Kubernetes Secret/Vault-like adapter 的接口，具体实现可分阶段。
+- 诊断输出必须脱敏 URL password、token、secret、private key。

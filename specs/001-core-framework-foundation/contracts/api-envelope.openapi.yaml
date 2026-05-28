@@ -1,0 +1,130 @@
+openapi: 3.1.0
+info:
+  title: Core Framework API Envelope
+  version: 0.1.0
+paths:
+  /api/v1/example-resources:
+    get:
+      summary: Example list response
+      responses:
+        "200":
+          description: Successful list response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelope"
+    post:
+      summary: Example create response
+      responses:
+        "201":
+          description: Successful create response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelope"
+        "400":
+          description: Validation failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: Permission failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Conflict or idempotency failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Rate limited
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+components:
+  schemas:
+    DataEnvelope:
+      type: object
+      required: [code, message, data, list, pagination, details, request_id]
+      properties:
+        code:
+          type: string
+          example: OK
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+        list:
+          type: "null"
+        pagination:
+          type: "null"
+        details:
+          type: ["object", "null"]
+        request_id:
+          type: string
+    ListEnvelope:
+      type: object
+      required: [code, message, data, list, pagination, details, request_id]
+      properties:
+        code:
+          type: string
+          example: OK
+        message:
+          type: string
+          example: success
+        data:
+          type: "null"
+        list:
+          type: array
+          items:
+            type: object
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+        details:
+          type: ["object", "null"]
+        request_id:
+          type: string
+    ErrorEnvelope:
+      type: object
+      required: [code, message, data, list, pagination, details, request_id]
+      properties:
+        code:
+          type: string
+          example: PERMISSION_DENIED
+        message:
+          type: string
+        data:
+          type: "null"
+        list:
+          type: "null"
+        pagination:
+          type: "null"
+        details:
+          type: ["object", "null"]
+        request_id:
+          type: string
+    Pagination:
+      type: object
+      required: [total, page, page_size, has_next]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        has_next:
+          type: boolean

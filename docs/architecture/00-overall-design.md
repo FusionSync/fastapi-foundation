@@ -21,7 +21,7 @@
 - 所有业务 app 必须遵守标准目录结构：`schemas.py`、`models.py`、`router.py`、`services.py`。
 - 业务 app 通过公开 service、事件或接口协作，不直接访问对方内部实现。
 - 框架能力必须可替换：认证 provider、存储 provider、任务 provider、权限 provider 都不能写死。
-- JSON API 统一使用 HTTP 200 返回，业务成功和失败通过响应体 `code` 区分。
+- JSON API 统一响应 envelope，HTTP status 表达协议/权限/系统语义，响应体 `code` 表达稳定业务语义。
 
 ## 3. 分层架构
 
@@ -36,7 +36,7 @@
   由具体项目按 app contract 扩展，例如 CRM、合同、知识库、订单、审批等
 
 核心框架层
-  配置、App Factory、Context、Base Classes、ORM、认证抽象、权限抽象、缓存、锁、幂等、限流、配额、存储抽象、HTTP 客户端、任务抽象、调度抽象、序列化、消息、日志、异常
+  配置、App Factory、Context、Base Classes、ORM、租户隔离、迁移治理、认证抽象、权限抽象、缓存、锁、幂等、限流、配额、存储抽象、HTTP 客户端、任务抽象、调度抽象、事务性 Outbox、序列化、消息、日志、异常
 
 基础设施层
   PostgreSQL/SQLite、Redis、MinIO/S3、本地文件系统、外部认证服务、消息队列
@@ -52,6 +52,7 @@ src/
     config/
     context/
     db/
+    migrations/
     auth/
     security/
     tenancy/
@@ -66,6 +67,7 @@ src/
     tasks/
     scheduler/
     events/
+    outbox/
     exceptions/
     serialization/
     messages/
@@ -102,24 +104,29 @@ server/
 ```python
 module = AppModule(
     label="example_domain",
+    version="0.1.0",
+    dependencies=[],
     routers=[router],
-    orm_apps={
-        "example_domain": {
-            "models": ["apps.example_domain.models"],
-            "migrations": "apps.example_domain.migrations",
-        }
-    },
+    models=["apps.example_domain.models"],
+    migrations=MigrationSpec(
+        path="apps.example_domain.migrations",
+        depends_on=[],
+    ),
     permissions=[
-        ("example", "read"),
-        ("example", "write"),
-        ("example", "delete"),
+        PermissionSpec(resource="example", action="read", scope="tenant"),
+        PermissionSpec(resource="example", action="write", scope="tenant"),
+        PermissionSpec(resource="example", action="delete", scope="tenant"),
     ],
     event_handlers=[],
     task_handlers=[],
+    schedules=[],
+    public_api=[],
 )
 ```
 
-框架启动时只读取 `settings.installed_apps`，动态加载 app 模块，然后注册路由、ORM models、权限点、事件处理器和任务处理器。
+框架启动时只读取 `settings.installed_apps`，动态加载 app 模块，然后注册路由、ORM models、迁移、权限点、事件处理器、任务处理器和调度定义。
+
+`AppModule` 是唯一注册事实源；迁移、权限、事件、任务和调度不能绕过它单独注册。
 
 ## 6. 配置模型
 
@@ -171,18 +178,19 @@ await authorize(
 
 ## 9. ORM 选择
 
-当前设计选择 Tortoise ORM：
+当前设计选择 SQLAlchemy 2.x async + Alembic：
 
-- 异步优先，适合 FastAPI。
-- 模型写法更接近 Django ORM，业务开发成本低。
-- 查询 API 直观，适合 CRUD、列表、过滤和关联查询。
-- 可通过 raw SQL 补足复杂报表和特殊查询。
+- SQLAlchemy 生态成熟，事务、连接、Unit of Work 和复杂查询能力更适合长期演进。
+- Alembic 迁移能力成熟，更容易做 migration manifest、preflight、dry-run 和 drift check。
+- async engine/session 适配 FastAPI，同时保留 Core SQL 能力处理复杂查询。
+- ORM 只在 core base/repository 层暴露，业务 app 不直接绑定底层 ORM API。
 
 约束：
 
 - 不在业务层手写跨租户查询。
 - 基础模型提供 `tenant_id`、审计字段和软删除策略。
 - 复杂事务必须封装在 service 层。
+- 业务代码通过 repository/unit-of-work 访问数据库，不直接管理 session。
 
 ## 10. API 命名约定
 
@@ -218,7 +226,7 @@ JSON API 响应统一封装。单对象响应使用 `data`，列表响应使用 
 }
 ```
 
-业务失败也返回 HTTP 200：
+业务失败仍使用相同 envelope，但 HTTP status 保留标准语义：
 
 ```json
 {
@@ -236,14 +244,14 @@ JSON API 响应统一封装。单对象响应使用 `data`，列表响应使用 
 
 第一阶段：
 
-- 搭建 core 框架、配置、App 注册、Context、统一响应、ORM、基础认证。
+- 搭建 core 框架、配置、App 注册、Context、统一响应、ORM、租户隔离基类、基础认证。
 - 建立租户、用户、成员、文件、审计基础模型。
 - 提供模块开发规范和一个 example app。
 
 第二阶段：
 
-- 接入 Casbin 权限、安全模块、缓存、锁、限流。
-- 实现 CLI、测试基座、幂等、配额、HTTP 客户端、任务队列、调度器、事件总线、存储 provider。
+- 接入权限模型升级、租户生命周期、安全模块、缓存、锁、限流。
+- 实现 CLI、测试基座、幂等、配额、HTTP 客户端、事务性 Outbox、迁移治理、任务队列、调度器、事件总线、存储 provider。
 - 加入 SQLAdmin 或自研内部管理后台。
 
 第三阶段：

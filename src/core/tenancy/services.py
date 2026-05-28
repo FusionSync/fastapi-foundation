@@ -1,0 +1,188 @@
+from __future__ import annotations
+
+import inspect
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.outbox import OutboxRepository
+from core.tenancy.lifecycle import SessionRevocationHook, TenantStatus, validate_tenant_transition
+from core.tenancy.models import Tenant, TenantMember
+
+TENANT_CREATED_EVENT = "tenant.created"
+TENANT_SUSPENDED_EVENT = "tenant.suspended"
+TENANT_DELETING_EVENT = "tenant.deleting"
+TENANT_ARCHIVED_EVENT = "tenant.archived"
+TENANT_DELETED_EVENT = "tenant.deleted"
+
+
+class TenantLifecycleService:
+    def __init__(
+        self,
+        session: AsyncSession,
+        outbox: OutboxRepository,
+        *,
+        session_revocation_hook: SessionRevocationHook | None = None,
+    ) -> None:
+        self.session = session
+        self.outbox = outbox
+        self.session_revocation_hook = session_revocation_hook
+
+    async def provision_tenant(
+        self,
+        *,
+        tenant_id: str,
+        name: str,
+        code: str,
+        owner_user_id: str,
+        actor_id: str,
+        request_id: str,
+        deployment_mode: str = "local",
+    ) -> Tenant:
+        tenant = Tenant(
+            id=tenant_id,
+            name=name,
+            code=code,
+            status="provisioning",
+            deployment_mode=deployment_mode,
+        )
+        self.session.add(tenant)
+        self.session.add(
+            TenantMember(
+                tenant_id=tenant_id,
+                user_id=owner_user_id,
+                status="active",
+            )
+        )
+        validate_tenant_transition("provisioning", "active")
+        tenant.status = "active"
+        await self._add_lifecycle_event(
+            TENANT_CREATED_EVENT,
+            tenant=tenant,
+            actor_id=actor_id,
+            request_id=request_id,
+            extra={"owner_user_id": owner_user_id},
+        )
+        return tenant
+
+    async def suspend_tenant(
+        self,
+        tenant: Tenant,
+        *,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> Tenant:
+        await self._transition(
+            tenant,
+            target="suspended",
+            event_type=TENANT_SUSPENDED_EVENT,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            revoke_sessions=True,
+        )
+        return tenant
+
+    async def reactivate_tenant(self, tenant: Tenant) -> Tenant:
+        validate_tenant_transition(_status(tenant), "active")
+        tenant.status = "active"
+        return tenant
+
+    async def begin_delete_tenant(
+        self,
+        tenant: Tenant,
+        *,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> Tenant:
+        await self._transition(
+            tenant,
+            target="deleting",
+            event_type=TENANT_DELETING_EVENT,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            revoke_sessions=True,
+        )
+        return tenant
+
+    async def finish_delete_tenant(
+        self,
+        tenant: Tenant,
+        *,
+        target: TenantStatus,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> Tenant:
+        if target not in {"archived", "deleted"}:
+            raise ValueError("finish_delete_tenant target must be archived or deleted")
+        event_type = TENANT_ARCHIVED_EVENT if target == "archived" else TENANT_DELETED_EVENT
+        await self._transition(
+            tenant,
+            target=target,
+            event_type=event_type,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            revoke_sessions=False,
+        )
+        return tenant
+
+    async def _transition(
+        self,
+        tenant: Tenant,
+        *,
+        target: TenantStatus,
+        event_type: str,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+        revoke_sessions: bool,
+    ) -> None:
+        validate_tenant_transition(_status(tenant), target)
+        tenant.status = target
+        if revoke_sessions:
+            await self._revoke_sessions(tenant.id, reason)
+        await self._add_lifecycle_event(
+            event_type,
+            tenant=tenant,
+            actor_id=actor_id,
+            request_id=request_id,
+            extra={"reason": reason},
+        )
+
+    async def _add_lifecycle_event(
+        self,
+        event_type: str,
+        *,
+        tenant: Tenant,
+        actor_id: str,
+        request_id: str,
+        extra: dict[str, str],
+    ) -> None:
+        await self.outbox.add(
+            event_type=event_type,
+            aggregate_type="tenant",
+            aggregate_id=tenant.id,
+            tenant_id=tenant.id,
+            payload={
+                "tenant_id": tenant.id,
+                "actor_id": actor_id,
+                "request_id": request_id,
+                "status": tenant.status,
+                **extra,
+            },
+        )
+
+    async def _revoke_sessions(self, tenant_id: str, reason: str) -> None:
+        if self.session_revocation_hook is None:
+            return
+        result = self.session_revocation_hook(tenant_id, reason)
+        if inspect.isawaitable(result):
+            await result
+
+
+def _status(tenant: Tenant) -> TenantStatus:
+    return tenant.status  # type: ignore[return-value]

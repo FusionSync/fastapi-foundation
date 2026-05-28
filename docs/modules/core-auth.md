@@ -44,10 +44,13 @@ external_id
 email
 display_name
 auth_provider
-is_platform_admin
+session_id
+token_version
 ```
 
 业务 app 只依赖 `CurrentUser`，不关心 token 来自本地 JWT、Logto 还是 Keycloak。
+
+`CurrentUser` 不包含 `is_platform_admin` 这类绕过字段。平台管理员身份通过权限系统查询 platform scope grant 得出，并进入审计。
 
 ## 与账号 app 的关系
 
@@ -58,4 +61,5 @@ is_platform_admin
 - 生产环境 JWT secret 不允许使用默认值。
 - OIDC 必须校验 issuer、audience、签名和过期时间。
 - 所有写接口必须依赖认证。
-- 后续需要支持 token refresh、会话撤销和审计日志。
+- 必须支持 `session_id`、`jti` 或 `token_version` 撤销机制，用于用户禁用、租户暂停/删除、角色撤销后的访问收敛。
+- token refresh 和会话管理可以分阶段实现，但撤销检查接口必须在 core auth 契约中预留。

@@ -46,6 +46,7 @@ await authorize(
 ```
 
 禁止业务 app 直接操作 Casbin enforcer。
+平台级权限使用 `scope=platform` 的 RoleGrant，不允许通过 `CurrentUser.is_platform_admin` 绕过授权接口。
 
 ## 权限点注册
 
@@ -53,13 +54,22 @@ await authorize(
 
 ```python
 permissions=[
-    ("workspace", "read"),
-    ("workspace", "write"),
-    ("file", "upload"),
+    PermissionSpec(resource="workspace", action="read", scope="tenant"),
+    PermissionSpec(resource="workspace", action="write", scope="tenant"),
+    PermissionSpec(resource="file", action="upload", scope="tenant"),
 ]
 ```
 
 core 启动时可收集权限点用于初始化、校验和后台展示。
+
+CLI 可查看权限目录：
+
+```bash
+core permissions catalog --installed-app apps.example_domain.module --json
+core permissions reconcile --installed-app apps.example_domain.module --json
+```
+
+`catalog` 来自 app module 的 `PermissionSpec`。`reconcile` 的数据库修复能力由 `PolicyProjector.reconcile(repair=True)` 提供，CLI 当前先提供 metadata contract，用于部署前检查权限目录是否可收集。
 
 ## 角色建议
 

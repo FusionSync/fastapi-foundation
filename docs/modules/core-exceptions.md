@@ -19,7 +19,9 @@ src/core/exceptions/
 AppError
   code
   message
+  status_code
   details
+  headers
 
 ValidationAppError
 PermissionAppError
@@ -34,7 +36,9 @@ SystemAppError
 - 业务已知异常转换为对应业务 code。
 - Pydantic/FastAPI validation error 转换为 `VALIDATION_ERROR`。
 - 未知异常转换为 `SYSTEM_ERROR`，生产环境不暴露堆栈。
-- 所有 JSON API 错误响应 HTTP status 为 200。
+- 默认使用标准 HTTP status，响应体 `code` 表达稳定业务语义。
+- 只有显式启用 `API__ERROR_HTTP_STATUS_MODE=always_200` 时，业务错误才降级为 HTTP 200 兼容响应。
+- exception handler 必须统一处理 `code -> status_code -> headers -> default_message` 映射。
 
 ## 设计要求
 
@@ -42,3 +46,4 @@ SystemAppError
 - router 不直接拼错误响应。
 - exception handler 必须记录 request_id、user_id、tenant_id。
 - details 必须先经过脱敏。
+- `Retry-After`、`WWW-Authenticate`、`X-App-Code` 等响应头由 core exception/response 层统一生成。

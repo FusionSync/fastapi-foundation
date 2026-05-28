@@ -31,12 +31,15 @@ src/core/serialization/
 
 ## 统一策略
 
-- `datetime` 使用 ISO 8601，默认带时区。
+- `datetime` 使用 ISO 8601，必须带时区；naive datetime 在 API 输出前视为错误。
+- 默认存储和输出使用 UTC；如保留 offset，必须在 schema 中显式说明。
 - `date` 使用 `YYYY-MM-DD`。
 - `Decimal` 默认转字符串，避免精度丢失。
 - `UUID` 转字符串。
 - `Enum` 输出 value。
 - ORM model 不直接裸返回，必须经过 schema 或 serializer。
+- Pydantic 输出统一使用 `model_dump(mode="json", by_alias=True)`。
+- 默认不使用 `exclude_none=True` 影响 envelope 字段；envelope 未使用字段显式为 `null`。
 
 ## BaseSchema 关系
 
@@ -55,7 +58,7 @@ json_encoders = core serialization encoders
 ```text
 ok(data)
 ok_list(items, pagination)
-fail(code, message=None, details=None)
+fail(code, message=None, details=None, status_code=None, headers=None)
 ```
 
 ## 设计要求

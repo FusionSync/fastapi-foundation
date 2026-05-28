@@ -20,7 +20,7 @@ src/core/app/
 - `create_app(settings)` 创建 FastAPI 实例。
 - 从 `settings.installed_apps` 加载 app modules。
 - 注册每个 app 的 routers。
-- 构建 Tortoise ORM 配置并绑定生命周期。
+- 构建 SQLAlchemy async engine/session factory 并绑定生命周期。
 - 注册全局异常处理器。
 - 注册请求 ID、日志、CORS、租户上下文等中间件。
 - 暴露健康检查和版本信息。

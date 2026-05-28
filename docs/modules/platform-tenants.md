@@ -18,14 +18,13 @@ TenantMember
   id
   tenant_id
   user_id
-  role
   status
 
 TenantInvitation
   id
   tenant_id
   email
-  role
+  role_template_id
   token
   expires_at
 ```
@@ -48,4 +47,4 @@ PATCH /api/v1/tenants/{id}/members/{member_id}
 
 ## 与权限模块关系
 
-Tenants 负责成员和角色事实，Permissions 负责授权决策。角色变更后同步到 Casbin policy。
+Tenants 负责成员关系和成员状态，Permissions 负责 RoleGrant、授权决策和策略投影。邀请可以携带初始 `role_template_id`，用户接受邀请后由权限模块创建 RoleGrant。

@@ -50,14 +50,32 @@ user_id
 route
 idempotency_key
 request_hash
+status
 response_code
 response_body
+task_id
+outbox_event_id
+locked_until
 expires_at
+```
+
+状态机：
+
+```text
+processing
+  -> succeeded
+  -> failed
+  -> expired
 ```
 
 ## 设计要求
 
 - 幂等 key 必须绑定 tenant、user 和 route。
 - 同 key 但 request body 不一致时返回 `IDEMPOTENCY_KEY_CONFLICT`。
+- 创建记录必须使用唯一约束和原子 insert-and-claim，不能先查后写。
+- 同 key 请求仍在 `processing` 时，默认返回 `409 + IDEMPOTENCY_IN_PROGRESS` 或按接口声明等待短轮询。
+- `succeeded` 请求再次到达时返回第一次的 response_code 和 response_body。
+- `failed` 是否允许重试必须由接口声明，默认高风险写操作不自动重试。
 - 幂等记录必须有 TTL。
 - 对高风险写接口，router 应显式声明是否需要幂等。
+- 提交任务或写 outbox 时，幂等记录必须绑定 `task_id` 或 `outbox_event_id`，避免客户端重试重复提交。

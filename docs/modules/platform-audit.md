@@ -11,13 +11,21 @@ AuditLog
   id
   tenant_id
   actor_id
+  actor_type
+  auth_provider
+  session_id
   action
   resource_type
   resource_id
+  result
+  reason
+  policy_version
   request_id
   ip_address
   user_agent
   payload
+  hash_prev
+  hash
   created_at
 ```
 
@@ -36,3 +44,6 @@ AuditLog
 - 生产环境审计日志不可随业务删除。
 - 敏感字段必须脱敏。
 - 私有化部署需要支持导出审计记录。
+- 安全关键审计必须与业务或权限变更强一致写入，不能仅依赖 best-effort 异步事件。
+- 生产 profile 应支持 hash chain 或外部 WORM/SIEM 适配，保证审计记录可追溯篡改。
+- 审计保留、导出和删除策略必须按部署 profile 配置。

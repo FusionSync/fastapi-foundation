@@ -32,6 +32,10 @@ src/core/testing/
 - 权限绕过必须显式声明。
 - service 测试可以使用内存 provider。
 - API 测试必须断言响应 envelope 和业务 code。
+- 每个注册 app 必须通过 app conformance test。
+- API contract test 必须校验 HTTP status、业务 code、headers、envelope schema 和 `request_id`。
+- serialization golden test 必须覆盖 datetime、Decimal、UUID、Enum、空值和列表响应。
+- 兼容模式 `always_200` 必须单独测试，不能影响默认生产模式。
 
 ## 最小测试矩阵
 
@@ -43,3 +47,21 @@ src/core/testing/
 - 权限拒绝。
 - 参数校验错误。
 - service 异常到 code 的映射。
+
+## App Conformance Gate
+
+框架必须提供可复用检查：
+
+```text
+core check-app
+pytest tests/contract/test_app_conformance.py
+```
+
+检查项：
+
+- `module.py` 字段完整且类型正确。
+- 标准文件存在：`schemas.py`、`models.py`、`router.py`、`services.py`。
+- router 使用 core router 工厂。
+- schema 继承 core schema 基类。
+- tenant-scoped model 只能通过 tenant-safe repository/query 访问。
+- app 权限、事件、任务、调度定义可被 registry 收集。

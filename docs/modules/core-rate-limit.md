@@ -39,7 +39,7 @@ default.write:
 
 ## 响应
 
-触发限流时仍返回 HTTP 200：
+默认触发限流时返回 `429 + RATE_LIMITED`，并带 `Retry-After`：
 
 ```json
 {
@@ -55,8 +55,11 @@ default.write:
 }
 ```
 
+只有显式启用 `API__ERROR_HTTP_STATUS_MODE=always_200` 时，兼容客户端才收到 HTTP 200；此时仍必须带 `Retry-After`、`X-App-Code=RATE_LIMITED` 和 `X-Request-ID`。
+
 ## 设计要求
 
 - 限流依赖 Cache provider，不直接依赖 Redis。
 - 支持按路由覆盖默认规则。
 - 所有限流命中必须进入指标和审计。
+- Redis 或 Cache provider 故障时必须有明确策略：认证、登录、支付、批量写入等高风险接口默认 fail-closed；普通读接口可按配置 fail-open 并记录告警。

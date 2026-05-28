@@ -10,18 +10,21 @@
 - 平台能力和业务能力都通过 app 模块注册，框架启动逻辑不依赖具体业务模块。
 - 配置、数据库、认证、权限、租户、存储、任务队列、审计、事件等基础设施集中维护。
 - 支持本地开发、私有化部署和公网 SaaS 三种运行形态。
-- ORM 采用更贴近工程使用的异步 ORM，当前设计选择 Tortoise ORM。
+- ORM 采用 SQLAlchemy 2.x async，迁移采用 Alembic。
 
 ## 文档入口
 
 - [总体架构设计](docs/architecture/00-overall-design.md)
+- [基础框架演进路线图](docs/architecture/01-foundation-roadmap.md)
 - [模块文档索引](docs/modules/00-index.md)
+- [运维文档索引](docs/operations/00-index.md)
 - [核心与应用边界决策](docs/decisions/0001-core-and-app-boundary.md)
 
 ## 推荐技术基线
 
 - FastAPI
-- Tortoise ORM
+- SQLAlchemy 2.x async
+- Alembic
 - PostgreSQL，单机版可切 SQLite
 - Redis
 - Casbin
@@ -44,6 +47,7 @@ server/
 docs/
   architecture/
   modules/
+  operations/
   decisions/
 ```
 

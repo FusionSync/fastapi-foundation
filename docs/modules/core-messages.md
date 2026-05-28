@@ -40,3 +40,5 @@ QUOTA_EXCEEDED -> 已超出配额限制
 - app 可以注册自己的 message catalog。
 - 未提供 message 时由 core 根据 code 解析。
 - message 不允许包含敏感信息。
+- code registry 是错误码单一事实源，必须包含默认 HTTP status、details schema、owner module 和废弃状态。
+- app 注册 message catalog 时不能创建重复语义 code；CI 必须检查 code 唯一性。

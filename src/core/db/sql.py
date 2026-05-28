@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.context import get_current_context
+from core.exceptions import AppError
+
+
+async def execute_tenant_scoped(
+    session: AsyncSession,
+    statement: str,
+    parameters: Mapping[str, Any] | None = None,
+    *,
+    tenant_id: str | None = None,
+) -> Any:
+    resolved_tenant_id = tenant_id or _current_tenant_id()
+    params = dict(parameters or {})
+    provided_tenant_id = params.get("tenant_id")
+    if provided_tenant_id is not None and provided_tenant_id != resolved_tenant_id:
+        raise AppError(
+            "TENANT_CONTEXT_CONFLICT",
+            "Raw SQL tenant parameter conflicts with current tenant",
+            status_code=403,
+        )
+    params["tenant_id"] = resolved_tenant_id
+    return await session.execute(text(statement), params)
+
+
+async def execute_cross_tenant(
+    session: AsyncSession,
+    statement: str,
+    parameters: Mapping[str, Any] | None = None,
+    *,
+    reason: str,
+    platform_permission_granted: bool,
+) -> Any:
+    if not reason.strip():
+        raise AppError(
+            "PERMISSION_DENIED",
+            "Cross-tenant SQL requires an audit reason",
+            status_code=403,
+        )
+    if not platform_permission_granted:
+        raise AppError(
+            "PERMISSION_DENIED",
+            "Cross-tenant SQL requires platform permission",
+            status_code=403,
+        )
+    return await session.execute(text(statement), dict(parameters or {}))
+
+
+def _current_tenant_id() -> str:
+    context = get_current_context()
+    if not context or not context.tenant_id:
+        raise AppError(
+            "TENANT_ACCESS_DENIED",
+            "Tenant-scoped SQL requires tenant context",
+            status_code=403,
+        )
+    return context.tenant_id

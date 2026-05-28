@@ -70,3 +70,7 @@ manual
 - 可以通过 Locks 模块保护单例调度。
 - app 通过 module 注册 schedule definitions。
 - 生产环境需要能查看调度状态和最近执行记录。
+- schedule trigger 必须记录 `schedule_id`、`planned_at`、`triggered_at`、`task_id`、`status`。
+- 错过触发策略必须显式声明：`skip`、`run_once` 或 `catch_up_limited`。
+- 周期任务提交必须绑定幂等键，例如 `schedule_id + planned_at`。
+- scheduler 只提交任务或写 outbox，不直接执行业务逻辑。
