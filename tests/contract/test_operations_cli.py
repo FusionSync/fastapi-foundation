@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from core.apps import AppModule, EventHandlerSpec, ScheduleSpec, TaskHandlerSpec
 from core.base.models import BaseModel
 from core.cli.main import main
+from core.operations import ProcessHeartbeat
 from core.outbox import OutboxEvent
 from core.scheduler import ScheduleTriggerLog
 from core.tasks import TaskRun
@@ -82,6 +83,48 @@ def test_outbox_dispatcher_role_can_run_one_iteration(tmp_path: Path, monkeypatc
     }
     assert delivered == [event_id]
     assert asyncio.run(_event_status(database_url, event_id)) == "published"
+
+
+def test_outbox_dispatcher_run_records_process_heartbeat(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_create_schema(database_url))
+
+    exit_code = main(
+        [
+            "outbox-dispatcher",
+            "--run",
+            "--max-iterations",
+            "1",
+            "--idle-sleep-seconds",
+            "0",
+            "--database-url",
+            database_url,
+            "--dispatcher-id",
+            "role-dispatcher",
+            "--instance-id",
+            "outbox-1",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    heartbeat = asyncio.run(_heartbeat(database_url, "outbox-dispatcher", "outbox-1"))
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["instance_id"] == "outbox-1"
+    assert heartbeat is not None
+    assert heartbeat.status == "healthy"
+    assert heartbeat.details == {
+        "dispatcher_id": "role-dispatcher",
+        "iterations": 1,
+        "claimed": 0,
+        "published": 0,
+        "failed": 0,
+        "dead_lettered": 0,
+    }
 
 
 def test_scheduler_role_can_run_registered_schedule_once(
@@ -236,6 +279,48 @@ def test_worker_role_can_run_finite_loop_for_pending_tasks(
     assert second.result_payload == {"value": "two", "worker": "sync"}
 
 
+def test_worker_run_records_process_heartbeat(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_create_schema(database_url))
+
+    exit_code = main(
+        [
+            "worker",
+            "--run",
+            "--max-iterations",
+            "1",
+            "--idle-sleep-seconds",
+            "0",
+            "--database-url",
+            database_url,
+            "--queue",
+            "default",
+            "--instance-id",
+            "worker-1",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    heartbeat = asyncio.run(_heartbeat(database_url, "worker", "worker-1"))
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["instance_id"] == "worker-1"
+    assert heartbeat is not None
+    assert heartbeat.status == "healthy"
+    assert heartbeat.details == {
+        "queue": "default",
+        "iterations": 1,
+        "claimed": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "dead_lettered": 0,
+    }
+
+
 def test_local_deployment_smoke_passes(capsys) -> None:
     exit_code = main(["smoke", "--profile", "local", "--json"])
 
@@ -378,6 +463,30 @@ async def _task_run(database_url: str, task_id: str) -> TaskRun:
             assert task_run is not None
             session.expunge(task_run)
             return task_run
+    finally:
+        await engine.dispose()
+
+
+async def _heartbeat(
+    database_url: str,
+    role: str,
+    instance_id: str,
+) -> ProcessHeartbeat | None:
+    from sqlalchemy import select
+
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            result = await session.execute(
+                select(ProcessHeartbeat)
+                .where(ProcessHeartbeat.role == role)
+                .where(ProcessHeartbeat.instance_id == instance_id)
+            )
+            heartbeat = result.scalar_one_or_none()
+            if heartbeat is not None:
+                session.expunge(heartbeat)
+            return heartbeat
     finally:
         await engine.dispose()
 

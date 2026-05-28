@@ -60,6 +60,7 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--installed-app", action="append", default=[])
             role_parser.add_argument("--queue", default="default")
             role_parser.add_argument("--tenant-status", default="active")
+            role_parser.add_argument("--instance-id")
             role_parser.add_argument("--max-iterations", type=int)
             role_parser.add_argument("--idle-sleep-seconds", type=float, default=1.0)
         if role == "scheduler":
@@ -78,6 +79,7 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--database-url")
             role_parser.add_argument("--installed-app", action="append", default=[])
             role_parser.add_argument("--dispatcher-id", default="outbox-dispatcher")
+            role_parser.add_argument("--instance-id")
             role_parser.add_argument("--batch-size", type=int, default=20)
             role_parser.add_argument("--max-iterations", type=int)
             role_parser.add_argument("--idle-sleep-seconds", type=float, default=1.0)
@@ -163,6 +165,7 @@ def _handle_worker_run(args: argparse.Namespace) -> int:
                 module_paths=installed_apps(args.installed_app),
                 queue=args.queue,
                 tenant_status=args.tenant_status,
+                instance_id=args.instance_id,
                 max_iterations=args.max_iterations,
                 idle_sleep_seconds=args.idle_sleep_seconds,
             )
@@ -241,6 +244,7 @@ def _handle_outbox_dispatcher_run(args: argparse.Namespace) -> int:
                 module_paths=installed_apps(args.installed_app),
                 dispatcher_id=args.dispatcher_id,
                 batch_size=args.batch_size,
+                instance_id=args.instance_id,
                 max_iterations=args.max_iterations,
                 idle_sleep_seconds=args.idle_sleep_seconds,
             )

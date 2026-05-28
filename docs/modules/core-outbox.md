@@ -3,11 +3,11 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、有限重试、dead-letter replay、lease 完成校验和 handler 幂等执行保护已落地。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验和 handler 幂等执行保护已落地。
 - Next:
   - [ ] 接跨进程锁和 handler schema/version 校验。
   - [ ] 补充 handler 外部 side-effect 幂等指南。
-  - [ ] 为 outbox-dispatcher 增加 heartbeat、shutdown signal 和部署 profile 参数。
+  - [ ] 为 outbox-dispatcher 增加 shutdown signal 和部署 profile 参数。
 
 ## 为什么需要 Outbox
 
@@ -187,6 +187,7 @@ core outbox dead-letter replay --event-id <event_id> --database-url sqlite+aiosq
 
 - `dispatch-once` 通过 `--installed-app` 或 settings 加载 app 事件处理器，领取一批待投递事件，调用 handler，并输出 claimed/published/failed/dead_lettered。
 - `outbox-dispatcher --run` 复用同一个运行层；默认持续循环，`--max-iterations` 可限制轮数，便于 CI 和本地 smoke。
+- `outbox-dispatcher --run --instance-id <id>` 每轮写入 `process_heartbeats`，details 包含 dispatcher_id、iterations 和投递统计。
 - `list` 输出 `dead_letter` 事件的稳定 JSON，包含 tenant、event type、aggregate、attempt、last_error 和 dead_letter_reason。
 - `replay` 必须显式传 `--yes`，避免误操作。
 - `replay` 只允许重放 `dead_letter` 事件，成功后把状态改回 `pending`，清理 `dead_letter_reason`、`last_error`、`next_retry_at` 和锁字段。

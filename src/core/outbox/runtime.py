@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from core.apps import AppRegistry
 from core.db import unit_of_work
 from core.events import EventRegistry
+from core.operations import ProcessHeartbeatRepository
 from core.outbox.dispatcher import OutboxDispatcher
 from core.outbox.repository import OutboxRepository
 
@@ -17,6 +18,7 @@ class OutboxDispatchRunResult:
     ok: bool
     dispatcher_id: str
     iterations: int
+    instance_id: str | None = None
     claimed: int = 0
     published: int = 0
     failed: int = 0
@@ -33,6 +35,8 @@ class OutboxDispatchRunResult:
         }
         if include_iterations:
             payload["iterations"] = self.iterations
+        if self.instance_id is not None:
+            payload["instance_id"] = self.instance_id
         return payload
 
 
@@ -42,12 +46,14 @@ async def run_outbox_dispatch_once(
     module_paths: list[str],
     dispatcher_id: str,
     batch_size: int,
+    instance_id: str | None = None,
 ) -> OutboxDispatchRunResult:
     return await run_outbox_dispatch_loop(
         database_url=database_url,
         module_paths=module_paths,
         dispatcher_id=dispatcher_id,
         batch_size=batch_size,
+        instance_id=instance_id,
         max_iterations=1,
         idle_sleep_seconds=0,
     )
@@ -59,6 +65,7 @@ async def run_outbox_dispatch_loop(
     module_paths: list[str],
     dispatcher_id: str,
     batch_size: int,
+    instance_id: str | None = None,
     max_iterations: int | None = None,
     idle_sleep_seconds: float = 1.0,
 ) -> OutboxDispatchRunResult:
@@ -81,11 +88,24 @@ async def run_outbox_dispatch_loop(
                     dispatcher_id=dispatcher_id,
                     batch_size=batch_size,
                 ).dispatch_once()
-            iterations += 1
-            claimed += stats.claimed
-            published += stats.published
-            failed += stats.failed
-            dead_lettered += stats.dead_lettered
+                iterations += 1
+                claimed += stats.claimed
+                published += stats.published
+                failed += stats.failed
+                dead_lettered += stats.dead_lettered
+                if instance_id is not None:
+                    await ProcessHeartbeatRepository(uow.session).record(
+                        role="outbox-dispatcher",
+                        instance_id=instance_id,
+                        details={
+                            "dispatcher_id": dispatcher_id,
+                            "iterations": iterations,
+                            "claimed": claimed,
+                            "published": published,
+                            "failed": failed,
+                            "dead_lettered": dead_lettered,
+                        },
+                    )
             if max_iterations is None and stats.claimed == 0:
                 await asyncio.sleep(idle_sleep_seconds)
     finally:
@@ -95,6 +115,7 @@ async def run_outbox_dispatch_loop(
         ok=failed == 0 and dead_lettered == 0,
         dispatcher_id=dispatcher_id,
         iterations=iterations,
+        instance_id=instance_id,
         claimed=claimed,
         published=published,
         failed=failed,
