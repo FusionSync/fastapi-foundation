@@ -187,6 +187,7 @@ Fields:
 - `tenant_id`
 - `owner_type`
 - `owner_id`
+- `bucket`
 - `object_key`
 - `file_name`
 - `content_type`
@@ -195,6 +196,7 @@ Fields:
 - `file_type`
 - `status`
 - `created_at`
+- `deleted_at`
 
 Rules:
 

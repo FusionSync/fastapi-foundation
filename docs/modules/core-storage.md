@@ -66,3 +66,15 @@ cloud:
 - 私有文件不直接暴露公共 URL。
 - 临时下载 URL 必须有过期时间。
 - 文件记录必须落库，不能只依赖对象存储列表。
+
+## 当前实现
+
+第一版先提供 provider 抽象和 local provider：
+
+- `StorageProvider` 定义 `put_file`、`get_file`、`delete_file`、`exists`、`generate_download_url`。
+- `LocalStorageProvider` 用于 local/profile 和测试环境，写入本地目录。
+- local provider 会校验 object key，拒绝绝对路径和 `..` 路径穿越。
+- `file_object_key()` 固定上传原始文件 key：`tenants/{tenant_id}/files/{file_id}/original.bin`。
+- `resource_object_key()` 固定资源关联文件 key：`tenants/{tenant_id}/resources/{resource_type}/{resource_id}/{file_id}.bin`。
+
+后续接入 MinIO/S3 时，provider 必须沿用相同 object key 约定，业务 app 只能通过 provider 和 FileObject metadata 访问文件。

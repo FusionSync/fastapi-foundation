@@ -13,10 +13,10 @@ htmlcov/
 .env.*
 !.env.example
 
-data/
-storage/
-tmp/
-logs/
+/data/
+/storage/
+/tmp/
+/logs/
 
 .idea/
 .vscode/
