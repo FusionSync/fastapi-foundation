@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.context.context import get_current_context
+from core.messages import resolve_message
 
 
 class Pagination(BaseModel):
@@ -74,13 +75,14 @@ def ok_list(
 def fail(
     code: str,
     *,
-    message: str = "error",
+    message: str | None = None,
     details: dict[str, Any] | None = None,
+    locale: str | None = None,
     request_id: str | None = None,
 ) -> dict[str, Any]:
     return Envelope(
         code=code,
-        message=message,
+        message=message or resolve_message(code, locale=locale),
         data=None,
         items=None,
         pagination=None,

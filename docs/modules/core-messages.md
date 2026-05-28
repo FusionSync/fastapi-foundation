@@ -42,3 +42,16 @@ QUOTA_EXCEEDED -> 已超出配额限制
 - message 不允许包含敏感信息。
 - code registry 是错误码单一事实源，必须包含默认 HTTP status、details schema、owner module 和废弃状态。
 - app 注册 message catalog 时不能创建重复语义 code；CI 必须检查 code 唯一性。
+
+## 当前实现
+
+已落地 `MessageCatalog`、`MessageRegistry` 和 `resolve_message()`：
+
+- 默认 `zh-CN` catalog 由 `core.exceptions` 错误码 registry 自动生成。
+- 默认 `en-US` catalog 覆盖核心错误码的英文文案。
+- `MessageRegistry.register()` 按 `locale + code` 检查重复，除非显式 `replace=True`。
+- `MessageCatalog` 会拒绝空 locale、空 owner、空 message，以及包含 password、token、secret 等敏感词的文案。
+- `core.serialization.fail()` 在未传入 message 时会自动根据 code 和 locale 解析文案。
+- `core.exceptions` handler 在 `AppError` 未显式传 message 时自动使用 resolver；显式业务 message 会被保留。
+
+第一版先使用 Python 内置 catalog。后续如需私有化多语言定制，可以从 YAML/数据库加载后注册到同一个 `MessageRegistry`。

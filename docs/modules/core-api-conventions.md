@@ -153,6 +153,8 @@ deprecated
 
 同一个语义只能有一个稳定 code，禁止不同 app 重复定义语义相同的错误码。CI/contract test 必须校验 code 唯一性、HTTP status 映射和 OpenAPI envelope 一致性。
 
+错误响应的 `message` 由 `core.messages` 解析。业务可以显式传 message，但默认应只抛稳定 code 和 details，让 core 根据 locale/catalog 生成最终文案。`message` 不作为稳定接口契约，客户端逻辑必须依赖 `code`。
+
 ## 设计要求
 
 - router 只做入参、依赖和响应，不放复杂业务逻辑。

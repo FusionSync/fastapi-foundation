@@ -14,6 +14,7 @@ class AppError(Exception):
         super().__init__(message or code)
         self.code = code
         self.message = message or code
+        self.message_provided = message is not None
         self.status_code = status_code
         self.details = details
         self.headers = headers or {}

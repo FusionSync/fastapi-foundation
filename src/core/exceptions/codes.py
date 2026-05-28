@@ -40,3 +40,7 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
 
 def get_error_code(code: str) -> ErrorCodeSpec:
     return _ERROR_CODES.get(code) or ErrorCodeSpec(code, 500, "系统错误")
+
+
+def iter_error_codes() -> tuple[ErrorCodeSpec, ...]:
+    return tuple(_ERROR_CODES.values())

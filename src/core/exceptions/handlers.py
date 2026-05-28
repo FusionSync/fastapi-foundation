@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from core.exceptions.base import AppError
 from core.exceptions.codes import get_error_code
+from core.messages import resolve_message
 from core.serialization.responses import fail
 
 
@@ -25,8 +26,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         spec = get_error_code(exc.code)
         status = exc.status_code or spec.default_http_status
+        message = exc.message if exc.message_provided else resolve_message(exc.code)
         return JSONResponse(
-            fail(exc.code, message=exc.message or spec.default_message, details=exc.details),
+            fail(exc.code, message=message, details=exc.details),
             status_code=_status_code(request, status),
             headers=_headers(request, exc.code, {**spec.headers, **exc.headers}),
         )
@@ -40,7 +42,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             fail(
                 spec.code,
-                message=spec.default_message,
+                message=resolve_message(spec.code),
                 details={"errors": exc.errors()},
             ),
             status_code=_status_code(request, spec.default_http_status),
@@ -51,7 +53,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
         spec = get_error_code("SYSTEM_ERROR")
         return JSONResponse(
-            fail(spec.code, message=spec.default_message),
+            fail(spec.code, message=resolve_message(spec.code)),
             status_code=_status_code(request, spec.default_http_status),
             headers=_headers(request, spec.code),
         )
