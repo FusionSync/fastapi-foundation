@@ -74,3 +74,14 @@ manual
 - 错过触发策略必须显式声明：`skip`、`run_once` 或 `catch_up_limited`。
 - 周期任务提交必须绑定幂等键，例如 `schedule_id + planned_at`。
 - scheduler 只提交任务或写 outbox，不直接执行业务逻辑。
+
+## 当前实现
+
+第一版先提供 `ScheduleRegistry`：
+
+- 从 `AppModule.schedules` 收集 schedule definition。
+- schedule_id 全局唯一。
+- 每个 schedule 的 task_type 必须能在 `TaskRegistry` 中找到。
+- registry 只负责定义校验，不执行具体调度。
+
+后续 APScheduler 或 Celery Beat provider 必须读取 `ScheduleRegistry`，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。
