@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、脱敏诊断和启动期安全检查已落地。
+- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查和 local/private/cloud profile 模板输出已落地。
 - Next:
   - [ ] 增加配置 diff/drift 检查。
-  - [ ] 为 local/private/cloud 输出可验证的部署配置模板。
+  - [ ] 将 profile 模板接入真实部署产物生成和配置漂移校验。
 
 ## 职责
 
@@ -76,6 +76,17 @@ cloud
 - `private` 和 `cloud` profile 必须通过 `core check-config --profile <name> --json` 校验后才能启动。
 - secret provider 第一版至少支持 env/Kubernetes Secret/Vault-like adapter 的接口，具体实现可分阶段。
 - 诊断输出必须脱敏 URL password、token、secret、private key。
+
+## Profile Template
+
+`core config template --profile <local|private|cloud> --json` 输出可验证的部署配置模板：
+
+- `env` 给出该 profile 的环境变量键和值或占位符。
+- `processes` 给出 `server`、`worker`、`scheduler`、`outbox-dispatcher`、`migrate` 的启动命令、replica 建议和运行备注。
+- `validation_commands` 给出发布脚本可直接执行的检查命令，包括 `check-config`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
+
+模板中的生产密钥通过 `SECURITY__JWT_SECRET_REF` 引用外部 secret，不输出 `SECURITY__JWT_SECRET` 明文。private/cloud 模板默认使用 PostgreSQL URL 占位符和标准 HTTP status mode。
+`check-config` 会接受生产 profile 的外部 secret reference，但启动期 `create_app()` 仍必须通过 secret provider 解析到真实密钥后才能通过 `validate_startup_settings()`。
 
 ## Secret Provider
 

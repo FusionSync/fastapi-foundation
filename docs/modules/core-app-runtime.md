@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes 和 `serve --run` 启动计划。
+- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes、`serve --run` 启动计划和 profile 进程模板。
 - Next:
-  - [ ] 将 server/worker/scheduler/outbox-dispatcher/migrate 启动参数沉淀为 profile 模板。
   - [ ] 为 app lifecycle startup/shutdown hook 定义注册和失败策略。
+  - [ ] 将 profile 进程模板接入部署产物生成和运行时配置校验。
 
 ## 职责
 
@@ -70,6 +70,7 @@ app = create_app(settings, request_security_pipeline=pipeline)
 ```
 
 `core serve --run --dry-run` 会走同一个 `create_app()` 装配路径，输出启动计划、route_count 和 server `ProcessHealth`；去掉 `--dry-run` 后由 CLI 使用同一配置启动 Uvicorn。
+`core config template --profile <profile> --json` 为 `server`、`worker`、`scheduler`、`outbox-dispatcher` 和 `migrate` 输出统一启动命令、replica 建议和验证命令，后续 profile 部署产物必须从这个矩阵派生。
 
 ## 稳定性要求
 

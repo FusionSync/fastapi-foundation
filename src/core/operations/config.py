@@ -26,12 +26,23 @@ def check_config(profile: DeploymentMode, settings: Settings | None = None) -> C
     resolved_settings = settings or Settings(app={"env": profile})
     errors: list[str] = []
     warnings: list[str] = []
-    try:
-        validate_startup_settings(resolved_settings)
-    except ValueError as exc:
-        errors.append(str(exc))
+    errors.extend(_startup_setting_errors(resolved_settings))
     if profile in {"private", "cloud"} and resolved_settings.database.url.startswith("sqlite"):
         errors.append(f"{profile} profile requires PostgreSQL database URL")
     if profile == "cloud" and not resolved_settings.security.cors_origins:
         warnings.append("cloud profile should declare explicit CORS origins")
     return ConfigCheckResult(ok=not errors, profile=profile, errors=errors, warnings=warnings)
+
+
+def _startup_setting_errors(settings: Settings) -> list[str]:
+    try:
+        validate_startup_settings(settings)
+    except ValueError as exc:
+        message = str(exc)
+        if (
+            message == "Production-like profiles require SECURITY__JWT_SECRET to be changed"
+            and settings.security.jwt_secret_ref
+        ):
+            return []
+        return [message]
+    return []
