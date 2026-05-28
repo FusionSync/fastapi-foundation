@@ -78,6 +78,7 @@ module = AppModule(
             read_only=True,
         )
     ],
+    auth_session_store=None,
     public_api=[],
 )
 ```
@@ -96,6 +97,8 @@ module = AppModule(
 
 这样 app contract check 可以在启动前发现拼写错误、空 handler path 和不合法版本。
 后台相关 spec 还会校验 `/admin` 路由边界、平台级权限边界和重复注册风险。
+
+`auth_session_store` 是少数由 app 向 core runtime 暴露的装配钩子，值必须是可导入 callable 路径，例如 `platform_apps.accounts.public_api.AccountsAuthSessionStore`。同一运行时只能安装一个声明该字段的 app。
 
 ## 依赖方向
 
@@ -136,5 +139,6 @@ apps.foo -> platform_apps.tenants.models
 - 每个 app router 必须通过 `core.base.create_router()` 创建；匿名公开接口必须显式声明 `public=True`。
 - 每个进入 OpenAPI 的 JSON route 必须声明 `response_model=Envelope[ReadSchema]` 或 `response_model=ListEnvelope[ReadSchema]`。
 - 每个 app 的 migrations、tasks、events、schedules 必须通过 `AppModule` 注册。
+- 提供账号会话事实的 app 必须通过 `auth_session_store` 声明 `AuthSessionStore` factory，不允许在 core app factory 中硬编码具体账号 app。
 - app contract check 必须拒绝循环依赖、非法导入和缺失标准文件。
 - app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

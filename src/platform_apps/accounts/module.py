@@ -9,5 +9,6 @@ module = AppModule(
     models=["platform_apps.accounts.models"],
     migrations=MigrationSpec(path="platform_apps.accounts.migrations"),
     permissions=PERMISSIONS,
+    auth_session_store="platform_apps.accounts.public_api.AccountsAuthSessionStore",
     public_api=["platform_apps.accounts.public_api"],
 )

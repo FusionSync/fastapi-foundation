@@ -22,10 +22,11 @@ src/core/app/
 - 注册每个 app 的 routers。
 - 按 `AppModule.models` 导入 ORM model modules，保证 SQLAlchemy metadata 和后续迁移治理能看到 app 表。
 - 基于同一个 `AppRegistry` 装配 permission、migration、event、task、schedule 和 admin registries，并挂到 `app.state`。
-- 构建 SQLAlchemy async engine/session factory 并绑定生命周期。
+- 构建 SQLAlchemy async engine/session factory，挂到 `app.state.database_engine` / `app.state.session_factory`，并在 lifespan shutdown 时释放 engine。
 - 注册全局异常处理器。
 - 注册请求 ID、日志、CORS、租户上下文等中间件。
-- 可通过 `request_security_pipeline` 挂载 HTTP 请求安全流水线，把 Bearer token、session/user fact、tenant resolver 和 route permissions 接入 route dependency。
+- 如果已安装 app 在 `AppModule.auth_session_store` 声明会话事实适配器，`create_app()` 会自动基于 `settings.database.url` 和 `settings.security.jwt_secret` 挂载 HTTP 请求安全流水线。
+- 仍可通过 `request_security_pipeline` 显式覆盖默认请求安全流水线。
 - 暴露健康检查和版本信息。
 - `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
 
@@ -44,7 +45,17 @@ from core.config.settings import settings
 app = create_app(settings)
 ```
 
-接入数据库请求安全流水线时，组合方提供 session factory、JWT provider 和账号 session store：
+安装了声明 `auth_session_store` 的账号 app 时，请求安全流水线会自动启用：
+
+```python
+app = create_app(
+    Settings(
+        installed_apps=["platform_apps.accounts.module"],
+    )
+)
+```
+
+需要替换认证 provider 或会话事实来源时，组合方可以显式提供 pipeline 覆盖默认装配：
 
 ```python
 app = create_app(settings, request_security_pipeline=pipeline)

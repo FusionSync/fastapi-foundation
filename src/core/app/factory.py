@@ -1,14 +1,19 @@
 import importlib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.admin import AdminRegistry
 from core.apps import AppRegistry
 from core.apps.conformance import AppCheckResult, check_apps
-from core.auth.request_security import DatabaseRequestSecurityPipeline
+from core.auth.jwt_provider import LocalJwtConfig, LocalJwtProvider
+from core.auth.request_security import DatabaseRequestSecurityPipeline, SessionStoreFactory
 from core.config import Settings, get_settings, validate_startup_settings
 from core.context import RequestContextMiddleware
+from core.db import DatabaseRuntime, create_database_runtime
 from core.events import EventRegistry
 from core.exceptions import register_exception_handlers
 from core.migrations import MigrationRegistry
@@ -38,21 +43,42 @@ def create_app(
     resolved_settings = resolve_settings_secrets(settings or get_settings(), secret_provider)
     validate_startup_settings(resolved_settings)
 
-    app = FastAPI(title=resolved_settings.app.name, version=resolved_settings.app.version)
+    database_runtime = create_database_runtime(resolved_settings)
+    app = FastAPI(
+        title=resolved_settings.app.name,
+        version=resolved_settings.app.version,
+        lifespan=_database_lifespan(database_runtime),
+    )
     app.state.settings = resolved_settings
+    app.state.database_engine = database_runtime.engine
+    app.state.session_factory = database_runtime.session_factory
     app.state.metrics_registry = MetricsRegistry()
     app.state.readiness_database_probe = DatabaseReadinessProbe(resolved_settings.database.url)
-    if request_security_pipeline is not None:
-        app.state.request_security_resolver = request_security_pipeline.resolve
-        app.state.route_authorizer = request_security_pipeline.authorize
 
     _register_security_middleware(app, resolved_settings)
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(HttpMetricsMiddleware)
     register_exception_handlers(app)
     _register_system_routes(app, resolved_settings)
-    _register_app_modules(app, resolved_settings)
+    registry = _register_app_modules(app, resolved_settings)
+    _configure_request_security(
+        app,
+        settings=resolved_settings,
+        registry=registry,
+        request_security_pipeline=request_security_pipeline,
+    )
     return app
+
+
+def _database_lifespan(database_runtime: DatabaseRuntime):
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            await database_runtime.dispose()
+
+    return lifespan
 
 
 def _register_security_middleware(app: FastAPI, settings: Settings) -> None:
@@ -115,7 +141,7 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
         )
 
 
-def _register_app_modules(app: FastAPI, settings: Settings) -> None:
+def _register_app_modules(app: FastAPI, settings: Settings) -> AppRegistry:
     _validate_installed_apps(settings.installed_apps)
     registry = AppRegistry(settings.installed_apps).load()
     imported_models = _import_app_models(registry)
@@ -124,6 +150,66 @@ def _register_app_modules(app: FastAPI, settings: Settings) -> None:
     _assemble_app_runtime_registries(app, registry)
     for router in registry.routers:
         app.include_router(router, prefix=settings.api.prefix)
+    return registry
+
+
+def _configure_request_security(
+    app: FastAPI,
+    *,
+    settings: Settings,
+    registry: AppRegistry,
+    request_security_pipeline: DatabaseRequestSecurityPipeline | None,
+) -> None:
+    pipeline = request_security_pipeline or _build_declared_request_security_pipeline(
+        settings=settings,
+        registry=registry,
+        session_factory=app.state.session_factory,
+    )
+    if pipeline is None:
+        return
+    app.state.request_security_pipeline = pipeline
+    app.state.request_security_resolver = pipeline.resolve
+    app.state.route_authorizer = pipeline.authorize
+
+
+def _build_declared_request_security_pipeline(
+    *,
+    settings: Settings,
+    registry: AppRegistry,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> DatabaseRequestSecurityPipeline | None:
+    session_store_factory = _declared_auth_session_store_factory(registry)
+    if session_store_factory is None:
+        return None
+    return DatabaseRequestSecurityPipeline(
+        session_factory=session_factory,
+        jwt_provider=LocalJwtProvider(LocalJwtConfig(secret=settings.security.jwt_secret)),
+        session_store_factory=session_store_factory,
+    )
+
+
+def _declared_auth_session_store_factory(registry: AppRegistry) -> SessionStoreFactory | None:
+    paths = [
+        module.auth_session_store
+        for module in registry.modules
+        if module.auth_session_store is not None
+    ]
+    if not paths:
+        return None
+    if len(paths) > 1:
+        raise ValueError("Only one app can declare auth_session_store")
+    return _load_session_store_factory(paths[0])
+
+
+def _load_session_store_factory(path: str) -> SessionStoreFactory:
+    module_path, separator, attribute_name = path.rpartition(".")
+    if not separator or not module_path or not attribute_name:
+        raise ValueError(f"Invalid auth_session_store path: {path!r}")
+    module = importlib.import_module(module_path)
+    factory = getattr(module, attribute_name)
+    if not callable(factory):
+        raise TypeError(f"auth_session_store {path!r} must be callable")
+    return factory
 
 
 def _validate_installed_apps(installed_apps: list[str]) -> None:

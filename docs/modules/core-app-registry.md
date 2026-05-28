@@ -27,6 +27,7 @@ permissions
 event_handlers
 task_handlers
 schedules
+auth_session_store
 public_api
 admin_models
 admin_routes
@@ -48,6 +49,7 @@ admin_permissions
 - `event_handlers`：事件 handler 列表。
 - `task_handlers`：任务 handler 列表。
 - `schedules`：调度定义列表。
+- `auth_session_store`：可选的 `AuthSessionStore` factory 导入路径，用于 server runtime 自动装配请求安全流水线。
 - `public_api`：允许其他 app 调用的公开 service/interface。
 - `admin_models`：后台模型视图声明。
 - `admin_routes`：后台专用路由声明。
@@ -67,6 +69,7 @@ admin_permissions
   -> 收集 migrations 和依赖
   -> 收集 permissions
   -> 收集 event/task handlers/schedules
+  -> 收集 auth session store 声明
   -> 收集 admin metadata
 ```
 
@@ -87,6 +90,7 @@ apps.example_domain.module
 - `registry.modules` 必须按 dependency-first 顺序输出，不依赖 settings 中的人工排列。
 - 迁移、权限、事件、任务和调度注册应复用这个顺序，避免各模块重复实现依赖治理。
 - `create_app()` 必须把 `PermissionRegistry`、`MigrationRegistry`、`EventRegistry`、`TaskRegistry`、`ScheduleRegistry` 和 `AdminRegistry` 从同一个 `AppRegistry` 装配到 `app.state`。
+- 同一运行时只能有一个 app 声明 `auth_session_store`；如需替换认证事实来源，使用新的账号 app 或显式传入 `request_security_pipeline`。
 
 ## 设计要求
 

@@ -60,6 +60,7 @@ class AppModule:
     event_handlers: list[EventHandlerSpec] = field(default_factory=list)
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
     schedules: list[ScheduleSpec] = field(default_factory=list)
+    auth_session_store: str | None = None
     public_api: list[str] = field(default_factory=list)
     admin_models: list[AdminModelSpec] = field(default_factory=list)
     admin_routes: list[AdminRouteSpec] = field(default_factory=list)
@@ -121,6 +122,10 @@ def validate_app_module(module: AppModule) -> AppModule:
     for public_api in module.public_api:
         if not isinstance(public_api, str) or not public_api:
             raise TypeError(f"App {module.label!r} public_api path must be a non-empty string")
+    if module.auth_session_store is not None and (
+        not isinstance(module.auth_session_store, str) or not module.auth_session_store
+    ):
+        raise TypeError(f"App {module.label!r} auth_session_store must be a non-empty string")
     for admin_model in module.admin_models:
         if not isinstance(admin_model, AdminModelSpec):
             raise TypeError(f"App {module.label!r} admin_model must be AdminModelSpec")

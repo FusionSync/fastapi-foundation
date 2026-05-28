@@ -165,6 +165,27 @@ def test_create_app_assembles_runtime_registries_and_imports_models(
     assert app.state.admin_registry.to_dict()["admin_permissions"] == []
 
 
+def test_create_app_exposes_database_runtime() -> None:
+    app = create_app(Settings(database={"url": "sqlite+aiosqlite:///:memory:"}))
+
+    assert app.state.database_engine is not None
+    assert app.state.session_factory is not None
+
+
+def test_create_app_auto_wires_declared_auth_session_store() -> None:
+    app = create_app(
+        Settings(
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            installed_apps=["platform_apps.accounts.module"],
+            security={"jwt_secret": "test-secret"},
+        )
+    )
+
+    assert app.state.request_security_pipeline is not None
+    assert app.state.request_security_resolver.__self__ is app.state.request_security_pipeline
+    assert app.state.route_authorizer.__self__ is app.state.request_security_pipeline
+
+
 def test_default_app_router_rejects_anonymous_request(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
