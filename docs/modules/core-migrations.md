@@ -191,7 +191,8 @@ core migrate drift-check
 - `MigrationRegistry.from_app_registry()` 从 `AppModule.migrations.path` 收集 `manifest.py` 中的 `MIGRATIONS`。
 - `plan_migrations()` 按 migration 依赖和 app dependency graph 输出顺序计划。
 - `run_preflight()` 校验 manifest、schema drift、destructive/backup readiness、high lock risk 和 forward-only warning。
+- `core migrate dry-run` 已输出 `MigrationApplyResult` 兼容结构：`applied=false`、`mode=metadata-dry-run`，并复用 preflight gate。
 - `core migrate apply` 已接入门禁：必须传 `--yes`，并在 apply 前运行 preflight；destructive 或 `requires_backup_restore` migration 必须额外传 `--backup-ready`。
 - 当前 `apply` 是 `metadata` mode，只输出通过门禁后的 migration apply plan，不直接调用 Alembic 执行数据库变更。
 
-后续接真实 Alembic runner 时，必须复用同一个 `MigrationApplyResult` 输出结构和 preflight gate，不能绕过 manifest 治理。
+后续接真实 Alembic runner 时，必须复用同一个 `MigrationApplyResult` 输出结构和 preflight gate，不能绕过 manifest 治理；dry-run 只允许验证将执行的 revision，不允许改变数据库状态。

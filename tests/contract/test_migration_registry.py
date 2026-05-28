@@ -197,6 +197,32 @@ def test_migrate_apply_requires_yes(monkeypatch, capsys) -> None:
     }
 
 
+def test_migrate_dry_run_outputs_metadata_result_without_applying(monkeypatch, capsys) -> None:
+    _install_app(
+        monkeypatch,
+        "fake_alpha",
+        label="alpha",
+        manifests=[
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
+                phase="expand",
+                classification="reversible",
+            )
+        ],
+    )
+
+    exit_code = main(["migrate", "dry-run", "--installed-app", "fake_alpha", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["applied"] is False
+    assert payload["mode"] == "metadata-dry-run"
+    assert payload["migrations"][0]["alembic_revision"] == "alpha_0001_initial"
+
+
 def test_migrate_apply_runs_preflight_before_metadata_apply(monkeypatch, capsys) -> None:
     _install_app(
         monkeypatch,

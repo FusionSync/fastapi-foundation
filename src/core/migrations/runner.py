@@ -44,3 +44,25 @@ def apply_migration_metadata(
         errors=[],
         warnings=preflight.warnings,
     )
+
+
+def dry_run_migration_metadata(
+    preflight: PreflightResult,
+) -> MigrationApplyResult:
+    if not preflight.ok or preflight.plan is None:
+        return MigrationApplyResult(
+            ok=False,
+            applied=False,
+            mode="metadata-dry-run",
+            migrations=preflight.plan.migrations if preflight.plan else [],
+            errors=preflight.errors,
+            warnings=preflight.warnings,
+        )
+    return MigrationApplyResult(
+        ok=True,
+        applied=False,
+        mode="metadata-dry-run",
+        migrations=preflight.plan.migrations,
+        errors=[],
+        warnings=preflight.warnings,
+    )

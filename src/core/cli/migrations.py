@@ -9,6 +9,7 @@ from core.migrations import (
     MigrationRegistry,
     apply_migration_metadata,
     check_drift,
+    dry_run_migration_metadata,
     plan_migrations,
     run_preflight,
 )
@@ -21,7 +22,7 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
         command_parser = migrate_subparsers.add_parser(command)
         command_parser.add_argument("--installed-app", action="append", default=[])
         command_parser.add_argument("--json", action="store_true", dest="as_json")
-        if command == "preflight":
+        if command in {"preflight", "dry-run"}:
             command_parser.add_argument("--backup-ready", action="store_true")
         command_parser.set_defaults(handler=_handle_migrate)
 
@@ -68,11 +69,14 @@ def _handle_migrate(args: argparse.Namespace) -> int:
             "registry_errors": migration_registry.errors,
         }
     elif args.migrate_command == "dry-run":
-        plan = plan_migrations(migration_registry.manifests, app_registry=app_registry)
+        result = run_preflight(
+            migration_registry.manifests,
+            backup_ready=args.backup_ready,
+        )
+        dry_run_result = dry_run_migration_metadata(result)
         payload = {
-            **plan.to_dict(),
-            "ok": not migration_registry.errors and plan.ok,
-            "dry_run": True,
+            **dry_run_result.to_dict(),
+            "ok": not migration_registry.errors and dry_run_result.ok,
             "registry_errors": migration_registry.errors,
         }
     elif args.migrate_command == "status":
