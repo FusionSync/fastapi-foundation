@@ -13,7 +13,7 @@ Casbin policy 是投影
 PermissionSpec 是权限目录
 ```
 
-角色变更应先写 RoleGrant，再通过 Outbox 同步到 Casbin policy。TenantMember 不再保存角色字段，只表达用户是否属于某租户以及成员状态。
+角色授予应先写 RoleGrant，再通过 Outbox 同步到 Casbin policy。角色撤销应删除 RoleGrant 事实，并通过同一个 Outbox event 清理对应投影。TenantMember 不再保存角色字段，只表达用户是否属于某租户以及成员状态。
 
 ## PermissionSpec
 
@@ -139,8 +139,9 @@ AuthorizationService
   查询 ProjectedPolicy，并在拒绝时写 authorization.denied 审计
 
 RoleGrantService
-  写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
-  可注入 AuditService 写 role.granted 强一致审计
+  授予时写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
+  撤销时删除 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
+  可注入 AuditService 写 role.granted / role.revoked 强一致审计
 ```
 
 第一版的 `ProjectedPolicy` 是 Casbin policy 的可替换投影层。后续接入真实 Casbin adapter 时，事实源仍然是 `RoleGrant`，不能让业务代码直接写 Casbin policy。

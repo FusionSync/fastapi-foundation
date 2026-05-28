@@ -96,6 +96,59 @@ async def test_role_grant_audit_rolls_back_with_business_transaction(
 
 
 @pytest.mark.asyncio
+async def test_role_revoke_writes_strong_audit_with_outbox(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    event_registry = _tenant_event_registry()
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(_viewer_template())
+        grant = await RoleGrantService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+        ).grant_role(
+            tenant_id="tenant-a",
+            subject_type="user",
+            subject_id="user-1",
+            role_template_id="template-viewer",
+            actor_id="owner-1",
+            request_id="req-grant",
+        )
+        grant_id = grant.id
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await RoleGrantService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+            audit=AuditService(uow.session),
+        ).revoke_role(
+            grant_id=grant_id,
+            actor_id="owner-1",
+            request_id="req-revoke",
+            reason="user left tenant",
+        )
+
+    audit_logs = await _audit_logs(session_factory)
+    assert await _count(session_factory, RoleGrant) == 0
+    assert await _count(session_factory, OutboxEvent) == 2
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == "role.revoked"
+    assert audit_logs[0].tenant_id == "tenant-a"
+    assert audit_logs[0].actor_id == "owner-1"
+    assert audit_logs[0].resource_type == "role_grant"
+    assert audit_logs[0].resource_id == grant_id
+    assert audit_logs[0].reason == "user left tenant"
+    assert audit_logs[0].request_id == "req-revoke"
+    assert audit_logs[0].policy_version == 1
+    assert audit_logs[0].payload == {
+        "subject_type": "user",
+        "subject_id": "user-1",
+        "role_template_id": "template-viewer",
+    }
+
+
+@pytest.mark.asyncio
 async def test_disable_user_writes_security_audit_and_revokes_sessions(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

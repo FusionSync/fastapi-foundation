@@ -38,7 +38,8 @@ class PolicyProjector:
             )
         grant = await self.session.get(RoleGrant, grant_id)
         if grant is None:
-            raise AppError("NOT_FOUND", f"RoleGrant {grant_id!r} not found", status_code=404)
+            await self.remove_grant_projection(grant_id)
+            return
         role_template = await self.session.get(RoleTemplate, grant.role_template_id)
         if role_template is None:
             raise AppError(
@@ -62,6 +63,13 @@ class PolicyProjector:
         self.cache.invalidate()
         await self.session.flush()
         return rules
+
+    async def remove_grant_projection(self, grant_id: str) -> None:
+        await self.session.execute(
+            delete(ProjectedPolicy).where(ProjectedPolicy.role_grant_id == grant_id)
+        )
+        self.cache.invalidate()
+        await self.session.flush()
 
     async def reconcile(self, *, repair: bool = False) -> ReconciliationResult:
         grants = list((await self.session.execute(select(RoleGrant))).scalars().all())

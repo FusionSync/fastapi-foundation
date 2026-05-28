@@ -140,6 +140,7 @@ Rules:
 
 - Role grants are source-of-truth facts.
 - Policy projection is generated from role grants.
+- Revoking a role removes the RoleGrant fact and removes projected policies for that grant through the outbox projector path.
 - Tenant membership status and role grants are reconciled together when projecting policies.
 - Platform-scope grants may have no tenant_id; tenant-scope grants must have tenant_id.
 - Authorization decisions are made through the core authorization service, not by business apps querying projected policies directly.

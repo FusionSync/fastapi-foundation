@@ -80,6 +80,76 @@ async def test_role_grant_outbox_event_updates_projected_policy_and_cache(
 
 
 @pytest.mark.asyncio
+async def test_role_revoke_outbox_event_removes_projected_policy_and_cache(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    cache = PermissionCache()
+    dispatch_session: AsyncSession | None = None
+
+    async def handle_role_grant_changed(envelope: EventEnvelope) -> None:
+        assert dispatch_session is not None
+        await PolicyProjector(dispatch_session, cache=cache).handle_role_grant_changed(envelope)
+
+    event_registry = EventRegistry()
+    event_registry.register(ROLE_GRANT_CHANGED_EVENT, 1, handle_role_grant_changed)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(_viewer_template())
+        grant = await RoleGrantService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+        ).grant_role(
+            tenant_id="tenant-a",
+            subject_type="user",
+            subject_id="user-1",
+            role_template_id="template-viewer",
+            actor_id="owner-1",
+            request_id="req_grant",
+        )
+        grant_id = grant.id
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        dispatch_session = uow.session
+        await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=event_registry),
+            event_registry,
+            dispatcher_id="permission-projector",
+        ).dispatch_once()
+        dispatch_session = None
+
+    assert len(await _policies(session_factory)) == 1
+    assert cache.version == 1
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await RoleGrantService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+        ).revoke_role(
+            grant_id=grant_id,
+            actor_id="owner-1",
+            request_id="req_revoke",
+            reason="user left tenant",
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        dispatch_session = uow.session
+        await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=event_registry),
+            event_registry,
+            dispatcher_id="permission-projector",
+        ).dispatch_once()
+        dispatch_session = None
+
+    assert await _grant_count(session_factory) == 0
+    assert await _policies(session_factory) == []
+    assert cache.version == 2
+
+
+@pytest.mark.asyncio
 async def test_permission_reconciliation_detects_and_repairs_missing_policy(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -284,3 +354,9 @@ async def _first_outbox_event(session_factory: async_sessionmaker[AsyncSession])
         event = (await session.execute(select(OutboxEvent).limit(1))).scalars().one()
         session.expunge(event)
         return event
+
+
+async def _grant_count(session_factory: async_sessionmaker[AsyncSession]) -> int:
+    async with session_factory() as session:
+        result = await session.scalar(select(func.count()).select_from(RoleGrant))
+        return int(result or 0)
