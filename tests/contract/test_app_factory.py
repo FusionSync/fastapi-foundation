@@ -64,6 +64,24 @@ def test_ready_endpoint_returns_503_when_dependency_probe_fails() -> None:
     assert body["data"]["details"]["dependencies"]["database"]["error"] == "database down"
 
 
+def test_missing_route_uses_error_envelope() -> None:
+    app = create_app(Settings())
+    client = TestClient(app)
+
+    response = client.get("/missing")
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["code"] == "NOT_FOUND"
+    assert body["data"] is None
+    assert body["list"] is None
+    assert body["pagination"] is None
+    assert body["details"] == {"path": "/missing"}
+    assert body["request_id"].startswith("req_")
+    assert response.headers["X-App-Code"] == "NOT_FOUND"
+    assert response.headers["X-Request-ID"] == body["request_id"]
+
+
 def test_cloud_profile_rejects_always_200_mode() -> None:
     settings = Settings(
         app={"env": "cloud"},

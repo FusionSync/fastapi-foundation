@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.exceptions.base import AppError
 from core.exceptions.codes import get_error_code
@@ -49,6 +50,23 @@ def register_exception_handlers(app: FastAPI) -> None:
             headers=_headers(request, spec.code),
         )
 
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(
+        request: Request,
+        exc: StarletteHTTPException,
+    ) -> JSONResponse:
+        code = _http_exception_code(exc.status_code)
+        spec = get_error_code(code)
+        return JSONResponse(
+            fail(
+                spec.code,
+                message=resolve_message(spec.code),
+                details={"path": request.url.path},
+            ),
+            status_code=_status_code(request, exc.status_code or spec.default_http_status),
+            headers=_headers(request, spec.code, {**spec.headers, **(exc.headers or {})}),
+        )
+
     @app.exception_handler(Exception)
     async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
         spec = get_error_code("SYSTEM_ERROR")
@@ -57,3 +75,15 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=_status_code(request, spec.default_http_status),
             headers=_headers(request, spec.code),
         )
+
+
+def _http_exception_code(status_code: int) -> str:
+    if status_code == 401:
+        return "AUTH_INVALID_TOKEN"
+    if status_code == 403:
+        return "PERMISSION_DENIED"
+    if status_code == 404:
+        return "NOT_FOUND"
+    if status_code < 500:
+        return "VALIDATION_ERROR"
+    return "SYSTEM_ERROR"
