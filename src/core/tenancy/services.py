@@ -5,14 +5,16 @@ import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.outbox import OutboxRepository
+from core.tenancy.events import (
+    TENANT_ARCHIVED_EVENT,
+    TENANT_CREATED_EVENT,
+    TENANT_DELETED_EVENT,
+    TENANT_DELETING_EVENT,
+    TENANT_SUSPENDED_EVENT,
+    publish_tenant_lifecycle_event,
+)
 from core.tenancy.lifecycle import SessionRevocationHook, TenantStatus, validate_tenant_transition
 from core.tenancy.models import Tenant, TenantMember
-
-TENANT_CREATED_EVENT = "tenant.created"
-TENANT_SUSPENDED_EVENT = "tenant.suspended"
-TENANT_DELETING_EVENT = "tenant.deleting"
-TENANT_ARCHIVED_EVENT = "tenant.archived"
-TENANT_DELETED_EVENT = "tenant.deleted"
 
 
 class TenantLifecycleService:
@@ -55,7 +57,8 @@ class TenantLifecycleService:
         )
         validate_tenant_transition("provisioning", "active")
         tenant.status = "active"
-        await self._add_lifecycle_event(
+        await publish_tenant_lifecycle_event(
+            self.outbox,
             TENANT_CREATED_EVENT,
             tenant=tenant,
             actor_id=actor_id,
@@ -145,35 +148,13 @@ class TenantLifecycleService:
         tenant.status = target
         if revoke_sessions:
             await self._revoke_sessions(tenant.id, reason)
-        await self._add_lifecycle_event(
+        await publish_tenant_lifecycle_event(
+            self.outbox,
             event_type,
             tenant=tenant,
             actor_id=actor_id,
             request_id=request_id,
             extra={"reason": reason},
-        )
-
-    async def _add_lifecycle_event(
-        self,
-        event_type: str,
-        *,
-        tenant: Tenant,
-        actor_id: str,
-        request_id: str,
-        extra: dict[str, str],
-    ) -> None:
-        await self.outbox.add(
-            event_type=event_type,
-            aggregate_type="tenant",
-            aggregate_id=tenant.id,
-            tenant_id=tenant.id,
-            payload={
-                "tenant_id": tenant.id,
-                "actor_id": actor_id,
-                "request_id": request_id,
-                "status": tenant.status,
-                **extra,
-            },
         )
 
     async def _revoke_sessions(self, tenant_id: str, reason: str) -> None:
