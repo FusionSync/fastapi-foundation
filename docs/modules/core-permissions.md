@@ -58,7 +58,7 @@ decision = await AuthorizationService(session).authorize(
 - decision 的 resource/action 必须覆盖当前操作，例如 `manage` 或当前 mutation action。
 
 第一版已接入的强制门禁包括 role grant mutation、tenant lifecycle mutation、user disable 和 session revoke。仅传 `actor_id`、`request_id` 或裸布尔值都不能作为授权证明。
-router 层的 `RouteSecurityPolicy.permissions` 会强制调用 `app.state.route_authorizer`；如果 route 声明了权限但运行时没有挂载授权器，请求会被拒绝。
+router 层的 `RouteSecurityPolicy.permissions` 使用 `resource:action` 字符串格式。它会强制调用 `app.state.route_authorizer`；如果 route 声明了权限但运行时没有挂载授权器，请求会被拒绝。挂载 `DatabaseRequestSecurityPipeline` 后，route permission 会调用 `AuthorizationService.require()` 校验 `ProjectedPolicy`。
 
 当前实现提供 `AuthorizationService`：
 

@@ -77,6 +77,7 @@ token_version
 - 认证失败统一抛 `AUTH_INVALID_TOKEN`，并带 `WWW-Authenticate: Bearer`。
 - `LocalJwtProvider` 提供本地 HS256 JWT 签发和校验，校验签名、issuer、audience 和过期时间，并把 `session_id`、`token_version`、`tenant_id` 转换为统一 `TokenClaims`。
 - `platform_apps.accounts.AccountsAuthSessionStore` 是当前 SQLAlchemy 适配器，读取 `UserSession` 和 `User`。
+- `DatabaseRequestSecurityPipeline` 串联 HTTP Bearer token、`AuthSessionValidator`、`DatabaseTenantContextResolver` 和 route permission authorization，可通过 `create_app(..., request_security_pipeline=...)` 挂到 FastAPI 请求链路。
 
 当前先由 `platform_apps.accounts` 落地会话事实：
 
@@ -95,6 +96,8 @@ LocalJwtProvider.verify_token()
 token.session_id 对应 UserSession.status == active
 token.token_version == User.token_version
 User.status == active
+DatabaseTenantContextResolver 校验 Tenant/TenantMember
+RouteSecurityPolicy.permissions 通过 AuthorizationService.require() 校验 ProjectedPolicy
 ```
 
 这样本地 JWT、后续 OIDC/Logto 或 Keycloak 适配都能复用同一套撤销事实。

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import CurrentUser as AuthenticatedUser
+from core.auth.schemas import CurrentUser as AuthenticatedUser
 from core.exceptions import AppError
 from core.tenancy.lifecycle import TenantOperation
 from core.tenancy.models import Tenant, TenantMember

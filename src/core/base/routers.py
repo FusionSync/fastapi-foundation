@@ -13,6 +13,7 @@ from core.exceptions import AppError
 
 CORE_ROUTE_SECURITY_POLICY_ATTR = "_core_route_security_policy"
 RouteAuthorizer = Callable[[RequestContext | None, "RouteSecurityPolicy"], object]
+RequestSecurityResolver = Callable[[Request, "RouteSecurityPolicy"], object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +127,11 @@ def _build_route_security_policy(
 
 def _route_security_dependency(policy: RouteSecurityPolicy):
     async def dependency(request: Request) -> None:
+        resolver = getattr(request.app.state, "request_security_resolver", None)
+        if resolver is not None and not policy.public:
+            resolved = resolver(request, policy)
+            if inspect.isawaitable(resolved):
+                await resolved
         await enforce_route_security(
             policy,
             authorizer=getattr(request.app.state, "route_authorizer", None),

@@ -25,6 +25,7 @@ src/core/app/
 - 构建 SQLAlchemy async engine/session factory 并绑定生命周期。
 - 注册全局异常处理器。
 - 注册请求 ID、日志、CORS、租户上下文等中间件。
+- 可通过 `request_security_pipeline` 挂载 HTTP 请求安全流水线，把 Bearer token、session/user fact、tenant resolver 和 route permissions 接入 route dependency。
 - 暴露健康检查和版本信息。
 - `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
 
@@ -41,6 +42,12 @@ from core.app.factory import create_app
 from core.config.settings import settings
 
 app = create_app(settings)
+```
+
+接入数据库请求安全流水线时，组合方提供 session factory、JWT provider 和账号 session store：
+
+```python
+app = create_app(settings, request_security_pipeline=pipeline)
 ```
 
 ## 稳定性要求

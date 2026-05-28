@@ -1,5 +1,6 @@
 from core.base.repositories import BaseRepository, CrossTenantRepository, TenantScopedRepository
 from core.base.routers import (
+    RequestSecurityResolver,
     RouteAuthorizer,
     RouteSecurityPolicy,
     create_router,
@@ -16,6 +17,7 @@ __all__ = [
     "CreateSchema",
     "ListQuerySchema",
     "ReadSchema",
+    "RequestSecurityResolver",
     "RouteSecurityPolicy",
     "RouteAuthorizer",
     "TenantScopedRepository",

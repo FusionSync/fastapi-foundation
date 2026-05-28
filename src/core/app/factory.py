@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.admin import AdminRegistry
 from core.apps import AppRegistry
 from core.apps.conformance import AppCheckResult, check_apps
+from core.auth import DatabaseRequestSecurityPipeline
 from core.config import Settings, get_settings, validate_startup_settings
 from core.context import RequestContextMiddleware
 from core.events import EventRegistry
@@ -32,6 +33,7 @@ def create_app(
     settings: Settings | None = None,
     *,
     secret_provider: SecretProvider | None = None,
+    request_security_pipeline: DatabaseRequestSecurityPipeline | None = None,
 ) -> FastAPI:
     resolved_settings = resolve_settings_secrets(settings or get_settings(), secret_provider)
     validate_startup_settings(resolved_settings)
@@ -40,6 +42,9 @@ def create_app(
     app.state.settings = resolved_settings
     app.state.metrics_registry = MetricsRegistry()
     app.state.readiness_database_probe = DatabaseReadinessProbe(resolved_settings.database.url)
+    if request_security_pipeline is not None:
+        app.state.request_security_resolver = request_security_pipeline.resolve
+        app.state.route_authorizer = request_security_pipeline.authorize
 
     _register_security_middleware(app, resolved_settings)
     app.add_middleware(RequestContextMiddleware)
