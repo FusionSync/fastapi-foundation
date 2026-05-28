@@ -103,6 +103,18 @@ def test_create_app_rejects_router_without_core_security_policy(
         create_app(Settings(installed_apps=["runtime_apps.raw_router.module"]))
 
 
+def test_create_app_rejects_route_returning_raw_dict(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "raw_response", raw_response=True)
+
+    with pytest.raises(ValueError, match="route handler must return core response envelope"):
+        create_app(Settings(installed_apps=["runtime_apps.raw_response.module"]))
+
+
 def test_create_app_assembles_runtime_registries_and_imports_models(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -145,6 +157,7 @@ def _write_runtime_app(
     *,
     declare_permissions: bool = True,
     use_raw_router: bool = False,
+    raw_response: bool = False,
 ) -> None:
     app_dir = root / "runtime_apps" / name
     migrations_dir = app_dir / "migrations"
@@ -157,7 +170,16 @@ def _write_runtime_app(
     )
     _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
     _write(app_dir / "services.py", "class RuntimeService:\n    pass\n")
-    if use_raw_router:
+    if raw_response:
+        _write(
+            app_dir / "router.py",
+            "from core.base import create_router\n\n"
+            "router = create_router('/runtime')\n\n"
+            "@router.get('/ping')\n"
+            "async def ping():\n"
+            "    return {'status': 'ok'}\n",
+        )
+    elif use_raw_router:
         _write(
             app_dir / "router.py",
             "from fastapi import APIRouter\n"

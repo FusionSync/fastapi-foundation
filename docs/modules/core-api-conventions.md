@@ -163,3 +163,5 @@ deprecated
 - 所有响应都应带 request_id。
 - 所有 router 返回值必须通过 core response helpers 包装。
 - 禁止业务 router 直接返回裸 dict、裸 list 或未封装 Pydantic schema。
+
+当前 app conformance 会在启动期扫描 app 的 `router.py`，发现 route handler 直接 `return {}` 或 `return []` 时拒绝装载。业务 JSON 返回必须使用 `ok()` 或 `ok_list()`；二进制下载等非 JSON 响应需要通过明确的 response class 处理。

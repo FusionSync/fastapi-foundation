@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib
 from dataclasses import dataclass, field
 from importlib import util
@@ -18,6 +19,7 @@ REQUIRED_APP_FILES = (
     "services.py",
     "permissions.py",
 )
+HTTP_ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
 
 @dataclass(slots=True)
@@ -72,6 +74,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
     _check_router_security(app_module, result)
+    _check_router_response_envelopes(package_dir, result)
     result.errors.extend(check_public_api_boundaries(package_dir, module_path, app_module))
     return result
 
@@ -123,6 +126,41 @@ def _check_router_security(app_module: AppModule, result: AppCheckResult) -> Non
             result.errors.append("non-public router must require authentication")
         if policy.tenant_required and not policy.auth_required:
             result.errors.append("tenant-scoped router cannot disable authentication")
+
+
+def _check_router_response_envelopes(package_dir: Path, result: AppCheckResult) -> None:
+    router_path = package_dir / "router.py"
+    if not router_path.is_file():
+        return
+    try:
+        tree = ast.parse(router_path.read_text(encoding="utf-8"), filename=str(router_path))
+    except SyntaxError as exc:
+        result.errors.append(f"router.py: syntax error: {exc}")
+        return
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        if not _is_route_handler(node):
+            continue
+        for return_node in ast.walk(node):
+            if isinstance(return_node, ast.Return) and isinstance(
+                return_node.value,
+                ast.Dict | ast.List,
+            ):
+                result.errors.append(
+                    f"router.py:{node.name} route handler must return core response "
+                    "envelope, not raw dict/list"
+                )
+
+
+def _is_route_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        func = decorator.func
+        if isinstance(func, ast.Attribute) and func.attr in HTTP_ROUTE_DECORATORS:
+            return True
+    return False
 
 
 def _load_checked_app_module(result: AppCheckResult) -> AppModule | None:
