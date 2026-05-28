@@ -125,6 +125,7 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
             app_registry=getattr(app.state, "app_registry", None),
             metrics_registry=getattr(app.state, "metrics_registry", None),
             dependency_results=dependency_results,
+            lifecycle_diagnostics=getattr(app.state, "lifecycle_diagnostics", None),
         )
         if not readiness.ok:
             response.status_code = 503

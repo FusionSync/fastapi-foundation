@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、security/rate-limit/metrics/context middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
+- Done: app factory 已串联 config、database runtime、security/rate-limit/metrics/context middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、lifecycle hook 结构化日志和启动诊断、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
 - Next:
-  - [ ] 将 lifecycle hook 执行结果接入结构化日志和启动诊断。
+  - [ ] 将 runtime registries 和 provider readiness 统一输出为启动诊断摘要。
 
 ## 职责
 
@@ -35,8 +35,9 @@ src/core/app/
 - 如果已安装 app 在 `AppModule.auth_session_store` 声明会话事实适配器，`create_app()` 会自动基于 `settings.database.url` 和 `settings.security.jwt_secret` 挂载 HTTP 请求安全流水线。
 - 仍可通过 `request_security_pipeline` 显式覆盖默认请求安全流水线。
 - 暴露健康检查和版本信息。
-- `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry diagnostics、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
+- `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry diagnostics、MetricsRegistry 和 lifecycle startup hook 检查明细；不 ready 时返回 HTTP 503。
 - `AppModule.lifecycle_hooks` 声明的 startup/shutdown hook 会挂入 FastAPI lifespan；startup 按 dependency-first app 顺序执行，shutdown 按反向顺序执行。
+- 每个 lifecycle hook 执行后会写入 `app.state.lifecycle_diagnostics`，并通过 `core.app.lifecycle` logger 输出结构化 `lifecycle_hook` 字段。`/readyz` 会检查 startup hook 是否全部成功，并在 `details.lifecycle_hooks` 中暴露 startup/shutdown hook 结果。
 
 ## 不负责
 
@@ -72,7 +73,7 @@ app = create_app(settings, request_security_pipeline=pipeline)
 `core serve --run --dry-run` 会走同一个 `create_app()` 装配路径，输出启动计划、route_count 和 server `ProcessHealth`；去掉 `--dry-run` 后由 CLI 使用同一配置启动 Uvicorn。
 `core config template --profile <profile> --json` 为 `server`、`worker`、`scheduler`、`outbox-dispatcher` 和 `migrate` 输出统一启动命令、replica 建议和验证命令，后续 profile 部署产物必须从这个矩阵派生。
 `core config artifacts --profile <profile> --target <docker-compose|systemd|helm-values> --json` 会把同一个进程矩阵渲染为部署产物内容；每个进程角色会写入自己的 `OBSERVABILITY__SERVICE_ROLE`。传入 `--actual KEY=VALUE` 时复用配置漂移检查，配合 `--role` 可校验单个运行时角色，产物与运行时配置不一致会返回非零 exit code。
-生命周期 hook handler 必须正好接受一个 `AppLifecycleContext` 参数。startup hook 失败会阻止 lifespan 启动并释放数据库 runtime；shutdown hook 在数据库释放前执行，失败会以 `RuntimeError` 暴露给运行时。
+生命周期 hook handler 必须正好接受一个 `AppLifecycleContext` 参数。startup hook 失败会阻止 lifespan 启动并释放数据库 runtime；shutdown hook 在数据库释放前执行，失败会以 `RuntimeError` 暴露给运行时。成功和失败都会保留结构化诊断记录，字段包括 `app_label`、`hook_id`、`phase`、`handler_path`、`status` 和可选 `error`。
 
 ## 稳定性要求
 

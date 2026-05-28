@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: metrics middleware、低基数字段、readiness、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
+- Done: metrics middleware、低基数字段、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入和 smoke 角色健康检查已落地。
 - Next:
   - [ ] 接结构化日志、trace propagation 和 audit/security 关键字段。
   - [ ] 输出 private/cloud 部署 profile 的监控面板和告警契约。
@@ -53,7 +53,8 @@ GET /version
 GET /metrics
 ```
 
-`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、数据库可连接性、AppRegistry 和 MetricsRegistry。`readyz` 不通过时必须返回 HTTP 503，避免平台探针把不可服务实例加入流量。
+`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、数据库可连接性、AppRegistry、MetricsRegistry 和 lifecycle startup hook 完成状态。`readyz` 不通过时必须返回 HTTP 503，避免平台探针把不可服务实例加入流量。
+`AppModule.lifecycle_hooks` 执行结果会通过 `core.app.lifecycle` logger 输出结构化 `lifecycle_hook` 字段，并进入 `/readyz` 的 `details.lifecycle_hooks`。
 worker、scheduler 和 outbox-dispatcher 也必须提供等价探针或 CLI health check。
 非 HTTP 角色通过 `process_heartbeats` 保存最近一次心跳事实；`core worker --run`、`core scheduler --run` 和 `core outbox-dispatcher --run` 传入 `--instance-id` 后会在每轮 loop 写入 heartbeat。健康检查读取最新
 `ProcessHeartbeatSnapshot` 后，按角色匹配、状态和 freshness 窗口判定是否可用。

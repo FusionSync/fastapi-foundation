@@ -74,12 +74,18 @@ def check_app_readiness(
     app_registry: AppRegistry | None,
     metrics_registry: MetricsRegistry | None,
     dependency_results: Mapping[str, DependencyProbeResult] | None = None,
+    lifecycle_diagnostics: Mapping[str, list[dict[str, str]]] | None = None,
 ) -> ReadinessResult:
+    startup_hooks_completed = _startup_hooks_completed(
+        app_registry=app_registry,
+        lifecycle_diagnostics=lifecycle_diagnostics,
+    )
     checks = {
         "config_loaded": settings is not None,
         "database_configured": bool(settings.database.url),
         "app_registry_loaded": app_registry is not None,
         "metrics_registry_loaded": metrics_registry is not None,
+        "lifecycle_startup_hooks_completed": startup_hooks_completed,
     }
     details = {
         "app_env": settings.app.env,
@@ -93,8 +99,41 @@ def check_app_readiness(
         if app_registry is not None
         else None,
         "dependencies": {},
+        "lifecycle_hooks": _lifecycle_diagnostics_payload(lifecycle_diagnostics),
     }
     for dependency_name, result in (dependency_results or {}).items():
         checks[f"{dependency_name}_reachable"] = result.ok
         details["dependencies"][dependency_name] = result.to_dict()
     return ReadinessResult(ok=all(checks.values()), checks=checks, details=details)
+
+
+def _startup_hooks_completed(
+    *,
+    app_registry: AppRegistry | None,
+    lifecycle_diagnostics: Mapping[str, list[dict[str, str]]] | None,
+) -> bool:
+    if app_registry is None:
+        return False
+    expected = [
+        (module.label, hook.hook_id)
+        for module in app_registry.modules
+        for hook in module.lifecycle_hooks
+        if hook.phase == "startup"
+    ]
+    if not expected:
+        return True
+    succeeded = {
+        (record.get("app_label", ""), record.get("hook_id", ""))
+        for record in (lifecycle_diagnostics or {}).get("startup", [])
+        if record.get("status") == "succeeded"
+    }
+    return all(hook_key in succeeded for hook_key in expected)
+
+
+def _lifecycle_diagnostics_payload(
+    lifecycle_diagnostics: Mapping[str, list[dict[str, str]]] | None,
+) -> dict[str, list[dict[str, str]]]:
+    return {
+        "startup": list((lifecycle_diagnostics or {}).get("startup", [])),
+        "shutdown": list((lifecycle_diagnostics or {}).get("shutdown", [])),
+    }

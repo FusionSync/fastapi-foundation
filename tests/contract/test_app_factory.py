@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 
@@ -46,6 +47,7 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
         "database_reachable": True,
         "app_registry_loaded": True,
         "metrics_registry_loaded": True,
+        "lifecycle_startup_hooks_completed": True,
     }
     assert body["data"]["details"]["installed_apps"] == ["example_domain"]
     assert body["data"]["details"]["app_registry"]["ok"] is True
@@ -53,6 +55,7 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
     assert body["data"]["details"]["app_registry"]["modules"][0]["module_path"] == (
         "apps.example_domain.module"
     )
+    assert body["data"]["details"]["lifecycle_hooks"] == {"startup": [], "shutdown": []}
     assert body["data"]["details"]["dependencies"]["database"]["ok"] is True
 
 
@@ -247,25 +250,65 @@ def test_default_app_router_rejects_anonymous_request(
     assert response.json()["code"] == "AUTH_INVALID_TOKEN"
 
 
-def test_create_app_runs_declared_lifecycle_hooks(
+def test_create_app_runs_declared_lifecycle_hooks_and_exposes_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     _purge_runtime_apps()
     monkeypatch.syspath_prepend(str(tmp_path))
     _write_runtime_app(tmp_path, "lifecycle_runtime", lifecycle_hooks=True)
-    app = create_app(Settings(installed_apps=["runtime_apps.lifecycle_runtime.module"]))
+    app = create_app(
+        Settings(
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            installed_apps=["runtime_apps.lifecycle_runtime.module"],
+        )
+    )
 
+    caplog.set_level(logging.INFO, logger="core.app.lifecycle")
     with TestClient(app) as client:
         response = client.get("/healthz")
+        ready_response = client.get("/readyz")
         from runtime_apps.lifecycle_runtime import lifecycle
 
         assert response.status_code == 200
+        assert ready_response.status_code == 200
         assert lifecycle.LOG == ["startup:lifecycle_runtime:startup"]
+        ready_body = ready_response.json()
+        assert ready_body["data"]["checks"]["lifecycle_startup_hooks_completed"] is True
+        assert ready_body["data"]["details"]["lifecycle_hooks"]["startup"] == [
+            {
+                "app_label": "lifecycle_runtime",
+                "hook_id": "startup",
+                "phase": "startup",
+                "handler_path": "runtime_apps.lifecycle_runtime.lifecycle.startup",
+                "status": "succeeded",
+            }
+        ]
 
     assert lifecycle.LOG == [
         "startup:lifecycle_runtime:startup",
         "shutdown:lifecycle_runtime:shutdown",
+    ]
+    assert [
+        record.lifecycle_hook
+        for record in caplog.records
+        if record.name == "core.app.lifecycle"
+    ] == [
+        {
+            "app_label": "lifecycle_runtime",
+            "hook_id": "startup",
+            "phase": "startup",
+            "handler_path": "runtime_apps.lifecycle_runtime.lifecycle.startup",
+            "status": "succeeded",
+        },
+        {
+            "app_label": "lifecycle_runtime",
+            "hook_id": "shutdown",
+            "phase": "shutdown",
+            "handler_path": "runtime_apps.lifecycle_runtime.lifecycle.shutdown",
+            "status": "succeeded",
+        },
     ]
 
 
@@ -289,6 +332,7 @@ def test_create_app_rejects_invalid_lifecycle_hook_signature(
 def test_lifespan_fails_when_startup_hook_raises(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     _purge_runtime_apps()
     monkeypatch.syspath_prepend(str(tmp_path))
@@ -300,9 +344,29 @@ def test_lifespan_fails_when_startup_hook_raises(
     )
     app = create_app(Settings(installed_apps=["runtime_apps.failing_lifecycle_runtime.module"]))
 
+    caplog.set_level(logging.INFO, logger="core.app.lifecycle")
     with pytest.raises(RuntimeError, match="startup lifecycle hook startup failed"):
         with TestClient(app):
             pass
+
+    assert app.state.lifecycle_diagnostics["startup"][0]["status"] == "failed"
+    assert app.state.lifecycle_diagnostics["startup"][0]["error"] == (
+        "RuntimeError: startup exploded"
+    )
+    assert [
+        record.lifecycle_hook
+        for record in caplog.records
+        if record.name == "core.app.lifecycle"
+    ] == [
+        {
+            "app_label": "failing_lifecycle_runtime",
+            "hook_id": "startup",
+            "phase": "startup",
+            "handler_path": "runtime_apps.failing_lifecycle_runtime.lifecycle.startup",
+            "status": "failed",
+            "error": "RuntimeError: startup exploded",
+        }
+    ]
 
 
 def _write_runtime_app(
