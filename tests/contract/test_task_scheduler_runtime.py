@@ -11,7 +11,9 @@ from core.apps import AppModule, AppRegistry, ScheduleSpec, TaskHandlerSpec
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.exceptions import AppError
+from core.locks import MemoryLockProvider
 from core.scheduler import (
+    LockedScheduleProvider,
     ManualScheduleProvider,
     ScheduleRegistry,
     ScheduleTriggerLog,
@@ -289,6 +291,126 @@ async def test_manual_schedule_provider_preserves_tenant_lifecycle_gate(
         )
 
     assert exc_info.value.code == "TENANT_STATE_FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_locked_schedule_provider_rejects_trigger_when_leader_lock_is_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        return {"task_id": envelope.task_id}
+
+    _install_handler_module(monkeypatch, refresh=refresh)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1"},
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    locks = MemoryLockProvider()
+    await locks.acquire(
+        "scheduler:trigger:example.refresh.daily:tenant-a:2026-05-28T01:00:00+00:00",
+        ttl_seconds=60,
+        owner_token="other-scheduler",
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await LockedScheduleProvider(
+            provider=ManualScheduleProvider(
+                schedule_registry=schedule_registry,
+                task_provider=SyncTaskProvider(task_registry),
+            ),
+            lock_provider=locks,
+        ).trigger(
+            ScheduleTriggerRequest(
+                schedule_id="example.refresh.daily",
+                tenant_id="tenant-a",
+                payload={},
+                request_id="req-1",
+                planned_at=datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
+            )
+        )
+
+    assert exc_info.value.code == "LOCK_NOT_ACQUIRED"
+    assert exc_info.value.details == {
+        "lock_key": "scheduler:trigger:example.refresh.daily:tenant-a:2026-05-28T01:00:00+00:00"
+    }
+
+
+@pytest.mark.asyncio
+async def test_locked_schedule_provider_releases_trigger_lock_after_submit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        return {"task_id": envelope.task_id}
+
+    _install_handler_module(monkeypatch, refresh=refresh)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1"},
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    locks = MemoryLockProvider()
+    planned_at = datetime(2026, 5, 28, 1, 0, tzinfo=UTC)
+    lock_key = "scheduler:trigger:example.refresh.daily:tenant-a:2026-05-28T01:00:00+00:00"
+
+    result = await LockedScheduleProvider(
+        provider=ManualScheduleProvider(
+            schedule_registry=schedule_registry,
+            task_provider=SyncTaskProvider(task_registry),
+        ),
+        lock_provider=locks,
+    ).trigger(
+        ScheduleTriggerRequest(
+            schedule_id="example.refresh.daily",
+            tenant_id="tenant-a",
+            payload={},
+            request_id="req-1",
+            planned_at=planned_at,
+        )
+    )
+
+    assert result.ok is True
+    assert result.metadata["lock_key"] == lock_key
+    assert result.metadata["fencing_token"] == 1
+    assert await locks.locked(lock_key) is False
 
 
 def test_task_registry_rejects_duplicate_task_types(monkeypatch: pytest.MonkeyPatch) -> None:

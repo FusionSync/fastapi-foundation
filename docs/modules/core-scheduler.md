@@ -84,8 +84,9 @@ manual
 - schedule_id 全局唯一。
 - 每个 schedule 的 task_type 必须能在 `TaskRegistry` 中找到。
 - `ManualScheduleProvider` 提供本地/运维触发入口，读取 `ScheduleRegistry`，构造带 `schedule_id + tenant_id + planned_at` 幂等键的 `TaskEnvelope`，再提交给 Tasks provider。
+- `LockedScheduleProvider` 可包装任意 scheduler provider，在触发前获取 `scheduler:trigger:{schedule_id}:{tenant_id}:{planned_at}` 锁，触发完成或失败后释放锁，避免同一实例集内重复触发同一 planned slot。
 - `ScheduleTriggerLog` 保存 `schedule_id`、`tenant_id`、`planned_at`、`triggered_at`、`task_id`、`task_type`、`status`、`request_id` 和错误信息。
 - `ScheduleTriggerRepository.record_result()` 使用 insert-first + 唯一约束记录触发历史；重复 trigger key 返回 `replayed`，不创建第二条历史。
 - scheduler provider 不直接调用业务函数，tenant lifecycle gate 仍由 task provider 执行。
 
-后续 APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。
+后续 APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。private/cloud 多实例部署时，`LockedScheduleProvider` 必须注入 Redis、数据库 advisory lock 或等价的分布式 `LockProvider`；内存 lock 只适合 local/profile 和测试。

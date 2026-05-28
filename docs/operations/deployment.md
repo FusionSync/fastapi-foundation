@@ -62,7 +62,7 @@ Ingress / reverse proxy / TLS
 
 - PostgreSQL 是生产数据源。
 - Redis 或等价组件用于 cache、locks、rate limit、coordination。
-- scheduler 必须通过 lock 或平台 leader election 避免重复触发。
+- scheduler 必须通过 `LockedScheduleProvider` 注入分布式 lock，或使用平台 leader election，避免重复触发同一 planned slot。
 - outbox-dispatcher 可以多副本，但必须使用 outbox 原子领取协议。
 
 ## Cloud Profile

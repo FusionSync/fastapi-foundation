@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from core.locks import LockProvider
 from core.scheduler.registry import ScheduleRegistry
 from core.scheduler.repository import ScheduleTriggerRepository
 from core.tasks import TaskEnvelope, TaskResult
@@ -18,6 +19,15 @@ class TaskSubmitter(Protocol):
         *,
         tenant_status: TenantStatus = "active",
     ) -> TaskResult: ...
+
+
+class ScheduleTriggerProvider(Protocol):
+    async def trigger(
+        self,
+        request: ScheduleTriggerRequest,
+        *,
+        tenant_status: TenantStatus = "active",
+    ) -> ScheduleTriggerResult: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +135,47 @@ class ManualScheduleProvider:
         )
 
 
+class LockedScheduleProvider:
+    def __init__(
+        self,
+        *,
+        provider: ScheduleTriggerProvider,
+        lock_provider: LockProvider,
+        lock_ttl_seconds: int = 60,
+    ) -> None:
+        self.provider = provider
+        self.lock_provider = lock_provider
+        self.lock_ttl_seconds = lock_ttl_seconds
+
+    async def trigger(
+        self,
+        request: ScheduleTriggerRequest,
+        *,
+        tenant_status: TenantStatus = "active",
+    ) -> ScheduleTriggerResult:
+        planned_at = _ensure_aware(request.planned_at or datetime.now(UTC))
+        resolved_request = replace(request, planned_at=planned_at)
+        lock_key = _lock_key(
+            schedule_id=request.schedule_id,
+            tenant_id=request.tenant_id,
+            planned_at=planned_at,
+        )
+        handle = await self.lock_provider.require_acquire(
+            lock_key,
+            ttl_seconds=self.lock_ttl_seconds,
+        )
+        try:
+            result = await self.provider.trigger(
+                resolved_request,
+                tenant_status=tenant_status,
+            )
+            result.metadata["lock_key"] = lock_key
+            result.metadata["fencing_token"] = handle.fencing_token
+            return result
+        finally:
+            await self.lock_provider.release(lock_key, owner_token=handle.owner_token)
+
+
 def _ensure_aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
@@ -138,3 +189,7 @@ def _idempotency_key(*, schedule_id: str, tenant_id: str, planned_at: datetime) 
 def _task_id(idempotency_key: str) -> str:
     digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:16]
     return f"schedule-{digest}"
+
+
+def _lock_key(*, schedule_id: str, tenant_id: str, planned_at: datetime) -> str:
+    return f"scheduler:trigger:{schedule_id}:{tenant_id}:{planned_at.isoformat()}"
