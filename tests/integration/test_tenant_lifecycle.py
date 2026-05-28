@@ -13,6 +13,7 @@ from core.tenancy import (
     TENANT_CREATED_EVENT,
     TENANT_DELETED_EVENT,
     TENANT_DELETING_EVENT,
+    TENANT_REACTIVATED_EVENT,
     TENANT_SUSPENDED_EVENT,
     Tenant,
     TenantLifecyclePolicy,
@@ -236,6 +237,7 @@ def _tenant_event_registry() -> EventRegistry:
     for event_type in (
         TENANT_CREATED_EVENT,
         TENANT_SUSPENDED_EVENT,
+        TENANT_REACTIVATED_EVENT,
         TENANT_DELETING_EVENT,
         TENANT_DELETED_EVENT,
     ):

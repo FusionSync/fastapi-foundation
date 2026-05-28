@@ -4,6 +4,7 @@ from core.tenancy.events import (
     TENANT_DELETED_EVENT,
     TENANT_DELETING_EVENT,
     TENANT_LIFECYCLE_EVENTS,
+    TENANT_REACTIVATED_EVENT,
     TENANT_SUSPENDED_EVENT,
     publish_tenant_lifecycle_event,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "TENANT_DELETED_EVENT",
     "TENANT_DELETING_EVENT",
     "TENANT_LIFECYCLE_EVENTS",
+    "TENANT_REACTIVATED_EVENT",
     "TENANT_SUSPENDED_EVENT",
     "TenantLifecyclePolicy",
     "TenantLifecycleService",

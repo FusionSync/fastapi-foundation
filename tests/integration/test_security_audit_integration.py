@@ -9,7 +9,7 @@ from core.db import unit_of_work
 from core.events import EventRegistry
 from core.outbox import OutboxEvent, OutboxRepository
 from core.permissions import RoleGrant, RoleGrantService, RoleTemplate
-from core.tenancy import Tenant, TenantLifecycleService
+from core.tenancy import TENANT_CREATED_EVENT, Tenant, TenantLifecycleService
 from platform_apps.accounts import AccountsService, User
 from platform_apps.audit import AuditLog, AuditService
 
@@ -236,8 +236,101 @@ async def test_tenant_suspend_writes_lifecycle_audit(
     }
 
 
+@pytest.mark.asyncio
+async def test_tenant_provision_writes_lifecycle_audit(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    event_registry = _tenant_event_registry()
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        tenant = await TenantLifecycleService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+            audit=AuditService(uow.session),
+        ).provision_tenant(
+            tenant_id="tenant-a",
+            name="Tenant A",
+            code="tenant-a",
+            owner_user_id="owner-1",
+            actor_id="owner-1",
+            request_id="req-provision",
+        )
+
+    audit_logs = await _audit_logs(session_factory)
+    assert tenant.status == "active"
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == TENANT_CREATED_EVENT
+    assert audit_logs[0].tenant_id == "tenant-a"
+    assert audit_logs[0].actor_id == "owner-1"
+    assert audit_logs[0].resource_type == "tenant"
+    assert audit_logs[0].resource_id == "tenant-a"
+    assert audit_logs[0].request_id == "req-provision"
+    assert audit_logs[0].payload == {
+        "from_status": "provisioning",
+        "to_status": "active",
+        "event_type": TENANT_CREATED_EVENT,
+        "revoke_sessions": False,
+        "owner_user_id": "owner-1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_tenant_reactivate_writes_lifecycle_audit_and_outbox_event(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    event_registry = _tenant_event_registry()
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(
+            Tenant(
+                id="tenant-a",
+                code="tenant-a",
+                name="Tenant A",
+                status="suspended",
+                deployment_mode="local",
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        tenant = await uow.session.get(Tenant, "tenant-a")
+        assert tenant is not None
+        await TenantLifecycleService(
+            uow.session,
+            OutboxRepository(uow.session, registry=event_registry),
+            audit=AuditService(uow.session),
+        ).reactivate_tenant(
+            tenant,
+            actor_id="admin-1",
+            request_id="req-reactivate",
+            reason="billing cleared",
+        )
+
+    audit_logs = await _audit_logs(session_factory)
+    outbox_events = await _outbox_events(session_factory)
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == "tenant.reactivated"
+    assert audit_logs[0].tenant_id == "tenant-a"
+    assert audit_logs[0].actor_id == "admin-1"
+    assert audit_logs[0].resource_type == "tenant"
+    assert audit_logs[0].resource_id == "tenant-a"
+    assert audit_logs[0].reason == "billing cleared"
+    assert audit_logs[0].request_id == "req-reactivate"
+    assert audit_logs[0].payload == {
+        "from_status": "suspended",
+        "to_status": "active",
+        "event_type": "tenant.reactivated",
+        "revoke_sessions": False,
+    }
+    assert [(event.event_type, event.payload["status"]) for event in outbox_events] == [
+        ("tenant.reactivated", "active")
+    ]
+
+
 def _tenant_event_registry() -> EventRegistry:
     registry = EventRegistry()
+    registry.register("tenant.created", 1, lambda event: None)
+    registry.register("tenant.reactivated", 1, lambda event: None)
     registry.register("permissions.role_grant_changed", 1, lambda event: None)
     registry.register("tenant.suspended", 1, lambda event: None)
     return registry
@@ -274,3 +367,14 @@ async def _count(session_factory: async_sessionmaker[AsyncSession], model: type[
     async with session_factory() as session:
         result = await session.scalar(select(func.count()).select_from(model))
         return int(result or 0)
+
+
+async def _outbox_events(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> list[OutboxEvent]:
+    async with session_factory() as session:
+        result = await session.execute(select(OutboxEvent).order_by(OutboxEvent.created_at))
+        events = list(result.scalars().all())
+        for event in events:
+            session.expunge(event)
+        return events

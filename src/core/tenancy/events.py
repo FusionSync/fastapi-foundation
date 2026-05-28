@@ -7,6 +7,7 @@ from core.tenancy.models import Tenant
 
 TENANT_CREATED_EVENT = "tenant.created"
 TENANT_SUSPENDED_EVENT = "tenant.suspended"
+TENANT_REACTIVATED_EVENT = "tenant.reactivated"
 TENANT_DELETING_EVENT = "tenant.deleting"
 TENANT_ARCHIVED_EVENT = "tenant.archived"
 TENANT_DELETED_EVENT = "tenant.deleted"
@@ -14,6 +15,7 @@ TENANT_DELETED_EVENT = "tenant.deleted"
 TENANT_LIFECYCLE_EVENTS = (
     TENANT_CREATED_EVENT,
     TENANT_SUSPENDED_EVENT,
+    TENANT_REACTIVATED_EVENT,
     TENANT_DELETING_EVENT,
     TENANT_ARCHIVED_EVENT,
     TENANT_DELETED_EVENT,

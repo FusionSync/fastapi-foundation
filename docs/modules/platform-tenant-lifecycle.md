@@ -22,10 +22,10 @@ provisioning
   正在初始化租户、默认角色、默认配置、存储目录。
 
 active
-  正常使用。
+  正常使用，可因运营或合规原因暂停。
 
 suspended
-  暂停服务，通常因为欠费、合规、管理员操作。
+  暂停服务，通常因为欠费、合规、管理员操作；问题解除后可恢复 active。
 
 deleting
   进入删除流程，冻结写入，等待异步清理。
@@ -97,8 +97,9 @@ TenantLifecyclePolicy / behavior matrix / transition validation
 TenantLifecycleService
   provision_tenant()
   suspend_tenant()
+  reactivate_tenant()
   begin_delete_tenant()
   finish_delete_tenant()
 ```
 
-暂停和删除流程会调用 session revocation hook，并写入租户生命周期 outbox event。`TenantLifecycleService` 可注入 `AuditService`，在同一事务写租户状态流转审计，记录 from/to 状态、事件类型和是否撤销 session。API 层、任务执行、文件下载和后台清理应统一调用 lifecycle gate，而不是各自判断 `status` 字段。
+创建、暂停、恢复、删除和归档流程都会写入租户生命周期 outbox event。暂停和删除流程会调用 session revocation hook。`TenantLifecycleService` 可注入 `AuditService`，在同一事务写租户状态流转审计，记录 from/to 状态、事件类型和是否撤销 session。API 层、任务执行、文件下载和后台清理应统一调用 lifecycle gate，而不是各自判断 `status` 字段。

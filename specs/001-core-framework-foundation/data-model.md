@@ -17,6 +17,7 @@ Fields:
 Rules:
 
 - Status follows the tenant lifecycle state machine.
+- Suspended tenants can be reactivated through an audited lifecycle transition.
 - Tenant deletion is asynchronous.
 - Tenant code must be globally unique.
 

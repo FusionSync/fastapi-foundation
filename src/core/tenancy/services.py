@@ -11,6 +11,7 @@ from core.tenancy.events import (
     TENANT_CREATED_EVENT,
     TENANT_DELETED_EVENT,
     TENANT_DELETING_EVENT,
+    TENANT_REACTIVATED_EVENT,
     TENANT_SUSPENDED_EVENT,
     publish_tenant_lifecycle_event,
 )
@@ -68,6 +69,23 @@ class TenantLifecycleService:
             request_id=request_id,
             extra={"owner_user_id": owner_user_id},
         )
+        if self.audit is not None:
+            await self.audit.record(
+                action=TENANT_CREATED_EVENT,
+                resource_type="tenant",
+                resource_id=tenant.id,
+                result="success",
+                tenant_id=tenant.id,
+                actor_id=actor_id,
+                request_id=request_id,
+                payload={
+                    "from_status": "provisioning",
+                    "to_status": "active",
+                    "event_type": TENANT_CREATED_EVENT,
+                    "revoke_sessions": False,
+                    "owner_user_id": owner_user_id,
+                },
+            )
         return tenant
 
     async def suspend_tenant(
@@ -89,9 +107,23 @@ class TenantLifecycleService:
         )
         return tenant
 
-    async def reactivate_tenant(self, tenant: Tenant) -> Tenant:
-        validate_tenant_transition(_status(tenant), "active")
-        tenant.status = "active"
+    async def reactivate_tenant(
+        self,
+        tenant: Tenant,
+        *,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> Tenant:
+        await self._transition(
+            tenant,
+            target="active",
+            event_type=TENANT_REACTIVATED_EVENT,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            revoke_sessions=False,
+        )
         return tenant
 
     async def begin_delete_tenant(
