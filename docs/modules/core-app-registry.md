@@ -58,11 +58,12 @@ admin_permissions
 
 ```text
 读取 settings.installed_apps
+  -> run app conformance checks
   -> import module path
   -> 获取 module 对象
   -> 校验 label 唯一
+  -> import ORM model modules
   -> 收集 routers
-  -> 收集 ORM models
   -> 收集 migrations 和依赖
   -> 收集 permissions
   -> 收集 event/task handlers/schedules
@@ -85,6 +86,7 @@ apps.example_domain.module
 - 依赖环必须启动前失败。
 - `registry.modules` 必须按 dependency-first 顺序输出，不依赖 settings 中的人工排列。
 - 迁移、权限、事件、任务和调度注册应复用这个顺序，避免各模块重复实现依赖治理。
+- `create_app()` 必须把 `PermissionRegistry`、`MigrationRegistry`、`EventRegistry`、`TaskRegistry`、`ScheduleRegistry` 和 `AdminRegistry` 从同一个 `AppRegistry` 装配到 `app.state`。
 
 ## 设计要求
 
@@ -94,3 +96,4 @@ apps.example_domain.module
 - 依赖关系必须在 module metadata 中显式声明。
 - 业务 app 只能导入其他 app 的 `public_api`，不能导入内部 models/repositories/services。
 - registry 必须提供 import lint 或 contract test，检查依赖图、循环依赖和非法跨 app 导入。
+- 启动期必须拒绝 conformance 失败的 app；`core check-app` 是人工诊断入口，不是唯一门禁。

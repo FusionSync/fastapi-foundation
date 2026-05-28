@@ -1,12 +1,20 @@
+import importlib
+
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.admin import AdminRegistry
 from core.apps import AppRegistry
+from core.apps.conformance import AppCheckResult, check_apps
 from core.config import Settings, get_settings, validate_startup_settings
 from core.context import RequestContextMiddleware
+from core.events import EventRegistry
 from core.exceptions import register_exception_handlers
+from core.migrations import MigrationRegistry
 from core.observability import HttpMetricsMiddleware, MetricsRegistry, render_metrics_contract
 from core.operations import check_app_readiness
+from core.permissions import PermissionRegistry
+from core.scheduler import ScheduleRegistry
 from core.security import (
     RequestBodySizeLimitMiddleware,
     SecretProvider,
@@ -15,6 +23,9 @@ from core.security import (
     resolve_settings_secrets,
 )
 from core.serialization import ok
+from core.tasks import TaskRegistry
+
+_IMPORTED_APP_MODEL_MODULES: set[str] = set()
 
 
 def create_app(
@@ -92,7 +103,59 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
 
 
 def _register_app_modules(app: FastAPI, settings: Settings) -> None:
+    _validate_installed_apps(settings.installed_apps)
     registry = AppRegistry(settings.installed_apps).load()
+    imported_models = _import_app_models(registry)
     app.state.app_registry = registry
+    app.state.app_model_modules = imported_models
+    _assemble_app_runtime_registries(app, registry)
     for router in registry.routers:
         app.include_router(router, prefix=settings.api.prefix)
+
+
+def _validate_installed_apps(installed_apps: list[str]) -> None:
+    results = check_apps(installed_apps)
+    failures = [result for result in results if not result.ok]
+    if not failures:
+        return
+    details = "; ".join(_format_app_check_failure(result) for result in failures)
+    raise ValueError(f"App conformance failed: {details}")
+
+
+def _format_app_check_failure(result: AppCheckResult) -> str:
+    return f"{result.module_path}: {', '.join(result.errors)}"
+
+
+def _import_app_models(registry: AppRegistry) -> list[str]:
+    imported: list[str] = []
+    for module in registry.modules:
+        for model_path in module.models:
+            if model_path not in _IMPORTED_APP_MODEL_MODULES:
+                importlib.import_module(model_path)
+                _IMPORTED_APP_MODEL_MODULES.add(model_path)
+            imported.append(model_path)
+    return imported
+
+
+def _assemble_app_runtime_registries(app: FastAPI, registry: AppRegistry) -> None:
+    admin_registry = AdminRegistry.from_app_registry(registry)
+    permission_registry = PermissionRegistry.from_app_registry(registry)
+    migration_registry = MigrationRegistry.from_app_registry(registry)
+    event_registry = EventRegistry.from_app_registry(registry)
+    task_registry = TaskRegistry.from_app_registry(registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        registry,
+        task_registry=task_registry,
+    )
+
+    if permission_registry.errors:
+        raise ValueError("; ".join(permission_registry.errors))
+    if migration_registry.errors:
+        raise ValueError("; ".join(migration_registry.errors))
+
+    app.state.admin_registry = admin_registry
+    app.state.permission_registry = permission_registry
+    app.state.migration_registry = migration_registry
+    app.state.event_registry = event_registry
+    app.state.task_registry = task_registry
+    app.state.schedule_registry = schedule_registry

@@ -18,8 +18,10 @@ src/core/app/
 ## 核心能力
 
 - `create_app(settings)` 创建 FastAPI 实例。
-- 从 `settings.installed_apps` 加载 app modules。
+- 从 `settings.installed_apps` 加载 app modules，并在启动期强制执行 app conformance check。
 - 注册每个 app 的 routers。
+- 按 `AppModule.models` 导入 ORM model modules，保证 SQLAlchemy metadata 和后续迁移治理能看到 app 表。
+- 基于同一个 `AppRegistry` 装配 permission、migration、event、task、schedule 和 admin registries，并挂到 `app.state`。
 - 构建 SQLAlchemy async engine/session factory 并绑定生命周期。
 - 注册全局异常处理器。
 - 注册请求 ID、日志、CORS、租户上下文等中间件。
@@ -44,5 +46,7 @@ app = create_app(settings)
 ## 稳定性要求
 
 - app 加载失败必须暴露清晰错误，包含 app path 和异常类型。
+- 非合规 app 必须启动失败，不能只依赖 CI 手动执行 `core check-app`。
+- `AppModule` 声明的非 router 资源必须在启动期集中装配，不能由业务 app 或各子系统分散注册。
 - 生产环境禁止自动建表。
 - 启动日志必须输出 env、版本、启用 app 列表、数据库类型和存储 provider。
