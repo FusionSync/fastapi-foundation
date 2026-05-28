@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、业务错误码 metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
+- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、业务错误码和 message catalog metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
 - Next: _none_
 
 ## 目标
@@ -33,6 +33,7 @@ src/apps/example_domain/
 from core.admin import AdminModelSpec, AdminPermissionSpec
 from core.apps.module import AppModule, EventHandlerSpec, LifecycleHookSpec, MigrationSpec, ScheduleSpec, TaskHandlerSpec
 from core.exceptions import ErrorCodeSpec
+from core.messages import MessageCatalog
 from core.permissions import PermissionSpec
 from .router import router
 
@@ -61,6 +62,13 @@ module = AppModule(
             owner_module="example_domain",
             details_schema={},
             deprecated=False,
+        )
+    ],
+    message_catalogs=[
+        MessageCatalog(
+            locale="en-US",
+            owner_module="example_domain",
+            messages={"EXAMPLE_NOT_READY": "Example is not ready"},
         )
     ],
     event_handlers=[
@@ -124,6 +132,7 @@ module = AppModule(
 - `ScheduleSpec(schedule_id, task_type, trigger, trigger_config, misfire_policy)`
 - `LifecycleHookSpec(hook_id, phase, handler_path)`
 - `ErrorCodeSpec(code, default_http_status, default_message, owner_module, details_schema, deprecated)`
+- `MessageCatalog(locale, owner_module, messages)`
 - `AdminModelSpec(admin_id, model_path, label, permissions, tenant_scoped, read_only)`
 - `AdminRouteSpec(route_id, path, handler_path, permissions, methods)`
 - `AdminDashboardWidgetSpec(widget_id, title, provider_path, permissions)`
@@ -135,6 +144,7 @@ app contract check 会导入 admin metadata 中声明的 `AdminModelSpec.model_p
 event/task handler 必须是可导入 callable，并且签名必须正好接受一个 envelope 参数；不符合运行时契约的 handler 会在 `check_app()` 或 app factory 启动检查中失败。
 lifecycle hook handler 必须是可导入 callable，并且签名必须正好接受一个 context 参数；startup hook 失败会阻止应用 lifespan 启动，shutdown hook 会在数据库 runtime 释放前按反向依赖顺序执行。
 业务错误码必须通过 `error_codes` 声明，不能在 service 中临时发明 code。`ErrorCodeSpec.owner_module` 必须等于 `AppModule.label`，并显式声明 `details_schema` 和 `deprecated`；多个 app 不能声明同一个错误码。通过 conformance 后，`AppRegistry.load()` 会把这些错误码注册到统一 exception registry。
+业务文案必须通过 `message_catalogs` 声明；`MessageCatalog.owner_module` 必须等于 `AppModule.label`，每个 message code 必须属于本 app 的 `error_codes`，不能为 deprecated code 注册新文案。通过 conformance 后，`AppRegistry.load()` 会在错误码注册后把这些 catalog 注册到统一 message registry。
 
 `auth_session_store` 是少数由 app 向 core runtime 暴露的装配钩子，值必须是可导入 callable 路径，例如 `platform_apps.accounts.public_api.AccountsAuthSessionStore`。同一运行时只能安装一个声明该字段的 app。
 `min_core_version` 和 `required_capabilities` 是启动前 gate：AppRegistry 会在依赖排序后拒绝 core 版本过低或 runtime capability 缺失的 app，并把失败原因写入 registry diagnostics。runtime capability 来自当前 Settings、部署 profile、进程 role 和已配置 provider，例如 `profile.cloud`、`provider.database.postgresql`、`provider.auth.external_secret` 或 `observability.metrics`。`provided_capabilities` 只表达 app 对外提供的能力标签，用于诊断和后续 capability 发现，不替代 dependencies。
@@ -188,6 +198,7 @@ apps.foo -> platform_apps.tenants.models
 - app contract check 必须拒绝不可导入、不可调用或签名不符合一个 envelope 参数契约的 event/task handler。
 - app contract check 必须拒绝不可导入、不可调用或签名不符合一个 context 参数契约的 lifecycle hook。
 - app contract check 必须拒绝缺失 metadata、owner 与 app label 不一致或跨 app 重复声明的业务错误码。
+- app contract check 必须拒绝 owner 与 app label 不一致、code 未在 `AppModule.error_codes` 声明或指向 deprecated code 的 message catalog。
 - app contract check 必须拒绝不可导入的 admin metadata dotted path，以及 app_label 不匹配、类型错误、重复 key 或 `MigrationManifest.validate()` 不通过的 migration metadata。
 - app contract check 必须扫描 `AppModule.models` 中的 `TenantScopedModel` 约束，拒绝全局唯一键等会破坏租户隔离的数据模型。
 - app contract check 必须扫描 `repository.py` / `repositories.py`，拒绝指向 tenant-scoped model 但未继承 `TenantScopedRepository` 或 `CrossTenantRepository` 的 repository。

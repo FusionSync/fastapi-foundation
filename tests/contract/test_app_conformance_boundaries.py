@@ -194,6 +194,93 @@ def test_check_app_rejects_error_code_owner_mismatch(isolated_apps: Path) -> Non
     )
 
 
+def test_check_app_accepts_declared_message_catalogs(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "[ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_READY', 409, 'example message ready', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            ")]"
+        ),
+        message_catalogs=(
+            "[MessageCatalog("
+            "locale='en-US', owner_module='example_domain', "
+            "messages={'EXAMPLE_MESSAGE_READY': 'Example message ready'}"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is True
+    assert result.errors == []
+
+
+def test_check_app_rejects_message_catalog_owner_mismatch(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "[ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_OWNER_MISMATCH', 409, 'owner mismatch', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            ")]"
+        ),
+        message_catalogs=(
+            "[MessageCatalog("
+            "locale='en-US', owner_module='other_domain', "
+            "messages={'EXAMPLE_MESSAGE_OWNER_MISMATCH': 'Wrong owner'}"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "message catalog en-US owner_module must match app label 'example_domain'"
+        in result.errors
+    )
+
+
+def test_check_app_rejects_message_catalog_for_unknown_or_deprecated_code(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "[ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_DEPRECATED', 410, 'deprecated', "
+            "owner_module='example_domain', details_schema={}, deprecated=True"
+            ")]"
+        ),
+        message_catalogs=(
+            "[MessageCatalog("
+            "locale='en-US', owner_module='example_domain', "
+            "messages={"
+            "'EXAMPLE_MESSAGE_UNKNOWN': 'Unknown', "
+            "'EXAMPLE_MESSAGE_DEPRECATED': 'Deprecated'"
+            "}"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "message catalog en-US code EXAMPLE_MESSAGE_UNKNOWN must be declared in "
+        "AppModule.error_codes"
+    ) in result.errors
+    assert (
+        "message catalog en-US code EXAMPLE_MESSAGE_DEPRECATED cannot target "
+        "deprecated error code"
+    ) in result.errors
+
+
 def test_check_app_rejects_undeclared_public_api_dependency(isolated_apps: Path) -> None:
     _write_app(isolated_apps, "other_domain")
     _write_app(
@@ -329,6 +416,7 @@ def _write_app(
     event_handler_body: str | None = None,
     task_handler_body: str | None = None,
     error_codes: str | None = None,
+    message_catalogs: str | None = None,
     tenant_model: bool = False,
     repository_body: str | None = None,
 ) -> None:
@@ -381,7 +469,13 @@ def _write_app(
     if task_handler_body is not None:
         app_module_imports.append("TaskHandlerSpec")
     error_code_import = "from core.exceptions import ErrorCodeSpec\n" if error_codes else ""
+    message_catalog_import = (
+        "from core.messages import MessageCatalog\n" if message_catalogs else ""
+    )
     error_codes_arg = f"    error_codes={error_codes},\n" if error_codes else ""
+    message_catalogs_arg = (
+        f"    message_catalogs={message_catalogs},\n" if message_catalogs else ""
+    )
     event_handlers = (
         "    event_handlers=[\n"
         "        EventHandlerSpec(\n"
@@ -407,6 +501,7 @@ def _write_app(
         app_dir / "module.py",
         f"from core.apps import {', '.join(app_module_imports)}\n"
         f"{error_code_import}"
+        f"{message_catalog_import}"
         f"from apps.{name}.permissions import PERMISSIONS\n"
         f"from apps.{name}.router import router\n\n"
         "module = AppModule(\n"
@@ -418,6 +513,7 @@ def _write_app(
         f"    migrations=MigrationSpec(path='apps.{name}.migrations'),\n"
         "    permissions=PERMISSIONS,\n"
         f"{error_codes_arg}"
+        f"{message_catalogs_arg}"
         f"{event_handlers}"
         f"{task_handlers}"
         f"    public_api=['apps.{name}.public_api'],\n"

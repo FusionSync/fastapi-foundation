@@ -9,7 +9,9 @@ from fastapi import APIRouter
 from core.apps.capabilities import DEFAULT_RUNTIME_CAPABILITIES
 from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
+from core.exceptions.base import AppError
 from core.exceptions.codes import register_error_codes, validate_error_code_spec
+from core.messages import register_message_catalogs
 
 CORE_FRAMEWORK_VERSION = "0.1.0"
 
@@ -166,6 +168,7 @@ class AppRegistry:
             raise ValueError("; ".join(gate_errors))
         try:
             self._register_app_error_codes(validation.ordered_modules)
+            self._register_app_message_catalogs(validation.ordered_modules)
         except ValueError as exc:
             self._set_diagnostics(
                 modules=diagnostics,
@@ -246,12 +249,21 @@ class AppRegistry:
                     f"{', '.join(missing_capabilities)}"
                 )
         errors.extend(_error_code_gate_errors(modules))
+        errors.extend(_message_catalog_gate_errors(modules))
         return errors
 
     def _register_app_error_codes(self, modules: list[AppModule]) -> None:
         specs = [spec for module in modules for spec in module.error_codes]
         if specs:
             register_error_codes(*specs)
+
+    def _register_app_message_catalogs(self, modules: list[AppModule]) -> None:
+        catalogs = [catalog for module in modules for catalog in module.message_catalogs]
+        if catalogs:
+            try:
+                register_message_catalogs(*catalogs)
+            except AppError as exc:
+                raise ValueError(str(exc)) from exc
 
 
 def _is_core_version_compatible(core_version: str, min_core_version: str | None) -> bool:
@@ -307,4 +319,37 @@ def _error_code_gate_errors(modules: list[AppModule]) -> list[str]:
                 f"App {label!r} duplicate app error code {code} declared by apps: "
                 f"{declared_by}"
             )
+    return errors
+
+
+def _message_catalog_gate_errors(modules: list[AppModule]) -> list[str]:
+    errors: list[str] = []
+    for module in modules:
+        specs_by_code = {spec.code: spec for spec in module.error_codes}
+        seen_by_locale: set[tuple[str, str]] = set()
+        for catalog in module.message_catalogs:
+            if catalog.owner_module != module.label:
+                errors.append(
+                    f"App {module.label!r} message catalog owner_module must match app label"
+                )
+            for code in catalog.messages:
+                locale_code = (catalog.locale, code)
+                if locale_code in seen_by_locale:
+                    errors.append(
+                        f"App {module.label!r} duplicate message catalog code {code} "
+                        f"in locale {catalog.locale}"
+                    )
+                seen_by_locale.add(locale_code)
+                spec = specs_by_code.get(code)
+                if spec is None:
+                    errors.append(
+                        f"App {module.label!r} message catalog {catalog.locale} code {code} "
+                        "must be declared in AppModule.error_codes"
+                    )
+                    continue
+                if spec.deprecated:
+                    errors.append(
+                        f"App {module.label!r} message catalog {catalog.locale} code {code} "
+                        "cannot target deprecated error code"
+                    )
     return errors

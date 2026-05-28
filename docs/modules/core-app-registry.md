@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、错误码声明注册、core version/capability gate、Settings 派生 runtime capability，以及 CLI/readiness 共用装载诊断已接入。
+- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、错误码和 message catalog 声明注册、core version/capability gate、Settings 派生 runtime capability，以及 CLI/readiness 共用装载诊断已接入。
 - Next: _none_
 
 ## 职责
@@ -34,6 +34,7 @@ models
 migrations
 permissions
 error_codes
+message_catalogs
 event_handlers
 task_handlers
 schedules
@@ -60,6 +61,7 @@ admin_permissions
 - `migrations`：迁移路径和依赖声明。
 - `permissions`：PermissionSpec 列表。
 - `error_codes`：业务错误码声明，启动期注册到统一 exception registry。
+- `message_catalogs`：业务文案 catalog，启动期注册到统一 message registry。
 - `event_handlers`：事件 handler 列表。
 - `task_handlers`：任务 handler 列表。
 - `schedules`：调度定义列表。
@@ -83,6 +85,7 @@ admin_permissions
   -> 收集 migrations 和依赖
   -> 收集 permissions
   -> 收集 error codes 并注册到 exception registry
+  -> 收集 message catalogs 并注册到 message registry
   -> 收集 event/task handlers/schedules
   -> 收集 auth session store 声明
   -> 收集 admin metadata
@@ -103,7 +106,7 @@ apps.example_domain.module
 - dependencies 必须能在已安装 app 中解析。
 - 依赖环必须启动前失败。
 - `registry.modules` 必须按 dependency-first 顺序输出，不依赖 settings 中的人工排列。
-- 迁移、权限、错误码、事件、任务和调度注册应复用这个顺序，避免各模块重复实现依赖治理。
+- 迁移、权限、错误码、message catalog、事件、任务和调度注册应复用这个顺序，避免各模块重复实现依赖治理。
 - AppRegistry 必须在依赖排序后执行 core version/capability gate；不兼容 app 不进入 runtime 装配。
 - AppRegistry 必须维护 `diagnostics`，包含 module path、label、version、load_order、runtime capabilities、缺失 capability 和错误列表，供 `list-apps` 与 `/readyz` 复用。
 - runtime capabilities 必须由当前 `Settings` 派生，而不是手写静态列表：基础框架能力包含 admin、events、lifecycle、migrations、outbox、permissions、scheduler、tasks 和 tenancy；profile/role 能力来自 `APP__ENV` 与 `OBSERVABILITY__SERVICE_ROLE`；provider 能力来自 `DATABASE__URL`、`SECURITY__JWT_SECRET` / `SECURITY__JWT_SECRET_REF` 和 `OBSERVABILITY__METRICS_ENABLED`。

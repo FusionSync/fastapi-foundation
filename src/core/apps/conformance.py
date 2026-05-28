@@ -85,6 +85,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
     _check_error_code_metadata(app_module, result)
+    _check_message_catalog_metadata(app_module, result)
     _check_admin_metadata(app_module, result)
     _check_background_handler_signatures(app_module, result)
     _check_lifecycle_hook_signatures(app_module, result)
@@ -217,6 +218,36 @@ def _check_duplicate_app_error_codes(
         error = f"duplicate app error code {code} declared by apps: {', '.join(labels)}"
         for result, _ in declared_by:
             result.errors.append(error)
+
+
+def _check_message_catalog_metadata(app_module: AppModule, result: AppCheckResult) -> None:
+    specs_by_code = {spec.code: spec for spec in app_module.error_codes}
+    seen_by_locale: set[tuple[str, str]] = set()
+    for catalog in app_module.message_catalogs:
+        if catalog.owner_module != app_module.label:
+            result.errors.append(
+                f"message catalog {catalog.locale} owner_module must match app label "
+                f"{app_module.label!r}"
+            )
+        for code in catalog.messages:
+            locale_code = (catalog.locale, code)
+            if locale_code in seen_by_locale:
+                result.errors.append(
+                    f"message catalog {catalog.locale} duplicate code {code}"
+                )
+            seen_by_locale.add(locale_code)
+            spec = specs_by_code.get(code)
+            if spec is None:
+                result.errors.append(
+                    f"message catalog {catalog.locale} code {code} must be declared in "
+                    "AppModule.error_codes"
+                )
+                continue
+            if spec.deprecated:
+                result.errors.append(
+                    f"message catalog {catalog.locale} code {code} cannot target "
+                    "deprecated error code"
+                )
 
 
 def _check_admin_metadata(app_module: AppModule, result: AppCheckResult) -> None:

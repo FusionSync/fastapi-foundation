@@ -170,7 +170,7 @@ deprecated
 
 同一个语义只能有一个稳定 code，禁止不同 app 重复定义语义相同的错误码。CI/contract test 必须校验 code 唯一性、HTTP status 映射和 OpenAPI envelope 一致性。
 
-错误响应的 `message` 由 `core.messages` 解析。业务可以显式传 message，但默认应只抛稳定 code 和 details，让 core 根据 locale/catalog 生成最终文案。`message` 不作为稳定接口契约，客户端逻辑必须依赖 `code`。
+错误响应的 `message` 由 `core.messages` 解析。业务可以显式传 message，但默认应只抛稳定 code 和 details，让 core 根据 locale/catalog 生成最终文案。业务 app 的 message catalog 必须通过 `AppModule.message_catalogs` 声明，并且只能覆盖本 app 已声明且未 deprecated 的错误码；locale 未精确命中时会先按语言前缀 fallback，再使用默认 catalog 或 `ErrorCodeSpec.default_message`。`message` 不作为稳定接口契约，客户端逻辑必须依赖 `code`。
 
 ## 设计要求
 

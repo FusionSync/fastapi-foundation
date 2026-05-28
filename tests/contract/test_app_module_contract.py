@@ -16,6 +16,7 @@ from core.apps import (
 from core.base import create_router
 from core.config import Settings
 from core.exceptions import AppError, ErrorCodeSpec, get_error_code
+from core.messages import MessageCatalog, resolve_message
 from core.permissions import PermissionSpec
 
 
@@ -350,6 +351,71 @@ def test_registry_rejects_duplicate_declared_error_codes(
 
     with pytest.raises(ValueError, match="duplicate app error code DEMO_SHARED_REGISTRY_ERROR"):
         AppRegistry(["fake_first_error_app", "fake_second_error_app"]).load()
+
+
+def test_registry_registers_declared_app_message_catalogs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = types.ModuleType("fake_app_with_message_catalogs")
+    fake.module = AppModule(
+        label="demo_messages",
+        version="0.1.0",
+        error_codes=[
+            ErrorCodeSpec(
+                "DEMO_MESSAGE_NOT_READY",
+                409,
+                "demo message default",
+                owner_module="demo_messages",
+                details_schema={},
+                deprecated=False,
+            )
+        ],
+        message_catalogs=[
+            MessageCatalog(
+                locale="en-US",
+                owner_module="demo_messages",
+                messages={"DEMO_MESSAGE_NOT_READY": "Demo message is not ready"},
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_with_message_catalogs", fake)
+
+    AppRegistry(["fake_app_with_message_catalogs"]).load()
+
+    assert resolve_message("DEMO_MESSAGE_NOT_READY", locale="en-GB") == (
+        "Demo message is not ready"
+    )
+
+
+def test_registry_rejects_message_catalog_owner_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = types.ModuleType("fake_app_with_wrong_message_owner")
+    fake.module = AppModule(
+        label="demo_messages",
+        version="0.1.0",
+        error_codes=[
+            ErrorCodeSpec(
+                "DEMO_MESSAGE_WRONG_OWNER",
+                409,
+                "demo message default",
+                owner_module="demo_messages",
+                details_schema={},
+                deprecated=False,
+            )
+        ],
+        message_catalogs=[
+            MessageCatalog(
+                locale="en-US",
+                owner_module="other_messages",
+                messages={"DEMO_MESSAGE_WRONG_OWNER": "Wrong owner"},
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_with_wrong_message_owner", fake)
+
+    with pytest.raises(ValueError, match="message catalog owner_module must match app label"):
+        AppRegistry(["fake_app_with_wrong_message_owner"]).load()
 
 
 def test_runtime_capabilities_are_derived_from_profile_and_providers() -> None:
