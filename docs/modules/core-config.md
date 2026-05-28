@@ -37,6 +37,9 @@ src/core/config/
 DATABASE__URL=postgres://user:pass@localhost:5432/service_core
 AUTH__PROVIDER=local_jwt
 AUTH__JWT_SECRET=change-me
+SECURITY__JWT_SECRET_REF=APP_JWT_SECRET
+SECURITY__TRUSTED_HOSTS='["api.example.com"]'
+SECURITY__CORS_ORIGINS='["https://console.example.com"]'
 STORAGE__PROVIDER=local
 STORAGE__LOCAL_ROOT=./data/files
 TASKS__PROVIDER=sync
@@ -65,3 +68,14 @@ cloud
 - `private` 和 `cloud` profile 必须通过 `core check-config --profile <name> --json` 校验后才能启动。
 - secret provider 第一版至少支持 env/Kubernetes Secret/Vault-like adapter 的接口，具体实现可分阶段。
 - 诊断输出必须脱敏 URL password、token、secret、private key。
+
+## Secret Provider
+
+`Settings.security.jwt_secret_ref` 可以声明外部密钥引用。`create_app(settings, secret_provider=...)` 会先调用 `resolve_settings_secrets()`，再执行启动校验。
+
+第一版提供：
+
+- `EnvSecretProvider`：从环境变量读取 secret。
+- `MappingSecretProvider`：用于测试、local profile 或上层系统注入。
+
+如果 `jwt_secret` 已显式配置为非默认值，secret provider 不覆盖它；如果仍是默认 `change-me` 且配置了 `jwt_secret_ref`，provider 必须能解析到 secret，否则启动失败。

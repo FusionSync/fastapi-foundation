@@ -22,8 +22,12 @@ class ApiSettings(BaseModel):
 
 class SecuritySettings(BaseModel):
     jwt_secret: str = "change-me"
+    jwt_secret_ref: str | None = None
     cors_origins: list[str] = Field(default_factory=list)
-    trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
+    trusted_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "testserver"]
+    )
+    max_request_body_bytes: int | None = 10 * 1024 * 1024
 
 
 class DatabaseSettings(BaseModel):

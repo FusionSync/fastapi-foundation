@@ -25,6 +25,8 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
         "当前租户状态不允许该操作",
     ),
     "UPLOAD_REJECTED": ErrorCodeSpec("UPLOAD_REJECTED", 400, "文件上传被拒绝"),
+    "HOST_NOT_ALLOWED": ErrorCodeSpec("HOST_NOT_ALLOWED", 400, "请求 Host 不被允许"),
+    "REQUEST_TOO_LARGE": ErrorCodeSpec("REQUEST_TOO_LARGE", 413, "请求体过大"),
     "PERMISSION_DENIED": ErrorCodeSpec("PERMISSION_DENIED", 403, "无权限访问该资源"),
     "NOT_FOUND": ErrorCodeSpec("NOT_FOUND", 404, "资源不存在"),
     "CONFLICT": ErrorCodeSpec("CONFLICT", 409, "资源冲突"),
