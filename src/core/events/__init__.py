@@ -1,3 +1,3 @@
-from core.events.registry import EventEnvelope, EventRegistry
+from core.events.registry import EventEnvelope, EventHandler, EventRegistry, RegisteredEventHandler
 
-__all__ = ["EventEnvelope", "EventRegistry"]
+__all__ = ["EventEnvelope", "EventHandler", "EventRegistry", "RegisteredEventHandler"]
