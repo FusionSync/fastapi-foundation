@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、operations/smoke 等命令骨架已接入。
+- Done: `check-app`、`list-apps`、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
 - Next:
-  - [ ] 统一 CLI exit code、JSON error envelope 和发布脚本契约。
   - [ ] 将非 dry-run server 启动参数沉淀为 profile 模板和进程管理示例。
+  - [ ] 为发布脚本补完整 checkpoint suite 和 profile 参数矩阵。
 
 ## 职责
 
@@ -63,6 +63,23 @@ migrate run
 `worker --run` 使用同一执行契约循环领取 pending `TaskRun`；`--max-iterations` 用于 CI/运维有限轮验证，不传则持续运行，空队列时按 `--idle-sleep-seconds` 休眠；传 `--instance-id` 时写入进程 heartbeat。
 `tasks failed retry` 必须传 `--yes`，并通过 `--installed-app` 或 settings 加载 AppModule 后执行已注册任务处理器。
 `smoke --profile <profile> --json` 必须输出 config 检查和所有运行角色的 `role_health` 明细，便于 CI/CD 在发布后判断 server、worker、scheduler、outbox-dispatcher、migrate 是否满足当前 profile 的运行门禁。
+
+失败命令在 `--json` 模式下必须输出稳定 envelope，便于发布脚本只解析 stdout：
+
+```json
+{
+  "ok": false,
+  "command": "tasks failed retry",
+  "exit_code": 1,
+  "error": {
+    "code": "CLI_CONFIRMATION_REQUIRED",
+    "message": "tasks failed retry requires --yes",
+    "details": {}
+  }
+}
+```
+
+参数解析错误返回 exit code `2` 和 `CLI_USAGE_ERROR`；缺少 `--yes` 等显式确认返回 exit code `1` 和 `CLI_CONFIRMATION_REQUIRED`；运行期异常返回 exit code `1` 和 `CLI_RUNTIME_ERROR`，`error.details.exception_type` 保留异常类型。
 
 ## 设计要求
 

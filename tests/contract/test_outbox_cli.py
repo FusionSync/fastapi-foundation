@@ -57,7 +57,13 @@ def test_outbox_dead_letter_replay_requires_yes(tmp_path: Path, capsys) -> None:
     assert exit_code == 1
     assert payload == {
         "ok": False,
-        "error": "outbox dead-letter replay requires --yes",
+        "command": "outbox dead-letter replay",
+        "exit_code": 1,
+        "error": {
+            "code": "CLI_CONFIRMATION_REQUIRED",
+            "message": "outbox dead-letter replay requires --yes",
+            "details": {},
+        },
     }
     assert asyncio.run(_event_status(database_url, event_id)) == "dead_letter"
 

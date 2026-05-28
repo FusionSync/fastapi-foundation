@@ -5,7 +5,14 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.cli.common import installed_apps, print_payload
+from core.cli.common import (
+    CLI_CONFIRMATION_REQUIRED,
+    CLI_RUNTIME_ERROR,
+    error_payload,
+    exception_error_payload,
+    installed_apps,
+    print_payload,
+)
 from core.config import get_settings
 from core.db import unit_of_work
 from core.outbox import (
@@ -59,10 +66,7 @@ def _handle_dispatch_once(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command="outbox dispatch-once"),
             as_json=args.as_json,
         )
         return 1
@@ -84,10 +88,12 @@ def _handle_dead_letter_list(args: argparse.Namespace) -> int:
 def _handle_dead_letter_replay(args: argparse.Namespace) -> int:
     if not args.yes:
         print_payload(
-            {
-                "ok": False,
-                "error": "outbox dead-letter replay requires --yes",
-            },
+            error_payload(
+                code=CLI_CONFIRMATION_REQUIRED,
+                message="outbox dead-letter replay requires --yes",
+                command="outbox dead-letter replay",
+                exit_code=1,
+            ),
             as_json=args.as_json,
         )
         return 1
@@ -134,7 +140,12 @@ async def _replay_dead_letter(*, database_url: str, event_id: str) -> dict[str, 
     try:
         async with unit_of_work(session_factory) as uow:
             if uow.session is None:
-                return {"ok": False, "error": "database session was not initialized"}
+                return error_payload(
+                    code=CLI_RUNTIME_ERROR,
+                    message="database session was not initialized",
+                    command="outbox dead-letter replay",
+                    exit_code=1,
+                )
             result = await replay_dead_letter_by_id(uow.session, event_id=event_id)
             return result.to_dict()
     finally:

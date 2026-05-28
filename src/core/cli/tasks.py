@@ -7,7 +7,14 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.apps import AppRegistry
-from core.cli.common import installed_apps, print_payload
+from core.cli.common import (
+    CLI_CONFIRMATION_REQUIRED,
+    CLI_RUNTIME_ERROR,
+    CLI_USAGE_ERROR,
+    error_payload,
+    installed_apps,
+    print_payload,
+)
 from core.config import get_settings
 from core.db import unit_of_work
 from core.exceptions import AppError
@@ -64,7 +71,12 @@ def _handle_failed_list(args: argparse.Namespace) -> int:
 def _handle_failed_retry(args: argparse.Namespace) -> int:
     if not args.yes:
         print_payload(
-            {"ok": False, "error": "tasks failed retry requires --yes"},
+            error_payload(
+                code=CLI_CONFIRMATION_REQUIRED,
+                message="tasks failed retry requires --yes",
+                command="tasks failed retry",
+                exit_code=1,
+            ),
             as_json=args.as_json,
         )
         return 1
@@ -82,7 +94,12 @@ def _handle_failed_retry(args: argparse.Namespace) -> int:
 def _handle_running_recover(args: argparse.Namespace) -> int:
     if not args.yes:
         print_payload(
-            {"ok": False, "error": "tasks running recover requires --yes"},
+            error_payload(
+                code=CLI_CONFIRMATION_REQUIRED,
+                message="tasks running recover requires --yes",
+                command="tasks running recover",
+                exit_code=1,
+            ),
             as_json=args.as_json,
         )
         return 1
@@ -119,14 +136,24 @@ async def _recover_running_tasks(
     limit: int,
 ) -> dict[str, object]:
     if older_than_seconds <= 0:
-        return {"ok": False, "error": "older-than-seconds must be positive"}
+        return error_payload(
+            code=CLI_USAGE_ERROR,
+            message="older-than-seconds must be positive",
+            command="tasks running recover",
+            exit_code=2,
+        )
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     older_than = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
     try:
         async with unit_of_work(session_factory) as uow:
             if uow.session is None:
-                return {"ok": False, "error": "database session was not initialized"}
+                return error_payload(
+                    code=CLI_RUNTIME_ERROR,
+                    message="database session was not initialized",
+                    command="tasks running recover",
+                    exit_code=1,
+                )
             tasks = await TaskRunRepository(uow.session).recover_stale_running(
                 older_than=older_than,
                 limit=limit,
@@ -153,7 +180,12 @@ async def _retry_failed_task(
     try:
         async with unit_of_work(session_factory) as uow:
             if uow.session is None:
-                return {"ok": False, "error": "database session was not initialized"}
+                return error_payload(
+                    code=CLI_RUNTIME_ERROR,
+                    message="database session was not initialized",
+                    command="tasks failed retry",
+                    exit_code=1,
+                )
             repository = TaskRunRepository(uow.session)
             try:
                 task_run = await repository.require(task_id)
@@ -162,7 +194,13 @@ async def _retry_failed_task(
                     task_repository=repository,
                 ).retry(task_run)
             except AppError as exc:
-                return {"ok": False, "code": exc.code, "error": exc.message}
+                return error_payload(
+                    code=exc.code,
+                    message=exc.message,
+                    command="tasks failed retry",
+                    exit_code=1,
+                    details=dict(exc.details or {}),
+                )
             return {
                 "ok": result.ok,
                 "task": _task_run_to_dict(task_run),

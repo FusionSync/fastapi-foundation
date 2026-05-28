@@ -193,7 +193,13 @@ def test_migrate_apply_requires_yes(monkeypatch, capsys) -> None:
     assert exit_code == 1
     assert payload == {
         "ok": False,
-        "error": "migrate apply requires --yes",
+        "command": "migrate apply",
+        "exit_code": 1,
+        "error": {
+            "code": "CLI_CONFIRMATION_REQUIRED",
+            "message": "migrate apply requires --yes",
+            "details": {},
+        },
     }
 
 

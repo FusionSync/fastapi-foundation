@@ -4,7 +4,13 @@ import argparse
 
 from core.apps.conformance import check_app, check_apps
 from core.apps.registry import AppRegistry
-from core.cli.common import installed_apps, print_payload
+from core.cli.common import (
+    CLI_USAGE_ERROR,
+    error_payload,
+    exception_error_payload,
+    installed_apps,
+    print_payload,
+)
 
 
 def register_app_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -29,10 +35,12 @@ def _handle_check_app(args: argparse.Namespace) -> int:
         payload: object = {"ok": ok, "apps": [result.to_dict() for result in results]}
     else:
         if not args.module_path:
-            payload = {
-                "ok": False,
-                "error": "check-app requires module_path unless --all is used",
-            }
+            payload = error_payload(
+                code=CLI_USAGE_ERROR,
+                message="check-app requires module_path unless --all is used",
+                command="check-app",
+                exit_code=2,
+            )
             print_payload(payload, as_json=args.as_json)
             return 2
         result = check_app(args.module_path)
@@ -49,11 +57,7 @@ def _handle_list_apps(args: argparse.Namespace) -> int:
         registry = AppRegistry(module_paths).load()
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-                "apps": [],
-            },
+            exception_error_payload(exc, command="list-apps", apps=[]),
             as_json=args.as_json,
         )
         return 1

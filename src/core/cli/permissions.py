@@ -6,7 +6,13 @@ import asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.apps.registry import AppRegistry
-from core.cli.common import installed_apps, print_payload
+from core.cli.common import (
+    CLI_RUNTIME_ERROR,
+    error_payload,
+    exception_error_payload,
+    installed_apps,
+    print_payload,
+)
 from core.db import unit_of_work
 from core.permissions import PermissionRegistry, PolicyProjector
 
@@ -40,7 +46,7 @@ def _handle_permissions(args: argparse.Namespace) -> int:
         permission_registry = PermissionRegistry.from_app_registry(app_registry)
     except Exception as exc:
         print_payload(
-            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            exception_error_payload(exc, command=f"permissions {args.permissions_command}"),
             as_json=args.as_json,
         )
         return 1
@@ -61,11 +67,13 @@ async def _reconcile_projection(*, database_url: str, repair: bool) -> dict[str,
     try:
         async with unit_of_work(session_factory) as uow:
             if uow.session is None:
-                return {
-                    "ok": False,
-                    "mode": "projection",
-                    "error": "database session was not initialized",
-                }
+                return error_payload(
+                    code=CLI_RUNTIME_ERROR,
+                    message="database session was not initialized",
+                    command="permissions reconcile",
+                    exit_code=1,
+                    mode="projection",
+                )
             result = await PolicyProjector(uow.session).reconcile(repair=repair)
             return {**result.to_dict(), "mode": "projection"}
     finally:

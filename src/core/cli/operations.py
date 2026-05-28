@@ -9,7 +9,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.app import create_app
 from core.apps import AppRegistry
-from core.cli.common import installed_apps, print_payload
+from core.cli.common import (
+    CLI_RUNTIME_ERROR,
+    CLI_USAGE_ERROR,
+    error_payload,
+    exception_error_payload,
+    installed_apps,
+    print_payload,
+)
 from core.config import get_settings
 from core.db import unit_of_work
 from core.locks import MemoryLockProvider
@@ -157,12 +164,7 @@ def _handle_serve_run(args: argparse.Namespace) -> int:
         app = create_app(settings)
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "server",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command=args.role, role="server"),
             as_json=args.as_json,
         )
         return 1
@@ -210,12 +212,7 @@ def _handle_worker_run_once(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "worker",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command=args.role, role="worker"),
             as_json=args.as_json,
         )
         return 1
@@ -243,12 +240,7 @@ def _handle_worker_run(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "worker",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command=args.role, role="worker"),
             as_json=args.as_json,
         )
         return 1
@@ -264,15 +256,16 @@ def _handle_worker_run(args: argparse.Namespace) -> int:
 def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
     if not args.schedule_id or not args.tenant_id:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "scheduler",
-                "error": "scheduler --run-once requires --schedule-id and --tenant-id",
-            },
+            error_payload(
+                code=CLI_USAGE_ERROR,
+                message="scheduler --run-once requires --schedule-id and --tenant-id",
+                command=args.role,
+                exit_code=2,
+                role="scheduler",
+            ),
             as_json=args.as_json,
         )
-        return 1
+        return 2
     try:
         payload = asyncio.run(
             _run_scheduler_once(
@@ -289,12 +282,7 @@ def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "scheduler",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command=args.role, role="scheduler"),
             as_json=args.as_json,
         )
         return 1
@@ -310,15 +298,16 @@ def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
 def _handle_scheduler_run(args: argparse.Namespace) -> int:
     if not args.tenant_id:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "scheduler",
-                "error": "scheduler --run requires --tenant-id",
-            },
+            error_payload(
+                code=CLI_USAGE_ERROR,
+                message="scheduler --run requires --tenant-id",
+                command=args.role,
+                exit_code=2,
+                role="scheduler",
+            ),
             as_json=args.as_json,
         )
-        return 1
+        return 2
     try:
         result = asyncio.run(
             run_scheduler_loop(
@@ -337,12 +326,7 @@ def _handle_scheduler_run(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "scheduler",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command=args.role, role="scheduler"),
             as_json=args.as_json,
         )
         return 1
@@ -370,12 +354,7 @@ def _handle_outbox_dispatcher_run(args: argparse.Namespace) -> int:
         )
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": args.role,
-                "role": "outbox-dispatcher",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command=args.role, role="outbox-dispatcher"),
             as_json=args.as_json,
         )
         return 1
@@ -402,7 +381,13 @@ async def _run_worker_once(
     try:
         async with unit_of_work(session_factory) as uow:
             if uow.session is None:
-                return {"ok": False, "error": "database session was not initialized"}
+                return error_payload(
+                    code=CLI_RUNTIME_ERROR,
+                    message="database session was not initialized",
+                    command="worker",
+                    exit_code=1,
+                    role="worker",
+                )
             repository = TaskRunRepository(uow.session)
             task_run = await repository.claim_next_pending(queue=queue)
             if task_run is None:
@@ -447,7 +432,13 @@ async def _run_scheduler_once(
     try:
         async with unit_of_work(session_factory) as uow:
             if uow.session is None:
-                return {"ok": False, "error": "database session was not initialized"}
+                return error_payload(
+                    code=CLI_RUNTIME_ERROR,
+                    message="database session was not initialized",
+                    command="scheduler",
+                    exit_code=1,
+                    role="scheduler",
+                )
             provider = LockedScheduleProvider(
                 provider=ManualScheduleProvider(
                     schedule_registry=schedule_registry,

@@ -5,7 +5,14 @@ import asyncio
 import uuid
 
 from core.apps.registry import AppRegistry
-from core.cli.common import installed_apps, print_payload
+from core.cli.common import (
+    CLI_CONFIRMATION_REQUIRED,
+    CLI_USAGE_ERROR,
+    error_payload,
+    exception_error_payload,
+    installed_apps,
+    print_payload,
+)
 from core.locks import MemoryLockProvider
 from core.migrations import (
     AlembicMigrationExecutor,
@@ -69,7 +76,7 @@ def _handle_migrate(args: argparse.Namespace) -> int:
         migration_registry = MigrationRegistry.from_app_registry(app_registry)
     except Exception as exc:
         print_payload(
-            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            exception_error_payload(exc, command=f"migrate {args.migrate_command}"),
             as_json=args.as_json,
         )
         return 1
@@ -121,12 +128,7 @@ def _handle_migrate_run(args: argparse.Namespace) -> int:
         migration_registry = MigrationRegistry.from_app_registry(app_registry)
     except Exception as exc:
         print_payload(
-            {
-                "ok": False,
-                "command": "migrate",
-                "role": "migrate",
-                "error": f"{type(exc).__name__}: {exc}",
-            },
+            exception_error_payload(exc, command="migrate run", role="migrate"),
             as_json=args.as_json,
         )
         return 1
@@ -178,10 +180,12 @@ def _apply_migrations(
     migration_registry: MigrationRegistry,
 ) -> dict[str, object]:
     if not args.yes:
-        return {
-            "ok": False,
-            "error": "migrate apply requires --yes",
-        }
+        return error_payload(
+            code=CLI_CONFIRMATION_REQUIRED,
+            message="migrate apply requires --yes",
+            command="migrate apply",
+            exit_code=1,
+        )
     if migration_registry.errors:
         return {
             "ok": False,
@@ -220,7 +224,19 @@ def _apply_migrations(
 
 
 def _handle_migrate_drift_check(args: argparse.Namespace) -> int:
-    report = check_drift(_parse_heads(args.expected), _parse_heads(args.actual))
+    try:
+        report = check_drift(_parse_heads(args.expected), _parse_heads(args.actual))
+    except ValueError as exc:
+        print_payload(
+            error_payload(
+                code=CLI_USAGE_ERROR,
+                message=str(exc),
+                command="migrate drift-check",
+                exit_code=2,
+            ),
+            as_json=args.as_json,
+        )
+        return 2
     payload = {"ok": not report.has_drift, "drift": report.to_dict()}
     print_payload(payload, as_json=args.as_json)
     return 0 if not report.has_drift else 1
@@ -240,7 +256,7 @@ def _parse_heads(values: list[str]) -> dict[str, str]:
     heads: dict[str, str] = {}
     for value in values:
         if "=" not in value:
-            raise SystemExit(f"Head mapping must use app=head format: {value}")
+            raise ValueError(f"Head mapping must use app=head format: {value}")
         app_label, head = value.split("=", 1)
         heads[app_label] = head
     return heads

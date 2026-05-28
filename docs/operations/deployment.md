@@ -114,6 +114,7 @@ migrate health
 local profile 可以使用 sync task provider；private/cloud profile 后续接 Redis、队列和 leader lock 时必须复用同一输出结构。
 
 当前 `core worker` 命令提供配置级健康检查，不强制依赖数据库连接；`core serve --run --dry-run`、`core migrate run`、`core worker --run --max-iterations <n>`、`core scheduler --run-once`、`core scheduler --run --max-iterations <n>` 和 `core outbox-dispatcher --run` 可在 local/CI 中执行启动计划或有限轮运行验证。`worker --run`、`scheduler --run` 和 `outbox-dispatcher --run` 传入 `--instance-id` 时会写入 `process_heartbeats`。
+发布脚本调用 `--json` 命令时必须以进程退出码为准，并在失败时读取 stdout 中的 `ok=false`、`exit_code` 和 `error.code/message/details`；参数错误固定为 exit code `2`，运行期失败和显式确认缺失固定为非零 exit code `1`。
 生产部署应由对应进程定期写入 `process_heartbeats`，再把最新 `ProcessHeartbeatSnapshot` 传入
 `check_process_health()`，使 `heartbeat_status_healthy`、`heartbeat_role_matches` 和
 `heartbeat_fresh` 进入统一 `ProcessHealth`。默认 freshness 窗口为 120 秒，部署平台可以按任务类型调整。

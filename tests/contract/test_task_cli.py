@@ -49,7 +49,16 @@ def test_tasks_failed_retry_requires_yes(tmp_path: Path, capsys) -> None:
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 1
-    assert payload == {"ok": False, "error": "tasks failed retry requires --yes"}
+    assert payload == {
+        "ok": False,
+        "command": "tasks failed retry",
+        "exit_code": 1,
+        "error": {
+            "code": "CLI_CONFIRMATION_REQUIRED",
+            "message": "tasks failed retry requires --yes",
+            "details": {},
+        },
+    }
     assert asyncio.run(_task_status(database_url, "task-failed")) == "failed"
 
 
@@ -101,7 +110,16 @@ def test_tasks_running_recover_requires_yes(tmp_path: Path, capsys) -> None:
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 1
-    assert payload == {"ok": False, "error": "tasks running recover requires --yes"}
+    assert payload == {
+        "ok": False,
+        "command": "tasks running recover",
+        "exit_code": 1,
+        "error": {
+            "code": "CLI_CONFIRMATION_REQUIRED",
+            "message": "tasks running recover requires --yes",
+            "details": {},
+        },
+    }
     assert asyncio.run(_task_status(database_url, "task-running")) == "running"
 
 
