@@ -108,6 +108,10 @@ migrate health
   one-shot command exit code and JSON output
 ```
 
+`core smoke --profile <profile> --json` 必须聚合 `server`、`worker`、`scheduler`、
+`outbox-dispatcher`、`migrate` 的 `ProcessHealth`，输出每个角色的 checks 和 details。
+local profile 可以使用 sync task provider；private/cloud profile 后续接 Redis、队列和 leader lock 时必须复用同一输出结构。
+
 ## Shutdown
 
 - server 停止接收新请求，等待 in-flight request 完成或超时。

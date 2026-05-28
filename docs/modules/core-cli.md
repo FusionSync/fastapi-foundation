@@ -39,6 +39,7 @@ outbox dead-letter replay
 ```
 
 `migrate apply` 当前是 metadata mode，必须传 `--yes`，并在执行前复用 migration preflight gate。破坏性迁移还必须传 `--backup-ready`。
+`smoke --profile <profile> --json` 必须输出 config 检查和所有运行角色的 `role_health` 明细，便于 CI/CD 在发布后判断 server、worker、scheduler、outbox-dispatcher、migrate 是否满足当前 profile 的运行门禁。
 
 ## 设计要求
 

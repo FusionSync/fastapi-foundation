@@ -40,7 +40,19 @@ def test_local_deployment_smoke_passes(capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["ok"] is True
-    assert payload["checks"] == {"config": True, "server_health": True}
+    assert payload["checks"] == {
+        "config": True,
+        "server_health": True,
+        "worker_health": True,
+        "scheduler_health": True,
+        "outbox_dispatcher_health": True,
+        "migrate_health": True,
+    }
+    assert payload["role_health"]["server"]["checks"]["http_routes_configured"] is True
+    assert payload["role_health"]["worker"]["details"]["task_provider"] == "sync"
+    assert payload["role_health"]["outbox-dispatcher"]["checks"][
+        "outbox_claim_loop_configured"
+    ] is True
 
 
 def test_backup_check_requires_timestamp_for_private_profile(capsys) -> None:
