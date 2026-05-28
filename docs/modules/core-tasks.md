@@ -91,6 +91,7 @@ finished_at
 
 - `TaskRegistry.from_app_registry()` 从 `AppModule.task_handlers` 收集任务处理器。
 - `TaskHandlerSpec.handler_path` 必须能 import 到 callable。
+- `check_app()` 会在启动期校验 task handler 签名必须接受一个 envelope 参数。
 - task_type 全局唯一，重复注册启动前失败。
 - `SyncTaskProvider` 用于 local/profile 和单机版，可同步执行普通函数或 async handler。
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。

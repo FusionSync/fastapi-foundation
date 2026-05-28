@@ -73,6 +73,45 @@ def test_check_app_allows_declared_public_api_import(isolated_apps: Path) -> Non
     assert result.errors == []
 
 
+def test_check_app_rejects_invalid_background_handler_signatures(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        event_handler_body="def handle_created():\n    pass\n",
+        task_handler_body="def refresh(envelope, extra):\n    return None\n",
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "event handler apps.example_domain.events.handle_created must accept exactly "
+        "one envelope argument"
+    ) in result.errors
+    assert (
+        "task handler apps.example_domain.tasks.refresh must accept exactly one "
+        "envelope argument"
+    ) in result.errors
+
+
+def test_check_app_accepts_valid_background_handler_signatures(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        event_handler_body="def handle_created(envelope):\n    return None\n",
+        task_handler_body="async def refresh(envelope):\n    return {'ok': True}\n",
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is True
+    assert result.errors == []
+
+
 def test_check_app_rejects_undeclared_public_api_dependency(isolated_apps: Path) -> None:
     _write_app(isolated_apps, "other_domain")
     _write_app(
@@ -177,6 +216,8 @@ def _write_app(
     label: str | None = None,
     dependencies: Iterable[str] = (),
     service_import: str = "",
+    event_handler_body: str | None = None,
+    task_handler_body: str | None = None,
 ) -> None:
     app_dir = root / "apps" / name
     migrations_dir = app_dir / "migrations"
@@ -203,9 +244,39 @@ def _write_app(
         app_dir / "public_api.py",
         "class OtherService:\n    pass\n",
     )
+    if event_handler_body is not None:
+        _write(app_dir / "events.py", event_handler_body)
+    if task_handler_body is not None:
+        _write(app_dir / "tasks.py", task_handler_body)
+    app_module_imports = ["AppModule", "MigrationSpec"]
+    if event_handler_body is not None:
+        app_module_imports.append("EventHandlerSpec")
+    if task_handler_body is not None:
+        app_module_imports.append("TaskHandlerSpec")
+    event_handlers = (
+        "    event_handlers=[\n"
+        "        EventHandlerSpec(\n"
+        "            event_type='example.created',\n"
+        "            event_version=1,\n"
+        f"            handler_path='apps.{name}.events.handle_created',\n"
+        "        )\n"
+        "    ],\n"
+        if event_handler_body is not None
+        else ""
+    )
+    task_handlers = (
+        "    task_handlers=[\n"
+        "        TaskHandlerSpec(\n"
+        "            task_type='example.refresh',\n"
+        f"            handler_path='apps.{name}.tasks.refresh',\n"
+        "        )\n"
+        "    ],\n"
+        if task_handler_body is not None
+        else ""
+    )
     _write(
         app_dir / "module.py",
-        "from core.apps import AppModule, MigrationSpec\n"
+        f"from core.apps import {', '.join(app_module_imports)}\n"
         f"from apps.{name}.permissions import PERMISSIONS\n"
         f"from apps.{name}.router import router\n\n"
         "module = AppModule(\n"
@@ -216,6 +287,8 @@ def _write_app(
         f"    models=['apps.{name}.models'],\n"
         f"    migrations=MigrationSpec(path='apps.{name}.migrations'),\n"
         "    permissions=PERMISSIONS,\n"
+        f"{event_handlers}"
+        f"{task_handlers}"
         f"    public_api=['apps.{name}.public_api'],\n"
         ")\n",
     )

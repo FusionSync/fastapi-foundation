@@ -79,6 +79,7 @@ def check_app(module_path: str) -> AppCheckResult:
     package_dir = Path(module_file).resolve().parent
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
+    _check_background_handler_signatures(app_module, result)
     _check_model_constraints(app_module, result)
     _check_router_security(app_module, result)
     _check_router_response_envelopes(package_dir, result)
@@ -122,6 +123,75 @@ def _check_migration_metadata(app_module: AppModule, result: AppCheckResult) -> 
         return
     if util.find_spec(app_module.migrations.path) is None:
         result.errors.append(f"migrations.path cannot be imported: {app_module.migrations.path}")
+
+
+def _check_background_handler_signatures(
+    app_module: AppModule,
+    result: AppCheckResult,
+) -> None:
+    for spec in app_module.event_handlers:
+        _check_envelope_handler_signature(
+            spec.handler_path,
+            handler_kind="event",
+            result=result,
+        )
+    for spec in app_module.task_handlers:
+        _check_envelope_handler_signature(
+            spec.handler_path,
+            handler_kind="task",
+            result=result,
+        )
+
+
+def _check_envelope_handler_signature(
+    handler_path: str,
+    *,
+    handler_kind: str,
+    result: AppCheckResult,
+) -> None:
+    try:
+        handler = _load_handler(handler_path)
+    except Exception as exc:
+        result.errors.append(
+            f"{handler_kind} handler {handler_path} cannot be imported: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError) as exc:
+        result.errors.append(
+            f"{handler_kind} handler {handler_path} signature cannot be inspected: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+    parameters = list(signature.parameters.values())
+    if len(parameters) != 1:
+        result.errors.append(
+            f"{handler_kind} handler {handler_path} must accept exactly one "
+            "envelope argument"
+        )
+        return
+    parameter = parameters[0]
+    if parameter.kind not in {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }:
+        result.errors.append(
+            f"{handler_kind} handler {handler_path} must accept exactly one "
+            "envelope argument"
+        )
+
+
+def _load_handler(handler_path: str) -> object:
+    module_path, separator, attribute = handler_path.rpartition(".")
+    if not separator or not module_path or not attribute:
+        raise ValueError(f"Invalid handler path: {handler_path!r}")
+    module = importlib.import_module(module_path)
+    handler = getattr(module, attribute, None)
+    if not callable(handler):
+        raise TypeError(f"{handler_path!r} must be callable")
+    return handler
 
 
 def _check_model_constraints(app_module: AppModule, result: AppCheckResult) -> None:

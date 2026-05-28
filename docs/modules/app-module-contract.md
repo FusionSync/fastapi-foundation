@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: typed `AppModule`、依赖图、标准文件、router security、response envelope、public_api 边界和 tenant model conformance 已接入启动检查。
+- Done: typed `AppModule`、依赖图、标准文件、router security、response envelope、public_api 边界、background handler 签名和 tenant model conformance 已接入启动检查。
 - Next:
-  - [ ] 在 events/tasks/scheduler runtime 全部闭环后补 handler 签名 conformance。
   - [ ] 将 admin、migration metadata 的错误诊断细化到 app contract 输出。
 
 ## 目标
@@ -105,6 +104,7 @@ module = AppModule(
 
 这样 app contract check 可以在启动前发现拼写错误、空 handler path 和不合法版本。
 后台相关 spec 还会校验 `/admin` 路由边界、平台级权限边界和重复注册风险。
+event/task handler 必须是可导入 callable，并且签名必须正好接受一个 envelope 参数；不符合运行时契约的 handler 会在 `check_app()` 或 app factory 启动检查中失败。
 
 `auth_session_store` 是少数由 app 向 core runtime 暴露的装配钩子，值必须是可导入 callable 路径，例如 `platform_apps.accounts.public_api.AccountsAuthSessionStore`。同一运行时只能安装一个声明该字段的 app。
 
@@ -152,5 +152,6 @@ apps.foo -> platform_apps.tenants.models
 - 提供账号会话事实的 app 必须通过 `auth_session_store` 声明 `AuthSessionStore` factory，不允许在 core app factory 中硬编码具体账号 app。
 - app contract check 必须拒绝循环依赖、非法导入和缺失标准文件。
 - app contract check 必须拒绝未声明 dependency 的 `apps.*.public_api` 和 `platform_apps.*.public_api` 导入。
+- app contract check 必须拒绝不可导入、不可调用或签名不符合一个 envelope 参数契约的 event/task handler。
 - app contract check 必须扫描 `AppModule.models` 中的 `TenantScopedModel` 约束，拒绝全局唯一键等会破坏租户隔离的数据模型。
 - app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

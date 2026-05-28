@@ -56,6 +56,7 @@ src/core/events/
 - app 通过 `AppModule.event_handlers` 声明事件处理器。
 - `EventRegistry.from_app_registry()` 统一导入 handler 并注册。
 - `EventHandlerSpec.handler_path` 必须能 import 到 callable。
+- `check_app()` 会在启动期校验 event handler 签名必须接受一个 envelope 参数。
 - `register_spec()` 使用 `handler_path` 作为稳定 handler key；直接 `register()` 的 handler key 默认为 `module.qualname`。
 - 同一 event_type/event_version 可以注册多个 handler。
 - 同一 event_type/event_version/handler_key 重复注册会启动前失败，避免重复副作用。
