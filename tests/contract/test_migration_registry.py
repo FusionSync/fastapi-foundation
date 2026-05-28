@@ -152,6 +152,117 @@ def test_migrate_drift_check_cli_blocks_mismatch(capsys) -> None:
     assert payload["drift"]["has_drift"] is True
 
 
+def test_migrate_apply_requires_yes(monkeypatch, capsys) -> None:
+    _install_app(
+        monkeypatch,
+        "fake_alpha",
+        label="alpha",
+        manifests=[
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0001_initial",
+                phase="expand",
+                classification="reversible",
+            )
+        ],
+    )
+
+    exit_code = main(["migrate", "apply", "--installed-app", "fake_alpha", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload == {
+        "ok": False,
+        "error": "migrate apply requires --yes",
+    }
+
+
+def test_migrate_apply_runs_preflight_before_metadata_apply(monkeypatch, capsys) -> None:
+    _install_app(
+        monkeypatch,
+        "fake_alpha",
+        label="alpha",
+        manifests=[
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0002_drop_legacy",
+                phase="contract",
+                classification="destructive",
+                destructive_operations=["drop column legacy_name"],
+                approved_by="dba",
+                approved_at="2026-05-28T00:00:00Z",
+                rollback_strategy="restore backup or forward-fix",
+            )
+        ],
+    )
+
+    exit_code = main(
+        [
+            "migrate",
+            "apply",
+            "--installed-app",
+            "fake_alpha",
+            "--yes",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["applied"] is False
+    assert "alpha:0002_drop_legacy requires backup readiness before execution" in payload["errors"]
+
+
+def test_migrate_apply_outputs_metadata_apply_plan_when_gates_pass(monkeypatch, capsys) -> None:
+    _install_app(
+        monkeypatch,
+        "fake_alpha",
+        label="alpha",
+        manifests=[
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0001_initial",
+                phase="expand",
+                classification="reversible",
+            ),
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0002_drop_legacy",
+                phase="contract",
+                classification="destructive",
+                depends_on=["0001_initial"],
+                destructive_operations=["drop column legacy_name"],
+                approved_by="dba",
+                approved_at="2026-05-28T00:00:00Z",
+                rollback_strategy="restore backup or forward-fix",
+            ),
+        ],
+    )
+
+    exit_code = main(
+        [
+            "migrate",
+            "apply",
+            "--installed-app",
+            "fake_alpha",
+            "--backup-ready",
+            "--yes",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["applied"] is True
+    assert payload["mode"] == "metadata"
+    assert [item["key"] for item in payload["migrations"]] == [
+        "alpha:0001_initial",
+        "alpha:0002_drop_legacy",
+    ]
+
+
 def _install_app(
     monkeypatch,
     module_path: str,

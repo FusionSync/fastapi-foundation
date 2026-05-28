@@ -32,6 +32,8 @@ outbox dead-letter list
 outbox dead-letter replay
 ```
 
+`migrate apply` 当前是 metadata mode，必须传 `--yes`，并在执行前复用 migration preflight gate。破坏性迁移还必须传 `--backup-ready`。
+
 ## 设计要求
 
 - CLI 与 server 共享同一套 settings 加载逻辑。

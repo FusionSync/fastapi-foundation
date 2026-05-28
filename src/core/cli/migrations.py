@@ -7,6 +7,7 @@ from core.cli.common import installed_apps, print_payload
 from core.migrations import (
     MigrationManifest,
     MigrationRegistry,
+    apply_migration_metadata,
     check_drift,
     plan_migrations,
     run_preflight,
@@ -27,6 +28,7 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
     apply_parser = migrate_subparsers.add_parser("apply")
     apply_parser.add_argument("--installed-app", action="append", default=[])
     apply_parser.add_argument("--json", action="store_true", dest="as_json")
+    apply_parser.add_argument("--backup-ready", action="store_true")
     apply_parser.add_argument("--yes", action="store_true")
     apply_parser.set_defaults(handler=_handle_migrate)
 
@@ -80,13 +82,31 @@ def _handle_migrate(args: argparse.Namespace) -> int:
             "apps": _migration_status(migration_registry.manifests),
         }
     else:
-        payload = {
-            "ok": False,
-            "error": "migrate apply is intentionally gated; use dry-run/preflight first",
-        }
+        payload = _apply_migrations(args, migration_registry)
 
     print_payload(payload, as_json=args.as_json)
     return 0 if bool(payload.get("ok")) else 1
+
+
+def _apply_migrations(
+    args: argparse.Namespace,
+    migration_registry: MigrationRegistry,
+) -> dict[str, object]:
+    if not args.yes:
+        return {
+            "ok": False,
+            "error": "migrate apply requires --yes",
+        }
+    result = run_preflight(
+        migration_registry.manifests,
+        backup_ready=args.backup_ready,
+    )
+    apply_result = apply_migration_metadata(result)
+    return {
+        **apply_result.to_dict(),
+        "ok": not migration_registry.errors and apply_result.ok,
+        "registry_errors": migration_registry.errors,
+    }
 
 
 def _handle_migrate_drift_check(args: argparse.Namespace) -> int:
