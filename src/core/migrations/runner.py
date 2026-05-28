@@ -5,6 +5,10 @@ from dataclasses import dataclass, field
 from core.migrations.manifest import MigrationManifest
 from core.migrations.preflight import PreflightResult
 
+METADATA_APPLY_DISABLED_ERROR = (
+    "migrate apply requires a real migration executor; metadata mode does not change schema"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class MigrationApplyResult:
@@ -33,15 +37,17 @@ def apply_migration_metadata(
         return MigrationApplyResult(
             ok=False,
             applied=False,
+            mode="metadata-apply-disabled",
             migrations=preflight.plan.migrations if preflight.plan else [],
             errors=preflight.errors,
             warnings=preflight.warnings,
         )
     return MigrationApplyResult(
-        ok=True,
-        applied=True,
+        ok=False,
+        applied=False,
+        mode="metadata-apply-disabled",
         migrations=preflight.plan.migrations,
-        errors=[],
+        errors=[METADATA_APPLY_DISABLED_ERROR],
         warnings=preflight.warnings,
     )
 

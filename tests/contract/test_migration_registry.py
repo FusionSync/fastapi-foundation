@@ -261,7 +261,7 @@ def test_migrate_apply_runs_preflight_before_metadata_apply(monkeypatch, capsys)
     assert "alpha:0002_drop_legacy requires backup readiness before execution" in payload["errors"]
 
 
-def test_migrate_apply_outputs_metadata_apply_plan_when_gates_pass(monkeypatch, capsys) -> None:
+def test_migrate_apply_refuses_metadata_noop_when_gates_pass(monkeypatch, capsys) -> None:
     _install_app(
         monkeypatch,
         "fake_alpha",
@@ -302,13 +302,16 @@ def test_migrate_apply_outputs_metadata_apply_plan_when_gates_pass(monkeypatch, 
     )
 
     payload = json.loads(capsys.readouterr().out)
-    assert exit_code == 0
-    assert payload["ok"] is True
-    assert payload["applied"] is True
-    assert payload["mode"] == "metadata"
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["applied"] is False
+    assert payload["mode"] == "metadata-apply-disabled"
     assert [item["key"] for item in payload["migrations"]] == [
         "alpha:0001_initial",
         "alpha:0002_drop_legacy",
+    ]
+    assert payload["errors"] == [
+        "migrate apply requires a real migration executor; metadata mode does not change schema"
     ]
 
 
