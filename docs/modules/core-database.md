@@ -43,6 +43,9 @@ async with unit_of_work() as uow:
 - outbox 和安全关键 audit 禁止在业务事务外隐式写入新连接。
 - 嵌套 service 调用复用外层 unit-of-work；第一版不做复杂嵌套事务编排。
 - transaction helper 必须在 rollback 时保证 outbox/audit 同步回滚。
+- `UnitOfWork` 使用 ContextVar 跟踪当前事务；嵌套 `unit_of_work()` 不新开 session、不自行 commit/close，只加入外层事务。
+- 内层 unit-of-work 发生异常时会把外层标记为 `rollback_only`；即使异常被业务代码捕获，外层退出时仍会 rollback，避免半提交。
+- `UnitOfWork.state` 暴露 `active`、`committed`、`rolled_back` 或 `joined`，便于测试和运行期诊断事务生命周期。
 
 ## 基础模型约定
 
