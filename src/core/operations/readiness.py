@@ -75,6 +75,7 @@ def check_app_readiness(
     metrics_registry: MetricsRegistry | None,
     dependency_results: Mapping[str, DependencyProbeResult] | None = None,
     lifecycle_diagnostics: Mapping[str, list[dict[str, str]]] | None = None,
+    startup_diagnostics: Mapping[str, Any] | None = None,
 ) -> ReadinessResult:
     startup_hooks_completed = _startup_hooks_completed(
         app_registry=app_registry,
@@ -100,6 +101,7 @@ def check_app_readiness(
         else None,
         "dependencies": {},
         "lifecycle_hooks": _lifecycle_diagnostics_payload(lifecycle_diagnostics),
+        "startup_diagnostics": dict(startup_diagnostics or {}),
     }
     for dependency_name, result in (dependency_results or {}).items():
         checks[f"{dependency_name}_reachable"] = result.ok

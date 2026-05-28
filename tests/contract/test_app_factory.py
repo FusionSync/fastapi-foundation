@@ -59,6 +59,35 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
     assert body["data"]["details"]["dependencies"]["database"]["ok"] is True
 
 
+def test_ready_endpoint_exposes_unified_startup_diagnostics() -> None:
+    app = create_app(
+        Settings(
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            installed_apps=["apps.example_domain.module"],
+        )
+    )
+    client = TestClient(app)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    diagnostics = response.json()["data"]["details"]["startup_diagnostics"]
+    assert diagnostics["ok"] is True
+    assert diagnostics["registries"]["app"]["counts"] == {
+        "modules": 1,
+        "model_modules": 1,
+        "routers": 1,
+    }
+    assert diagnostics["registries"]["permissions"]["counts"]["permissions"] == 2
+    assert diagnostics["registries"]["migrations"]["counts"]["manifests"] == 0
+    assert diagnostics["registries"]["events"]["counts"]["handlers"] == 0
+    assert diagnostics["registries"]["tasks"]["counts"]["tasks"] == 0
+    assert diagnostics["registries"]["schedules"]["counts"]["schedules"] == 0
+    assert diagnostics["registries"]["admin"]["counts"]["admin_permissions"] == 0
+    assert diagnostics["providers"]["database"]["ok"] is True
+    assert diagnostics["providers"]["database"]["details"] == {"service": "database"}
+
+
 def test_ready_endpoint_returns_503_when_dependency_probe_fails() -> None:
     app = create_app(Settings(database={"url": "sqlite+aiosqlite:///:memory:"}))
     app.state.readiness_database_probe = _FailingReadinessProbe()
@@ -72,6 +101,10 @@ def test_ready_endpoint_returns_503_when_dependency_probe_fails() -> None:
     assert body["data"]["status"] == "not_ready"
     assert body["data"]["checks"]["database_reachable"] is False
     assert body["data"]["details"]["dependencies"]["database"]["error"] == "database down"
+    diagnostics = body["data"]["details"]["startup_diagnostics"]
+    assert diagnostics["ok"] is False
+    assert diagnostics["providers"]["database"]["ok"] is False
+    assert diagnostics["providers"]["database"]["error"] == "database down"
 
 
 def test_missing_route_uses_error_envelope() -> None:

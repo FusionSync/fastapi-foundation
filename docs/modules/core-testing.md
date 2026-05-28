@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、binary response conformance whitelist、app registry version/capability diagnostics、tenant isolation、security、rate-limit middleware、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、binary response conformance whitelist、app registry version/capability diagnostics、runtime startup diagnostics、tenant isolation、security、rate-limit middleware、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
 
@@ -48,6 +48,7 @@ src/core/testing/
 - Config profile contract test 必须覆盖模板输出、生产 secret reference、按进程角色执行的 drift-check 成功/失败路径、部署产物渲染和敏感值脱敏。
 - Release checkpoint contract test 必须覆盖 profile 参数矩阵、部署产物、按角色 drift gate、backup readiness、migrate dry-run 和 smoke 聚合输出。
 - App runtime contract test 必须覆盖 lifecycle startup/shutdown 执行顺序、handler 签名 conformance 和 startup 失败策略。
+- App runtime readiness contract test 必须覆盖 runtime registry counts、provider readiness 合并和 provider 失败时的统一 startup diagnostics。
 - App conformance contract test 必须覆盖 `FileResponse`/`StreamingResponse` 例外，以及 `JSONResponse` 不能绕过 typed envelope 的拒绝路径。
 
 ## 最小测试矩阵

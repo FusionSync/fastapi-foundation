@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.admin import AdminRegistry
+from core.app.diagnostics import build_startup_diagnostics, merge_provider_readiness
 from core.app.lifecycle import run_lifecycle_hooks
 from core.apps import AppRegistry
 from core.apps.conformance import AppCheckResult, check_apps
@@ -70,6 +71,7 @@ def create_app(
         registry=registry,
         request_security_pipeline=request_security_pipeline,
     )
+    app.state.startup_diagnostics = build_startup_diagnostics(app)
     return app
 
 
@@ -126,6 +128,10 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
             metrics_registry=getattr(app.state, "metrics_registry", None),
             dependency_results=dependency_results,
             lifecycle_diagnostics=getattr(app.state, "lifecycle_diagnostics", None),
+            startup_diagnostics=merge_provider_readiness(
+                getattr(app.state, "startup_diagnostics", None),
+                dependency_results,
+            ),
         )
         if not readiness.ok:
             response.status_code = 503

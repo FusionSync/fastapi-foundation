@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、security/rate-limit/metrics/context middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、lifecycle hook 结构化日志和启动诊断、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
-- Next:
-  - [ ] 将 runtime registries 和 provider readiness 统一输出为启动诊断摘要。
+- Done: app factory 已串联 config、database runtime、security/rate-limit/metrics/context middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、lifecycle hook 结构化日志和启动诊断、runtime registry/provider readiness 统一启动诊断摘要、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
+- Next: _none_
 
 ## 职责
 
@@ -36,6 +35,7 @@ src/core/app/
 - 仍可通过 `request_security_pipeline` 显式覆盖默认请求安全流水线。
 - 暴露健康检查和版本信息。
 - `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry diagnostics、MetricsRegistry 和 lifecycle startup hook 检查明细；不 ready 时返回 HTTP 503。
+- `create_app()` 会生成 `app.state.startup_diagnostics`，统一汇总 AppRegistry、permission、migration、event、task、schedule、admin 和 metrics registry 的加载状态与 counts；`/readyz` 会把数据库等 provider readiness probe 结果合并到同一个 `details.startup_diagnostics.providers`。
 - `AppModule.lifecycle_hooks` 声明的 startup/shutdown hook 会挂入 FastAPI lifespan；startup 按 dependency-first app 顺序执行，shutdown 按反向顺序执行。
 - 每个 lifecycle hook 执行后会写入 `app.state.lifecycle_diagnostics`，并通过 `core.app.lifecycle` logger 输出结构化 `lifecycle_hook` 字段。`/readyz` 会检查 startup hook 是否全部成功，并在 `details.lifecycle_hooks` 中暴露 startup/shutdown hook 结果。
 
