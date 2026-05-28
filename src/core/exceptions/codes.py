@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,6 +12,9 @@ class ErrorCodeSpec:
     details_schema: dict[str, Any] | None = None
     deprecated: bool = False
     headers: dict[str, str] = field(default_factory=dict)
+
+
+_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 _ERROR_CODES: dict[str, ErrorCodeSpec] = {
@@ -40,8 +44,45 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
 }
 
 
+def _validate_error_code_spec(spec: ErrorCodeSpec) -> None:
+    if not _CODE_PATTERN.fullmatch(spec.code):
+        raise ValueError(f"Invalid error code: {spec.code!r}")
+    if spec.default_http_status < 100 or spec.default_http_status > 599:
+        raise ValueError(f"Invalid HTTP status for error code {spec.code!r}")
+    if not spec.default_message:
+        raise ValueError(f"Default message is required for error code {spec.code!r}")
+    if not spec.owner_module:
+        raise ValueError(f"Owner module is required for error code {spec.code!r}")
+
+
+def register_error_codes(*specs: ErrorCodeSpec, replace: bool = False) -> None:
+    seen: set[str] = set()
+    for spec in specs:
+        _validate_error_code_spec(spec)
+        if spec.code in seen:
+            raise ValueError(f"Duplicate error code registration: {spec.code}")
+        seen.add(spec.code)
+        existing = _ERROR_CODES.get(spec.code)
+        if existing is not None and existing != spec and not replace:
+            raise ValueError(f"Error code already registered: {spec.code}")
+
+    for spec in specs:
+        _ERROR_CODES[spec.code] = spec
+
+
 def get_error_code(code: str) -> ErrorCodeSpec:
     return _ERROR_CODES.get(code) or ErrorCodeSpec(code, 500, "系统错误")
+
+
+def is_error_code_registered(code: str) -> bool:
+    return code in _ERROR_CODES
+
+
+def require_error_code(code: str) -> ErrorCodeSpec:
+    spec = _ERROR_CODES.get(code)
+    if spec is None:
+        raise ValueError(f"Unregistered error code: {code}")
+    return spec
 
 
 def iter_error_codes() -> tuple[ErrorCodeSpec, ...]:

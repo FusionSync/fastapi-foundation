@@ -1,5 +1,7 @@
 from typing import Any
 
+from core.exceptions.codes import require_error_code
+
 
 class AppError(Exception):
     def __init__(
@@ -11,6 +13,7 @@ class AppError(Exception):
         details: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> None:
+        require_error_code(code)
         super().__init__(message or code)
         self.code = code
         self.message = message or code

@@ -34,6 +34,7 @@ SystemAppError
 ## 处理策略
 
 - 业务已知异常转换为对应业务 code。
+- `AppError` 只能使用已登记到 error code registry 的 code；业务 app 扩展错误码时必须先调用 `register_error_codes()` 注册 `ErrorCodeSpec`。
 - Pydantic/FastAPI validation error 转换为 `VALIDATION_ERROR`。
 - 未知异常转换为 `SYSTEM_ERROR`，生产环境不暴露堆栈。
 - 默认使用标准 HTTP status，响应体 `code` 表达稳定业务语义。
@@ -43,6 +44,7 @@ SystemAppError
 ## 设计要求
 
 - service 只抛 AppError 或其子类。
+- 禁止在 service 或 router 中临时拼接未登记的错误码；未登记 code 会在 `AppError` 构造时直接失败。
 - router 不直接拼错误响应。
 - exception handler 必须记录 request_id、user_id、tenant_id。
 - details 必须先经过脱敏。
