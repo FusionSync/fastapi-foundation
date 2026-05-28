@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、业务错误码和 message catalog metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
+- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security 和 route permission conformance、response envelope、public_api 边界、业务错误码和 message catalog metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
 - Next: _none_
 
 ## 目标
@@ -148,6 +148,7 @@ lifecycle hook handler 必须是可导入 callable，并且签名必须正好接
 
 `auth_session_store` 是少数由 app 向 core runtime 暴露的装配钩子，值必须是可导入 callable 路径，例如 `platform_apps.accounts.public_api.AccountsAuthSessionStore`。同一运行时只能安装一个声明该字段的 app。
 `min_core_version` 和 `required_capabilities` 是启动前 gate：AppRegistry 会在依赖排序后拒绝 core 版本过低或 runtime capability 缺失的 app，并把失败原因写入 registry diagnostics。runtime capability 来自当前 Settings、部署 profile、进程 role 和已配置 provider，例如 `profile.cloud`、`provider.database.postgresql`、`provider.auth.external_secret` 或 `observability.metrics`。`provided_capabilities` 只表达 app 对外提供的能力标签，用于诊断和后续 capability 发现，不替代 dependencies。
+router 的 `permissions=["resource:action"]` 必须使用 `resource:action` 格式，并且对应 `PermissionSpec(resource, action)` 必须在 `AppModule.permissions` 中声明；否则 `check_app()` 和 app factory 启动检查会拒绝该 app。
 
 ## 依赖方向
 
@@ -189,6 +190,7 @@ apps.foo -> platform_apps.tenants.models
 - 每个 app 的外部接口必须遵守 API conventions。
 - 每个 app 必须使用标准文件名：`schemas.py`、`models.py`、`router.py`、`services.py`。
 - 每个 app router 必须通过 `core.base.create_router()` 创建；匿名公开接口必须显式声明 `public=True`。
+- router 声明的每个 route permission 必须在 `AppModule.permissions` 中存在对应 `PermissionSpec`。
 - 每个进入 OpenAPI 的 JSON route 必须声明 `response_model=Envelope[ReadSchema]` 或 `response_model=ListEnvelope[ReadSchema]`；文件下载和流式响应必须显式声明 `response_class=FileResponse` 或 `response_class=StreamingResponse` 才能跳过 JSON envelope。
 - 每个 app 的 migrations、tasks、events、schedules 必须通过 `AppModule` 注册。
 - 需要参与启动或关闭流程的 app 必须通过 `LifecycleHookSpec` 注册 startup/shutdown hook，不能在 core app factory 中硬编码业务 app 初始化逻辑。

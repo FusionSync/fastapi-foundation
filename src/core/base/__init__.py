@@ -5,6 +5,7 @@ from core.base.routers import (
     RouteSecurityPolicy,
     create_router,
     get_router_security_policy,
+    parse_route_permission,
 )
 from core.base.schemas import (
     BaseSchema,
@@ -32,4 +33,5 @@ __all__ = [
     "UpdateSchema",
     "create_router",
     "get_router_security_policy",
+    "parse_route_permission",
 ]

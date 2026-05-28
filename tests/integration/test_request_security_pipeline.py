@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.app import create_app
@@ -14,6 +15,7 @@ from core.permissions import ProjectedPolicy
 from core.tenancy import Tenant, TenantMember
 from platform_apps.accounts import AccountsAuthSessionStore
 from platform_apps.accounts.models import User, UserSession
+from platform_apps.audit import AuditLog, AuditService
 
 
 def test_request_security_pipeline_authenticates_tenant_and_route_permission(
@@ -87,6 +89,57 @@ def test_request_security_pipeline_rejects_missing_route_permission(
 
     assert response.status_code == 403
     assert response.json()["code"] == "PERMISSION_DENIED"
+
+
+def test_request_security_pipeline_audits_route_permission_denial(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'security-pipeline-audit.db'}"
+    asyncio.run(_seed_security_facts(database_url, include_policy=False))
+    token = _token()
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_protected_runtime_app(tmp_path)
+
+    session_factory = _session_factory(database_url)
+    pipeline = DatabaseRequestSecurityPipeline(
+        session_factory=session_factory,
+        jwt_provider=LocalJwtProvider(LocalJwtConfig(secret="test-secret")),
+        session_store_factory=AccountsAuthSessionStore,
+        audit_factory=AuditService,
+    )
+    app = create_app(
+        Settings(
+            database={"url": database_url},
+            security={"jwt_secret": "test-secret"},
+            installed_apps=["runtime_apps.secure_runtime.module"],
+        ),
+        request_security_pipeline=pipeline,
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/v1/secure/ping",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+    )
+
+    audit_logs = asyncio.run(_audit_logs(session_factory))
+    assert response.status_code == 403
+    assert response.json()["code"] == "PERMISSION_DENIED"
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == "authorization.denied"
+    assert audit_logs[0].result == "denied"
+    assert audit_logs[0].tenant_id == "tenant-a"
+    assert audit_logs[0].actor_id == "user-1"
+    assert audit_logs[0].resource_type == "secure"
+    assert audit_logs[0].request_id is not None
+    assert audit_logs[0].payload == {
+        "resource": "secure",
+        "action": "read",
+        "subject": "user:user-1",
+        "reason": "missing_projected_policy",
+    }
 
 
 def test_request_security_pipeline_exposes_route_authorization_decision(
@@ -196,6 +249,15 @@ def _token() -> str:
             tenant_id="tenant-a",
         )
     )
+
+
+async def _audit_logs(session_factory: async_sessionmaker) -> list[AuditLog]:
+    async with session_factory() as session:
+        result = await session.execute(select(AuditLog).order_by(AuditLog.created_at))
+        audit_logs = list(result.scalars().all())
+        for audit_log in audit_logs:
+            session.expunge(audit_log)
+        return audit_logs
 
 
 def _write_protected_runtime_app(root: Path, *, use_decision_dependency: bool = False) -> None:

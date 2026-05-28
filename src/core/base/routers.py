@@ -65,6 +65,18 @@ def get_router_security_policy(router: APIRouter) -> RouteSecurityPolicy | None:
     return None
 
 
+def parse_route_permission(permission: str) -> tuple[str, str]:
+    resource, separator, action = permission.partition(":")
+    if not separator or not resource.strip() or not action.strip():
+        raise AppError(
+            "VALIDATION_ERROR",
+            "Route permission must use resource:action format",
+            status_code=400,
+            details={"permission": permission},
+        )
+    return resource, action
+
+
 async def enforce_route_security(
     policy: RouteSecurityPolicy,
     *,

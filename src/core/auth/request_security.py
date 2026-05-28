@@ -5,16 +5,18 @@ from collections.abc import Callable
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.requests import Request
 
+from core.audit import AuditRecorder
 from core.auth.errors import invalid_auth_token
 from core.auth.jwt_provider import LocalJwtProvider
 from core.auth.session import AuthSessionStore, AuthSessionValidator
-from core.base import RouteSecurityPolicy
+from core.base import RouteSecurityPolicy, parse_route_permission
 from core.context import RequestContext
 from core.exceptions import AppError
 from core.permissions import AuthorizationDecision, AuthorizationService
 from core.tenancy import DatabaseTenantContextResolver
 
 SessionStoreFactory = Callable[[AsyncSession], AuthSessionStore]
+AuditFactory = Callable[[AsyncSession], AuditRecorder]
 
 
 class DatabaseRequestSecurityPipeline:
@@ -24,10 +26,12 @@ class DatabaseRequestSecurityPipeline:
         session_factory: async_sessionmaker[AsyncSession],
         jwt_provider: LocalJwtProvider,
         session_store_factory: SessionStoreFactory,
+        audit_factory: AuditFactory | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.jwt_provider = jwt_provider
         self.session_store_factory = session_store_factory
+        self.audit_factory = audit_factory
 
     async def resolve(self, request: Request, policy: RouteSecurityPolicy) -> None:
         if not (policy.auth_required or policy.tenant_required or policy.permissions):
@@ -59,32 +63,26 @@ class DatabaseRequestSecurityPipeline:
                 status_code=403,
             )
         async with self.session_factory() as session:
-            authorization = AuthorizationService(session)
+            audit = self.audit_factory(session) if self.audit_factory is not None else None
+            authorization = AuthorizationService(session, audit=audit)
             decisions: list[AuthorizationDecision] = []
-            for permission in policy.permissions:
-                resource, action = parse_route_permission(permission)
-                decisions.append(
-                    await authorization.require(
-                        user_id=context.user_id,
-                        tenant_id=context.tenant_id,
-                        resource=resource,
-                        action=action,
-                        request_id=context.request_id,
+            try:
+                for permission in policy.permissions:
+                    resource, action = parse_route_permission(permission)
+                    decisions.append(
+                        await authorization.require(
+                            user_id=context.user_id,
+                            tenant_id=context.tenant_id,
+                            resource=resource,
+                            action=action,
+                            request_id=context.request_id,
+                        )
                     )
-                )
+            except AppError as exc:
+                if audit is not None and exc.code == "PERMISSION_DENIED":
+                    await session.commit()
+                raise
             return tuple(decisions)
-
-
-def parse_route_permission(permission: str) -> tuple[str, str]:
-    resource, separator, action = permission.partition(":")
-    if not separator or not resource.strip() or not action.strip():
-        raise AppError(
-            "VALIDATION_ERROR",
-            "Route permission must use resource:action format",
-            status_code=400,
-            details={"permission": permission},
-        )
-    return resource, action
 
 
 def _bearer_token(request: Request) -> str:

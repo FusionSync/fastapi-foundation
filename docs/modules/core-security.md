@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: security headers、trusted hosts、body size limit、secret provider、HTTP client credential secret 注入、password hashing、upload guard 和 app route security policy 已落地。
+- Done: security headers、trusted hosts、body size limit、secret provider、HTTP client credential secret 注入、password hashing、upload guard、app route security policy、route permission conformance 诊断和权限拒绝审计接入已落地。
 - Next:
-  - [ ] 将 route-level security policy 接入审计和 conformance 诊断。
   - [ ] 为 private/cloud profile 补 CSP、cookie、TLS/header hardening 清单。
 
 ## 职责
@@ -57,5 +56,7 @@ src/core/security/
 - `RequestBodySizeLimitMiddleware` 按 `settings.security.max_request_body_bytes` 拒绝超大请求体，并返回 `REQUEST_TOO_LARGE`。
 - CORS runtime 使用 FastAPI/Starlette `CORSMiddleware`，由 `settings.security.cors_origins` 启用。
 - `SecretProvider` 协议、`EnvSecretProvider`、`MappingSecretProvider` 和 `resolve_settings_secrets()` 支持通过 `jwt_secret_ref` 从外部 provider 注入 JWT secret；`CoreHttpClient` 也复用同一协议按 `HttpClientCredentialSpec.secret_ref` 注入外部服务 credential header。
+- route-level security policy 的 `permissions=["resource:action"]` 会在 app conformance 中校验格式，并要求对应 `PermissionSpec` 已在 `AppModule.permissions` 声明。
+- `DatabaseRequestSecurityPipeline` 可注入 `audit_factory`；路由权限被 `AuthorizationService.require()` 拒绝时会写入并提交 `authorization.denied` 审计。
 
 第一版 secret provider 负责启动期 JWT secret 和运行期外部 HTTP credential 解析，不实现远程 Vault 客户端。后续 Kubernetes Secret、Vault 或云 KMS adapter 必须继续实现 `SecretProvider` 协议，不要让业务 app 直接读取外部密钥系统。

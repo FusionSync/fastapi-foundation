@@ -112,6 +112,42 @@ def test_check_app_accepts_valid_background_handler_signatures(
     assert result.errors == []
 
 
+def test_check_app_rejects_route_permission_not_declared_by_app(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        route_permissions=("example:write",),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "route security permission example:write must be declared in AppModule.permissions"
+        in result.errors
+    )
+
+
+def test_check_app_rejects_route_permission_with_invalid_format(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        route_permissions=("example.write",),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "route security permission example.write must use resource:action format"
+        in result.errors
+    )
+
+
 def test_check_app_accepts_declared_error_codes(isolated_apps: Path) -> None:
     _write_app(
         isolated_apps,
@@ -417,6 +453,7 @@ def _write_app(
     task_handler_body: str | None = None,
     error_codes: str | None = None,
     message_catalogs: str | None = None,
+    route_permissions: tuple[str, ...] = (),
     tenant_model: bool = False,
     repository_body: str | None = None,
 ) -> None:
@@ -446,9 +483,13 @@ def _write_app(
     _write(app_dir / "services.py", f"{service_import}\n\nclass ExampleService:\n    pass\n")
     if repository_body is not None:
         _write(app_dir / "repository.py", repository_body)
+    permissions_arg = (
+        f", permissions={list(route_permissions)!r}" if route_permissions else ""
+    )
     _write(
         app_dir / "router.py",
-        "from core.base import create_router\n\nrouter = create_router('/examples')\n",
+        "from core.base import create_router\n\n"
+        f"router = create_router('/examples'{permissions_arg})\n",
     )
     _write(
         app_dir / "permissions.py",

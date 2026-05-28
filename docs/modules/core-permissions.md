@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、route authorization dependency、projection cache invalidation、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
+- Done: permission registry、authorization decision、platform/tenant scope 校验、route authorization dependency、route permission conformance、projection cache invalidation、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
 - Next:
   - [ ] 补资源 owner adapter 和跨租户平台权限统一 gate。
 
@@ -66,6 +66,7 @@ decision = await AuthorizationService(session).authorize(
 
 第一版已接入的强制门禁包括 role grant mutation、tenant lifecycle mutation、user disable 和 session revoke。仅传 `actor_id`、`request_id` 或裸布尔值都不能作为授权证明。
 router 层的 `RouteSecurityPolicy.permissions` 使用 `resource:action` 字符串格式。它会强制调用 `app.state.route_authorizer`；如果 route 声明了权限但运行时没有挂载授权器，请求会被拒绝。挂载 `DatabaseRequestSecurityPipeline` 后，route permission 会调用 `AuthorizationService.require()` 校验 `ProjectedPolicy`。
+app conformance 会校验 route permission 格式，并拒绝未在 `AppModule.permissions` 声明对应 `PermissionSpec` 的 route policy。
 授权通过后，route authorizer 返回的 `AuthorizationDecision` 会写入当前 request state。业务 mutation 可以通过标准 dependency 读取它，并把它作为 service 层的授权证明继续向下传：
 
 ```python
@@ -90,6 +91,7 @@ async def mutate_workspace(
 - `require()` 查询并在拒绝时抛 `PERMISSION_DENIED`。
 - `authorize_platform()` / `require_platform()` 使用 `__platform__` domain 查询 platform scope 投影。
 - 拒绝时如果传入 `AuditService`，会在同一个数据库 session 中写入 `authorization.denied` 审计。
+- `DatabaseRequestSecurityPipeline(audit_factory=...)` 会把 route permission 拒绝审计持久化，用于 HTTP 入口的权限拒绝追踪。
 - 第一版 subject 固定为 `user:{user_id}`，tenant domain 固定为 `tenant_id`。
 - 业务 app 不直接查询 `ProjectedPolicy`；文件、任务、业务资源等入口应接入 `AuthorizationService`。
 

@@ -13,10 +13,11 @@ from fastapi.routing import APIRoute
 from core.apps.boundaries import check_public_api_boundaries
 from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
-from core.base import get_router_security_policy
+from core.base import get_router_security_policy, parse_route_permission
 from core.base.models import TenantScopedModel
 from core.base.repositories import CrossTenantRepository, TenantScopedRepository
 from core.db.constraints import check_tenant_scoped_model
+from core.exceptions import AppError
 from core.exceptions.codes import validate_error_code_spec
 from core.migrations.manifest import MigrationManifest
 from core.serialization import Envelope, ListEnvelope
@@ -488,6 +489,9 @@ def _check_repository_inheritance(
 
 
 def _check_router_security(app_module: AppModule, result: AppCheckResult) -> None:
+    declared_permissions = {
+        (permission.resource, permission.action) for permission in app_module.permissions
+    }
     for router in app_module.routers:
         policy = get_router_security_policy(router)
         if policy is None:
@@ -497,6 +501,19 @@ def _check_router_security(app_module: AppModule, result: AppCheckResult) -> Non
             result.errors.append("non-public router must require authentication")
         if policy.tenant_required and not policy.auth_required:
             result.errors.append("tenant-scoped router cannot disable authentication")
+        for permission in policy.permissions:
+            try:
+                resource, action = parse_route_permission(permission)
+            except AppError:
+                result.errors.append(
+                    f"route security permission {permission} must use resource:action format"
+                )
+                continue
+            if (resource, action) not in declared_permissions:
+                result.errors.append(
+                    f"route security permission {permission} must be declared in "
+                    "AppModule.permissions"
+                )
 
 
 def _check_router_response_envelopes(package_dir: Path, result: AppCheckResult) -> None:

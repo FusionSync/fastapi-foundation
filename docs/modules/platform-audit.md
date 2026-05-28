@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: audit model、AuditService、result/reason/session/policy fields、hash chain、进程内链路锁、权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
+- Done: audit model、AuditService、result/reason/session/policy fields、hash chain、进程内链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
 - Next:
   - [ ] 接 WORM/SIEM export。
   - [ ] 为 private/cloud 多 worker 部署补分布式 hash chain 串行化。
@@ -71,6 +71,7 @@ AuditLog
 - `AuditService.record()` 对同一进程内的同一 tenant/platform 链路加锁，并持有到当前 SQLAlchemy session 外层事务结束，防止应用内并发写入形成 hash chain 分叉。
 - `AuditService.verify_hash_chain(tenant_id)` 可按租户校验本库内审计链路，发现 hash 不匹配、前驱缺失、分叉、多根和断链。
 - `core.permissions.AuthorizationService` 会在权限拒绝时写入 `authorization.denied` 审计。
+- `DatabaseRequestSecurityPipeline` 可通过 `audit_factory=AuditService` 持久化 route-level permission denied 审计；该审计记录会复用 `RequestContext` 中的 tenant、actor、request、IP 和 user agent 默认字段。
 - `RoleGrantService` 可注入 `AuditService`，角色授予和撤销会写 `role.granted` / `role.revoked` 审计。
 - `AccountsService` 可注入 `AuditService`，session 创建/撤销和禁用用户会写 `session.created` / `session.revoked` / `user.disabled` 审计。
 - `TenantLifecycleService` 可注入 `AuditService`，租户创建、暂停、恢复、删除和归档会写对应 `tenant.*` 审计。
