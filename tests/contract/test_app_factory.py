@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.app import create_app
+from core.apps.conformance import check_app
 from core.cache import MemoryCacheProvider
 from core.config import Settings
 from core.operations import DependencyProbeResult
@@ -233,6 +234,49 @@ def test_create_app_rejects_tenant_scoped_model_constraint_violation(
 
     with pytest.raises(ValueError, match="tenant scoped constraint violation"):
         create_app(Settings(installed_apps=["runtime_apps.bad_tenant_model.module"]))
+
+
+def test_check_app_reports_admin_metadata_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "bad_admin_metadata", bad_admin_metadata=True)
+
+    result = check_app("runtime_apps.bad_admin_metadata.module")
+
+    assert result.ok is False
+    assert result.errors == [
+        (
+            "admin route runtime.export handler_path "
+            "runtime_apps.bad_admin_metadata.admin.export cannot be imported: "
+            "ModuleNotFoundError: No module named 'runtime_apps.bad_admin_metadata.admin'"
+        )
+    ]
+
+
+def test_check_app_reports_migration_metadata_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "bad_migration_metadata", bad_migration_metadata=True)
+
+    result = check_app("runtime_apps.bad_migration_metadata.module")
+
+    assert result.ok is False
+    assert result.errors == [
+        (
+            "migration metadata runtime_apps.bad_migration_metadata.migrations.manifest "
+            "other_app:0001_initial app_label does not match app 'bad_migration_metadata'"
+        ),
+        (
+            "migration metadata runtime_apps.bad_migration_metadata.migrations.manifest "
+            "other_app:0001_initial requires alembic_revision"
+        ),
+    ]
 
 
 def test_create_app_uses_profile_provider_runtime_capabilities(
@@ -482,6 +526,8 @@ def _write_runtime_app(
     file_response: bool = False,
     json_response_class: bool = False,
     bad_tenant_model: bool = False,
+    bad_admin_metadata: bool = False,
+    bad_migration_metadata: bool = False,
     lifecycle_hooks: bool = False,
     invalid_lifecycle_signature: bool = False,
     failing_startup_hook: bool = False,
@@ -619,26 +665,66 @@ def _write_runtime_app(
         "PERMISSIONS = [PermissionSpec(resource='runtime', action='read')]\n",
     )
     _write(migrations_dir / "__init__.py", "")
-    _write(migrations_dir / "manifest.py", "MIGRATIONS = []\n")
+    if bad_migration_metadata:
+        _write(
+            migrations_dir / "manifest.py",
+            "from core.migrations import MigrationManifest\n\n"
+            "MIGRATIONS = [\n"
+            "    MigrationManifest(\n"
+            "        app_label='other_app',\n"
+            "        migration_id='0001_initial',\n"
+            "        phase='expand',\n"
+            "        classification='reversible',\n"
+            "    )\n"
+            "]\n",
+        )
+    else:
+        _write(migrations_dir / "manifest.py", "MIGRATIONS = []\n")
     permissions_expr = "PERMISSIONS" if declare_permissions else "[]"
     required_capabilities_arg = ""
     if required_capabilities:
         required_capabilities_arg = f"    required_capabilities={required_capabilities!r},\n"
-    _write(
-        app_dir / "module.py",
-        "from runtime_apps.{name}.permissions import PERMISSIONS\n"
-        "from runtime_apps.{name}.router import router\n"
-        f"from core.apps import AppModule, MigrationSpec{lifecycle_import}\n\n"
+    admin_import = ""
+    admin_arg = ""
+    if bad_admin_metadata:
+        admin_import = "AdminPermissionSpec, AdminRouteSpec"
+        admin_arg = (
+            "    admin_routes=[\n"
+            "        AdminRouteSpec(\n"
+            "            route_id='runtime.export',\n"
+            "            path='/admin/runtime/export',\n"
+            f"            handler_path='runtime_apps.{name}.admin.export',\n"
+            "            permissions=[\n"
+            "                AdminPermissionSpec(resource='runtime_export', action='read'),\n"
+            "            ],\n"
+            "        )\n"
+            "    ],\n"
+        )
+    module_imports = (
+        f"from runtime_apps.{name}.permissions import PERMISSIONS\n"
+        f"from runtime_apps.{name}.router import router\n"
+        f"from core.apps import AppModule, MigrationSpec{lifecycle_import}\n"
+    )
+    if admin_import:
+        module_imports += f"from core.admin import {admin_import}\n"
+    module_content = (
+        module_imports
+        + "\n"
         "module = AppModule(\n"
-        "    label={name!r},\n"
+        f"    label={name!r},\n"
         "    version='0.1.0',\n"
         "    routers=[router],\n"
-        "    models=['runtime_apps.{name}.models'],\n"
-        "    migrations=MigrationSpec(path='runtime_apps.{name}.migrations'),\n"
+        f"    models=['runtime_apps.{name}.models'],\n"
+        f"    migrations=MigrationSpec(path='runtime_apps.{name}.migrations'),\n"
         f"    permissions={permissions_expr},\n"
         f"{required_capabilities_arg}"
+        f"{admin_arg}"
         f"{lifecycle_arg}"
-        ")\n".format(name=name),
+        ")\n"
+    )
+    _write(
+        app_dir / "module.py",
+        module_content,
     )
 
 

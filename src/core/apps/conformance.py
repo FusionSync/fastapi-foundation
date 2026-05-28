@@ -16,6 +16,7 @@ from core.apps.module import AppModule, validate_app_module
 from core.base import get_router_security_policy
 from core.base.models import TenantScopedModel
 from core.db.constraints import check_tenant_scoped_model
+from core.migrations.manifest import MigrationManifest
 from core.serialization import Envelope, ListEnvelope
 
 REQUIRED_APP_FILES = (
@@ -81,6 +82,7 @@ def check_app(module_path: str) -> AppCheckResult:
     package_dir = Path(module_file).resolve().parent
     _check_required_files(package_dir, result)
     _check_migration_metadata(app_module, result)
+    _check_admin_metadata(app_module, result)
     _check_background_handler_signatures(app_module, result)
     _check_lifecycle_hook_signatures(app_module, result)
     _check_model_constraints(app_module, result)
@@ -126,6 +128,117 @@ def _check_migration_metadata(app_module: AppModule, result: AppCheckResult) -> 
         return
     if util.find_spec(app_module.migrations.path) is None:
         result.errors.append(f"migrations.path cannot be imported: {app_module.migrations.path}")
+        return
+    manifest_module_path = f"{app_module.migrations.path}.manifest"
+    try:
+        manifest_module = importlib.import_module(manifest_module_path)
+    except ModuleNotFoundError as exc:
+        if exc.name == manifest_module_path:
+            return
+        result.errors.append(
+            f"migration metadata {manifest_module_path} cannot be imported: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+    except Exception as exc:
+        result.errors.append(
+            f"migration metadata {manifest_module_path} cannot be imported: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+
+    raw_manifests = getattr(
+        manifest_module,
+        "MIGRATIONS",
+        getattr(manifest_module, "migrations", []),
+    )
+    if not isinstance(raw_manifests, list):
+        result.errors.append(
+            f"migration metadata {manifest_module_path} MIGRATIONS must be a list"
+        )
+        return
+    seen: set[str] = set()
+    for index, raw_manifest in enumerate(raw_manifests, start=1):
+        if not isinstance(raw_manifest, MigrationManifest):
+            result.errors.append(
+                f"migration metadata {manifest_module_path} item #{index} "
+                "must be MigrationManifest"
+            )
+            continue
+        if raw_manifest.key in seen:
+            result.errors.append(
+                f"migration metadata {manifest_module_path} duplicate key {raw_manifest.key}"
+            )
+        seen.add(raw_manifest.key)
+        if raw_manifest.app_label != app_module.label:
+            result.errors.append(
+                f"migration metadata {manifest_module_path} {raw_manifest.key} "
+                f"app_label does not match app {app_module.label!r}"
+            )
+        for violation in raw_manifest.validate():
+            result.errors.append(f"migration metadata {manifest_module_path} {violation}")
+
+
+def _check_admin_metadata(app_module: AppModule, result: AppCheckResult) -> None:
+    for spec in app_module.admin_models:
+        _check_importable_path(
+            spec.model_path,
+            metadata_label=f"admin model {spec.admin_id} model_path",
+            result=result,
+        )
+    for spec in app_module.admin_routes:
+        _check_callable_path(
+            spec.handler_path,
+            metadata_label=f"admin route {spec.route_id} handler_path",
+            result=result,
+        )
+    for spec in app_module.dashboard_widgets:
+        _check_callable_path(
+            spec.provider_path,
+            metadata_label=f"dashboard widget {spec.widget_id} provider_path",
+            result=result,
+        )
+
+
+def _check_importable_path(
+    dotted_path: str,
+    *,
+    metadata_label: str,
+    result: AppCheckResult,
+) -> None:
+    try:
+        _load_dotted_attribute(dotted_path)
+    except Exception as exc:
+        result.errors.append(
+            f"{metadata_label} {dotted_path} cannot be imported: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+
+def _check_callable_path(
+    dotted_path: str,
+    *,
+    metadata_label: str,
+    result: AppCheckResult,
+) -> None:
+    try:
+        handler = _load_dotted_attribute(dotted_path)
+    except Exception as exc:
+        result.errors.append(
+            f"{metadata_label} {dotted_path} cannot be imported: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return
+    if not callable(handler):
+        result.errors.append(f"{metadata_label} {dotted_path} must be callable")
+
+
+def _load_dotted_attribute(dotted_path: str) -> object:
+    module_path, separator, attribute = dotted_path.rpartition(".")
+    if not separator or not module_path or not attribute:
+        raise ValueError(f"Invalid dotted path: {dotted_path!r}")
+    module = importlib.import_module(module_path)
+    return getattr(module, attribute)
 
 
 def _check_background_handler_signatures(

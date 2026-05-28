@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
-- Next:
-  - [ ] 将 admin、migration metadata 的错误诊断细化到 app contract 输出。
+- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security、response envelope、public_api 边界、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
+- Next: _none_
 
 ## 目标
 
@@ -120,6 +119,7 @@ module = AppModule(
 
 这样 app contract check 可以在启动前发现拼写错误、空 handler path 和不合法版本。
 后台相关 spec 还会校验 `/admin` 路由边界、平台级权限边界和重复注册风险。
+app contract check 会导入 admin metadata 中声明的 `AdminModelSpec.model_path`、`AdminRouteSpec.handler_path` 和 `AdminDashboardWidgetSpec.provider_path`；不可导入、不可调用或指向错误对象时，错误会包含 admin 类型、id 和 dotted path。
 event/task handler 必须是可导入 callable，并且签名必须正好接受一个 envelope 参数；不符合运行时契约的 handler 会在 `check_app()` 或 app factory 启动检查中失败。
 lifecycle hook handler 必须是可导入 callable，并且签名必须正好接受一个 context 参数；startup hook 失败会阻止应用 lifespan 启动，shutdown hook 会在数据库 runtime 释放前按反向依赖顺序执行。
 
@@ -174,5 +174,6 @@ apps.foo -> platform_apps.tenants.models
 - app contract check 必须拒绝未声明 dependency 的 `apps.*.public_api` 和 `platform_apps.*.public_api` 导入。
 - app contract check 必须拒绝不可导入、不可调用或签名不符合一个 envelope 参数契约的 event/task handler。
 - app contract check 必须拒绝不可导入、不可调用或签名不符合一个 context 参数契约的 lifecycle hook。
+- app contract check 必须拒绝不可导入的 admin metadata dotted path，以及 app_label 不匹配、类型错误、重复 key 或 `MigrationManifest.validate()` 不通过的 migration metadata。
 - app contract check 必须扫描 `AppModule.models` 中的 `TenantScopedModel` 约束，拒绝全局唯一键等会破坏租户隔离的数据模型。
 - app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

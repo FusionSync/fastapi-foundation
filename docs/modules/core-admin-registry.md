@@ -65,6 +65,7 @@ risk_level defaults to high unless overridden
 - `AdminRegistry.to_dict()` 输出可序列化元数据，包含后台 surface 和完整后台权限目录，供未来 admin UI、CLI 或诊断接口使用。
 
 后台权限 metadata 冲突属于启动期契约错误。权限目录可以报告该错误，但业务应在部署前通过 contract test 或 CLI 检查修复。
+app conformance 会在启动前导入 `AdminModelSpec.model_path`、`AdminRouteSpec.handler_path` 和 `AdminDashboardWidgetSpec.provider_path`，并把不可导入或不可调用的错误定位到具体 admin id 和 dotted path。
 
 ## 设计要求
 

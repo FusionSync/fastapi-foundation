@@ -198,6 +198,7 @@ core migrate run
 - `MigrationManifest` 定义 app、migration_id、phase、classification、依赖、行数、锁风险、backfill、rollback、审批和 destructive operations。
 - `MigrationManifest.validate()` 要求每条 migration 显式声明 `alembic_revision`，并在 CLI JSON 中输出该绑定。
 - `MigrationRegistry.from_app_registry()` 从 `AppModule.migrations.path` 收集 `manifest.py` 中的 `MIGRATIONS`。
+- app conformance 会在启动前读取 `manifest.py`，拒绝非 `MigrationManifest` 条目、app_label 不匹配、重复 key 和 `MigrationManifest.validate()` 返回的字段级错误，并把错误定位到具体 manifest module。
 - `plan_migrations()` 按 migration 依赖和 app dependency graph 输出顺序计划。
 - `run_preflight()` 校验 manifest、schema drift、destructive/backup readiness、high lock risk 和 forward-only warning。
 - `core migrate dry-run` 已输出 `MigrationApplyResult` 兼容结构：`applied=false`、`mode=metadata-dry-run`，并复用 preflight gate。
