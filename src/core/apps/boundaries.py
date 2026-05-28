@@ -73,12 +73,22 @@ def _declared_dependency_error(
     package_dir: Path,
 ) -> str | None:
     parts = imported_name.split(".")
-    if len(parts) < 2 or parts[0] != "apps":
+    dependency_label = _dependency_label_for_public_api_import(parts)
+    if dependency_label is None:
         return None
-    dependency_label = parts[1]
     if dependency_label in app_module.dependencies:
         return None
     return (
         f"{path.relative_to(package_dir)} imports {dependency_label!r} public_api "
         "without declaring it in dependencies"
     )
+
+
+def _dependency_label_for_public_api_import(parts: list[str]) -> str | None:
+    if len(parts) < 3:
+        return None
+    if parts[0] == "apps":
+        return parts[1]
+    if parts[0] == "platform_apps":
+        return f"platform_{parts[1]}"
+    return None

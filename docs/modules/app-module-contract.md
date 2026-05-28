@@ -108,7 +108,7 @@ apps -> core
 core -> no app imports
 ```
 
-业务 app 可以依赖平台 app 的公开 service，不能导入其他 app 的内部 repository、models 实现。
+业务 app 可以依赖平台 app 的公开 service，但必须在 `dependencies` 中声明对应平台 app label；不能导入其他 app 的内部 repository、models 实现。
 平台 app 也必须按标准结构提供 `module.py`、`schemas.py`、`models.py`、`router.py`、`services.py`、`permissions.py` 和 `migrations/`。
 当前底座内置的 `platform_apps.accounts.module`、`platform_apps.audit.module`、`platform_apps.files.module`、`platform_apps.tenants.module` 都可被 `AppRegistry` 直接加载。
 
@@ -119,6 +119,8 @@ apps.foo -> platform_apps.accounts.public_api
 apps.foo -> apps.bar.public_api
 apps.foo -> core events/tasks/interfaces
 ```
+
+`apps.foo -> platform_apps.accounts.public_api` 必须同时声明 `dependencies=["platform_accounts"]`；`apps.foo -> apps.bar.public_api` 必须声明 `dependencies=["bar"]`。
 
 禁止的跨 app 调用：
 
@@ -141,4 +143,5 @@ apps.foo -> platform_apps.tenants.models
 - 每个 app 的 migrations、tasks、events、schedules 必须通过 `AppModule` 注册。
 - 提供账号会话事实的 app 必须通过 `auth_session_store` 声明 `AuthSessionStore` factory，不允许在 core app factory 中硬编码具体账号 app。
 - app contract check 必须拒绝循环依赖、非法导入和缺失标准文件。
+- app contract check 必须拒绝未声明 dependency 的 `apps.*.public_api` 和 `platform_apps.*.public_api` 导入。
 - app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

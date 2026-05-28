@@ -98,6 +98,6 @@ apps.example_domain.module
 - app label 必须稳定，不能随意改名。
 - app 之间不能通过导入顺序隐式依赖。
 - 依赖关系必须在 module metadata 中显式声明。
-- 业务 app 只能导入其他 app 的 `public_api`，不能导入内部 models/repositories/services。
+- 业务 app 只能导入已声明 dependency 的其他 app 或平台 app 的 `public_api`，不能导入内部 models/repositories/services。
 - registry 必须提供 import lint 或 contract test，检查依赖图、循环依赖和非法跨 app 导入。
 - 启动期必须拒绝 conformance 失败的 app；`core check-app` 是人工诊断入口，不是唯一门禁。

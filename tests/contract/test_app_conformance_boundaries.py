@@ -102,6 +102,7 @@ def test_check_app_allows_platform_public_api_import(isolated_apps: Path) -> Non
     _write_app(
         isolated_apps,
         "example_domain",
+        dependencies=["platform_accounts"],
         service_import="from platform_apps.accounts.public_api import AccountService",
     )
 
@@ -109,6 +110,25 @@ def test_check_app_allows_platform_public_api_import(isolated_apps: Path) -> Non
 
     assert result.ok is True
     assert result.errors == []
+
+
+def test_check_app_rejects_undeclared_platform_public_api_dependency(
+    isolated_apps: Path,
+) -> None:
+    _write_platform_app(isolated_apps, "accounts")
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        service_import="from platform_apps.accounts.public_api import AccountService",
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert any(
+        "imports 'platform_accounts' public_api without declaring it in dependencies" in error
+        for error in result.errors
+    )
 
 
 def test_check_apps_rejects_missing_dependency(isolated_apps: Path) -> None:
