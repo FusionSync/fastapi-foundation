@@ -175,6 +175,67 @@ def test_worker_role_can_run_one_pending_task(
     assert task.result_payload == {"value": "ok", "worker": "sync"}
 
 
+def test_worker_role_can_run_finite_loop_for_pending_tasks(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _install_worker_app(monkeypatch)
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(
+        _seed_pending_task(
+            database_url,
+            task_id="task-pending-loop-1",
+            payload={"value": "one"},
+        )
+    )
+    asyncio.run(
+        _seed_pending_task(
+            database_url,
+            task_id="task-pending-loop-2",
+            payload={"value": "two"},
+        )
+    )
+
+    exit_code = main(
+        [
+            "worker",
+            "--run",
+            "--max-iterations",
+            "2",
+            "--idle-sleep-seconds",
+            "0",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_worker_app",
+            "--queue",
+            "default",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    first = asyncio.run(_task_run(database_url, "task-pending-loop-1"))
+    second = asyncio.run(_task_run(database_url, "task-pending-loop-2"))
+    assert exit_code == 0
+    assert payload == {
+        "ok": True,
+        "command": "worker",
+        "role": "worker",
+        "queue": "default",
+        "iterations": 2,
+        "claimed": 2,
+        "succeeded": 2,
+        "failed": 0,
+        "dead_lettered": 0,
+    }
+    assert first.status == "succeeded"
+    assert first.result_payload == {"value": "one", "worker": "sync"}
+    assert second.status == "succeeded"
+    assert second.result_payload == {"value": "two", "worker": "sync"}
+
+
 def test_local_deployment_smoke_passes(capsys) -> None:
     exit_code = main(["smoke", "--profile", "local", "--json"])
 

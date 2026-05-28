@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler run-once 本地提交链路和 worker run-once 本地执行链路已落地。
+- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler run-once 本地提交链路和 worker 本地执行 loop 已落地。
 - Next:
   - [ ] 接 RQ/Celery 或等价队列 provider。
-  - [ ] 串通 worker 后台循环、队列 ack/retry/backoff 和部署 profile 参数。
+  - [ ] 串通队列 ack/retry/backoff 和部署 profile 参数。
 
 ## 职责
 
@@ -105,6 +105,7 @@ finished_at
 - `core tasks running recover --older-than-seconds <n> --yes` 执行恢复，输出被恢复的任务列表。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过 `SyncTaskProvider` 或未来队列 provider，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
 - `core worker --run-once` 加载 app task handler，按 queue 领取一个 `pending` `TaskRun`，执行后持久化为 `succeeded/failed/dead_letter`；当前用于 local/CI 有限轮验证，不替代生产级队列 worker。
+- `core worker --run` 可按 `--max-iterations` 做有限轮验证，未设置时作为本地常驻 loop，空转时按 `--idle-sleep-seconds` 休眠。
 
 后续接入 RQ 或 Celery 时，provider 必须复用 `TaskEnvelope`、`TaskRegistry`、`TaskRun` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。
 

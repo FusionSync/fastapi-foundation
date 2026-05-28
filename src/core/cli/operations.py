@@ -27,7 +27,7 @@ from core.scheduler import (
     ScheduleTriggerRepository,
     ScheduleTriggerRequest,
 )
-from core.tasks import SyncTaskProvider, TaskRegistry, TaskRunRepository
+from core.tasks import SyncTaskProvider, TaskRegistry, TaskRunRepository, run_task_worker_loop
 
 _PROFILES = ["local", "private", "cloud"]
 
@@ -54,11 +54,14 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
         role_parser = subparsers.add_parser(role)
         role_parser.add_argument("--json", action="store_true", dest="as_json")
         if role == "worker":
+            role_parser.add_argument("--run", action="store_true")
             role_parser.add_argument("--run-once", action="store_true")
             role_parser.add_argument("--database-url")
             role_parser.add_argument("--installed-app", action="append", default=[])
             role_parser.add_argument("--queue", default="default")
             role_parser.add_argument("--tenant-status", default="active")
+            role_parser.add_argument("--max-iterations", type=int)
+            role_parser.add_argument("--idle-sleep-seconds", type=float, default=1.0)
         if role == "scheduler":
             role_parser.add_argument("--run-once", action="store_true")
             role_parser.add_argument("--database-url")
@@ -107,6 +110,8 @@ def _handle_process_role(args: argparse.Namespace) -> int:
     role = "server" if args.role == "serve" else args.role
     if role == "worker" and args.run_once:
         return _handle_worker_run_once(args)
+    if role == "worker" and args.run:
+        return _handle_worker_run(args)
     if role == "scheduler" and args.run_once:
         return _handle_scheduler_run_once(args)
     if role == "outbox-dispatcher" and args.run:
@@ -148,6 +153,38 @@ def _handle_worker_run_once(args: argparse.Namespace) -> int:
     }
     print_payload(payload, as_json=args.as_json)
     return 0 if bool(payload.get("ok")) else 1
+
+
+def _handle_worker_run(args: argparse.Namespace) -> int:
+    try:
+        result = asyncio.run(
+            run_task_worker_loop(
+                database_url=_database_url(args.database_url),
+                module_paths=installed_apps(args.installed_app),
+                queue=args.queue,
+                tenant_status=args.tenant_status,
+                max_iterations=args.max_iterations,
+                idle_sleep_seconds=args.idle_sleep_seconds,
+            )
+        )
+    except Exception as exc:
+        print_payload(
+            {
+                "ok": False,
+                "command": args.role,
+                "role": "worker",
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+            as_json=args.as_json,
+        )
+        return 1
+    payload = {
+        **result.to_dict(),
+        "command": args.role,
+        "role": "worker",
+    }
+    print_payload(payload, as_json=args.as_json)
+    return 0 if result.ok else 1
 
 
 def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
