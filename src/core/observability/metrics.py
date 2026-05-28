@@ -10,6 +10,7 @@ METRIC_NAMES = {
     "migration_preflight_total": "Counter for migration preflight results.",
     "migration_apply_total": "Counter for migration apply results.",
     "tenant_isolation_guard_failures_total": "Counter for tenant isolation guard failures.",
+    "rate_limit_hits_total": "Counter for rate limit denials by rule and route class.",
 }
 
 _COUNTERS = {
@@ -17,6 +18,7 @@ _COUNTERS = {
     "migration_preflight_total",
     "migration_apply_total",
     "tenant_isolation_guard_failures_total",
+    "rate_limit_hits_total",
 }
 _HISTOGRAMS = {"http_request_duration_seconds", "outbox_dispatch_duration_seconds"}
 
