@@ -72,7 +72,7 @@ finished_at
 - 任务输出必须落库或落文件。
 - 任务日志关联 request_id、tenant_id 和 task_id。
 - worker 执行前必须检查 tenant lifecycle gate；`suspended/deleting` 租户按行为矩阵拒绝或跳过任务。
-- 任务失败超过上限进入 failed/dead-letter 状态，并提供 CLI 重试。
+- 任务失败先进入 `failed`，重试达到 `max_attempts` 后进入 `dead_letter`，并提供 CLI 重试。
 - outbox dispatcher 和 task worker 是不同进程角色；可靠任务提交优先通过 outbox 触发。
 
 ## 当前实现
@@ -85,7 +85,9 @@ finished_at
 - `SyncTaskProvider` 用于 local/profile 和单机版，可同步执行普通函数或 async handler。
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。
 - `TaskRun` 定义统一任务运行记录，保存 input、result、error、queue、request_id、attempt_count、started_at、finished_at。
-- `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed` 状态，不注入时保持原有纯运行时模式。
+- `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed/dead_letter` 状态，不注入时保持原有纯运行时模式。
+- `SyncTaskProvider.retry()` 可基于已落库 `TaskRun` 重新执行同一个 `TaskEnvelope`，并复用 tenant lifecycle gate。
+- `core tasks failed list` 输出 `failed/dead_letter` 任务；`core tasks failed retry --task-id <id> --yes` 显式重试注册过的任务处理器。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过 `SyncTaskProvider` 或未来队列 provider，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
 
 后续接入 RQ 或 Celery 时，provider 必须复用 `TaskEnvelope`、`TaskRegistry`、`TaskRun` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。

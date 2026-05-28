@@ -95,6 +95,56 @@ async def test_sync_task_provider_persists_failed_task_run(
     assert task_run.finished_at is not None
 
 
+@pytest.mark.asyncio
+async def test_sync_task_provider_retries_failed_run_and_dead_letters_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        raise RuntimeError(f"still failing {envelope.task_id}")
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        provider = SyncTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+            max_attempts=2,
+        )
+        first_result = await provider.submit(
+            TaskEnvelope(
+                task_id="task-3",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "bad"},
+                idempotency_key="example.refresh:tenant-a:retry",
+                request_id="req-3",
+            )
+        )
+
+    first_run = await _task_run(session_factory, "task-3")
+    assert first_result.status == "failed"
+    assert first_run.status == "failed"
+    assert first_run.attempt_count == 1
+    assert first_run.max_attempts == 2
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        retry_run = await uow.session.get(TaskRun, "task-3")
+        assert retry_run is not None
+        retry_result = await SyncTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).retry(retry_run)
+
+    retried_run = await _task_run(session_factory, "task-3")
+    assert retry_result.status == "dead_letter"
+    assert retried_run.status == "dead_letter"
+    assert retried_run.attempt_count == 2
+    assert retried_run.error_message == "RuntimeError: still failing task-3"
+
+
 def _task_registry(
     monkeypatch: pytest.MonkeyPatch,
     **handlers,

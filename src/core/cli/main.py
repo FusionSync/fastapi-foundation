@@ -9,6 +9,7 @@ from core.cli.migrations import register_migration_commands
 from core.cli.operations import register_operation_commands
 from core.cli.outbox import register_outbox_commands
 from core.cli.permissions import register_permission_commands
+from core.cli.tasks import register_task_commands
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -25,6 +26,7 @@ def _build_parser() -> argparse.ArgumentParser:
     register_operation_commands(subparsers)
     register_outbox_commands(subparsers)
     register_permission_commands(subparsers)
+    register_task_commands(subparsers)
     return parser
 
 

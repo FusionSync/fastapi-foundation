@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.base.models import BaseModel
 
-TaskRunStatus = Literal["running", "succeeded", "failed"]
+TaskRunStatus = Literal["running", "succeeded", "failed", "dead_letter"]
 
 
 class TaskRun(BaseModel):
@@ -32,7 +32,7 @@ class TaskRun(BaseModel):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     queue: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
