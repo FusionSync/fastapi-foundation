@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.events import EventRegistry
+from core.idempotency import IdempotencyStore
 from core.observability import MetricsRegistry
 from core.outbox.repository import OutboxRepository
 
@@ -25,6 +26,7 @@ class OutboxDispatcher:
         batch_size: int = 20,
         retry_delay_seconds: int = 30,
         metrics: MetricsRegistry | None = None,
+        idempotency_store: IdempotencyStore | None = None,
     ) -> None:
         self.repository = repository
         self.registry = registry
@@ -32,6 +34,7 @@ class OutboxDispatcher:
         self.batch_size = batch_size
         self.retry_delay_seconds = retry_delay_seconds
         self.metrics = metrics
+        self.idempotency_store = idempotency_store or IdempotencyStore(repository.session)
 
     async def dispatch_once(self) -> DispatchStats:
         events = await self.repository.claim_batch(
@@ -43,7 +46,10 @@ class OutboxDispatcher:
         dead_lettered = 0
         for event in events:
             try:
-                await self.registry.dispatch(self.repository.to_envelope(event))
+                await self.registry.dispatch(
+                    self.repository.to_envelope(event),
+                    idempotency_store=self.idempotency_store,
+                )
             except Exception as exc:
                 await self.repository.mark_failed(
                     event,

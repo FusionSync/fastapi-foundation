@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from core.exceptions import AppError
+from core.idempotency import IdempotencyStore, hash_request_payload
 
 if TYPE_CHECKING:
     from core.apps.module import EventHandlerSpec
@@ -33,9 +34,15 @@ class RegisteredEventHandler:
     handler: EventHandler
 
 
+@dataclass(frozen=True, slots=True)
+class _EventHandlerEntry:
+    handler_key: str
+    handler: EventHandler
+
+
 class EventRegistry:
     def __init__(self) -> None:
-        self._handlers: dict[tuple[str, int], list[EventHandler]] = {}
+        self._handlers: dict[tuple[str, int], list[_EventHandlerEntry]] = {}
         self._registered_handlers: list[RegisteredEventHandler] = []
         self._handler_keys: set[tuple[str, int, str]] = set()
 
@@ -47,9 +54,26 @@ class EventRegistry:
                 registry.register_spec(app_module.label, spec)
         return registry
 
-    def register(self, event_type: str, event_version: int, handler: EventHandler) -> None:
+    def register(
+        self,
+        event_type: str,
+        event_version: int,
+        handler: EventHandler,
+        *,
+        handler_key: str | None = None,
+    ) -> None:
         key = (event_type, event_version)
-        self._handlers.setdefault(key, []).append(handler)
+        resolved_handler_key = handler_key or _handler_key(handler)
+        if any(entry.handler_key == resolved_handler_key for entry in self._handlers.get(key, [])):
+            raise ValueError(
+                "Duplicate event handler "
+                f"{resolved_handler_key!r} for {event_type} v{event_version}"
+            )
+        entry = _EventHandlerEntry(
+            handler_key=resolved_handler_key,
+            handler=handler,
+        )
+        self._handlers.setdefault(key, []).append(entry)
 
     def register_spec(self, app_label: str, spec: EventHandlerSpec) -> None:
         duplicate_key = (spec.event_type, spec.event_version, spec.handler_path)
@@ -59,7 +83,12 @@ class EventRegistry:
                 f"{spec.handler_path!r} for {spec.event_type} v{spec.event_version}"
             )
         handler = _import_event_handler(spec.handler_path)
-        self.register(spec.event_type, spec.event_version, handler)
+        self.register(
+            spec.event_type,
+            spec.event_version,
+            handler,
+            handler_key=spec.handler_path,
+        )
         self._handler_keys.add(duplicate_key)
         self._registered_handlers.append(
             RegisteredEventHandler(
@@ -85,18 +114,51 @@ class EventRegistry:
             ]
         }
 
-    async def dispatch(self, envelope: EventEnvelope) -> None:
-        handlers = self._handlers.get((envelope.event_type, envelope.event_version), [])
-        if not handlers:
+    async def dispatch(
+        self,
+        envelope: EventEnvelope,
+        *,
+        idempotency_store: IdempotencyStore | None = None,
+    ) -> None:
+        entries = self._handlers.get((envelope.event_type, envelope.event_version), [])
+        if not entries:
             raise AppError(
                 "SYSTEM_ERROR",
                 f"No handler registered for {envelope.event_type} v{envelope.event_version}",
                 status_code=500,
             )
-        for handler in handlers:
-            result = handler(envelope)
-            if inspect.isawaitable(result):
-                await result
+        for entry in entries:
+            if idempotency_store is None:
+                await _call_handler(entry.handler, envelope)
+                continue
+            claim = await idempotency_store.claim(
+                tenant_id=envelope.tenant_id,
+                user_id=str(envelope.payload.get("actor_id") or "__system__"),
+                route=_handler_route(envelope, entry.handler_key),
+                idempotency_key=envelope.event_id,
+                request_hash=_handler_request_hash(envelope, entry.handler_key),
+                retry_failed=True,
+            )
+            if claim.outcome == "replayed":
+                continue
+            try:
+                await _call_handler(entry.handler, envelope)
+            except Exception as exc:
+                await idempotency_store.mark_failed(
+                    claim.record,
+                    response_code=type(exc).__name__,
+                    response_body={"error": str(exc)},
+                )
+                raise
+            await idempotency_store.mark_succeeded(
+                claim.record,
+                response_code="OK",
+                response_body={
+                    "event_id": envelope.event_id,
+                    "handler_key": entry.handler_key,
+                },
+                outbox_event_id=envelope.event_id,
+            )
 
 
 def _import_event_handler(handler_path: str) -> EventHandler:
@@ -111,3 +173,30 @@ def _import_event_handler(handler_path: str) -> EventHandler:
     if not callable(handler):
         raise TypeError(f"Event handler {handler_path!r} must be callable")
     return handler
+
+
+async def _call_handler(handler: EventHandler, envelope: EventEnvelope) -> None:
+    result = handler(envelope)
+    if inspect.isawaitable(result):
+        await result
+
+
+def _handler_key(handler: EventHandler) -> str:
+    module = getattr(handler, "__module__", handler.__class__.__module__)
+    qualname = getattr(handler, "__qualname__", handler.__class__.__qualname__)
+    return f"{module}.{qualname}"
+
+
+def _handler_route(envelope: EventEnvelope, handler_key: str) -> str:
+    return f"outbox:{envelope.event_type}:v{envelope.event_version}:{handler_key}"
+
+
+def _handler_request_hash(envelope: EventEnvelope, handler_key: str) -> str:
+    return hash_request_payload(
+        {
+            "event_id": envelope.event_id,
+            "event_type": envelope.event_type,
+            "event_version": envelope.event_version,
+            "handler_key": handler_key,
+        }
+    )

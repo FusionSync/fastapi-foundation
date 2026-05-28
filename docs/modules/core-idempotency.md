@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim 和状态流转 store 已落地。
+- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim、状态流转 store 和 outbox handler 执行幂等复用已落地。
 - Next:
   - [ ] 补 response replay/cache 语义。
   - [ ] 增加过期清理策略和冲突诊断命令。
@@ -99,6 +99,7 @@ processing
 - 相同 key、不同请求指纹返回 `IDEMPOTENCY_KEY_CONFLICT`。
 - 成功请求通过 `mark_succeeded()` 保存 `response_code` 和 `response_body`，后续重复请求返回原响应。
 - 可通过 `outbox_event_id` 或 `task_id` 绑定异步副作用，避免客户端重试重复提交。
+- outbox dispatcher 复用 `IdempotencyStore` 保护 handler 执行，范围为 `tenant_id + actor_id + outbox route + event_id`，其中 route 包含 `event_type`、`event_version` 和 `handler_key`。
 - `locked_until` 过期后允许重新领取；`expires_at` 过期后允许复用同一 key。
 
 第一版没有直接做 HTTP middleware。推荐先由高风险写接口在 service/route 入口显式调用 store，等账户、文件、任务等大功能全部连通后，再抽象成可复用 dependency。

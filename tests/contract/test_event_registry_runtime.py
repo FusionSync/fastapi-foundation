@@ -102,6 +102,18 @@ def test_event_registry_rejects_duplicate_handler_specs(
         EventRegistry.from_app_registry(AppRegistry(["fake_event_app"]).load())
 
 
+def test_event_registry_rejects_duplicate_direct_handler_key() -> None:
+    registry = EventRegistry()
+
+    def handle_created(envelope: EventEnvelope) -> None:
+        return None
+
+    registry.register("example.created", 1, handle_created)
+
+    with pytest.raises(ValueError, match="Duplicate event handler"):
+        registry.register("example.created", 1, handle_created)
+
+
 def test_event_registry_rejects_non_callable_handler(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

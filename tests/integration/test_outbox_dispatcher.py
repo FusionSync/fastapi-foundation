@@ -6,10 +6,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from core.apps import EventHandlerSpec
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
 from core.exceptions import AppError
+from core.idempotency import IdempotencyStore, hash_request_payload
 from core.observability import MetricsRegistry
 from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
 
@@ -101,6 +103,47 @@ async def test_dispatcher_retries_failed_event_then_publishes(
     assert second_stats.published == 1
     assert second_event.status == "published"
     assert calls == [second_event.id, second_event.id]
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_skips_handler_when_event_handler_already_succeeded(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    delivered: list[str] = []
+    handler_key = "fake_idempotent_handlers.handle_business_created"
+    registry = EventRegistry()
+    _install_handler_module(
+        monkeypatch,
+        handle_business_created=lambda event: delivered.append(event.event_id),
+    )
+    registry.register_spec(
+        "idempotent_app",
+        EventHandlerSpec(
+            event_type="business.created",
+            event_version=1,
+            handler_path=handler_key,
+        ),
+    )
+    event_id = await _add_event(session_factory, registry)
+    await _mark_handler_succeeded(
+        session_factory,
+        event_id=event_id,
+        handler_key=handler_key,
+    )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+        ).dispatch_once()
+
+    event = await _first_event(session_factory)
+    assert stats.published == 1
+    assert delivered == []
+    assert event.status == "published"
 
 
 @pytest.mark.asyncio
@@ -358,10 +401,10 @@ async def _add_event(
     registry: EventRegistry,
     *,
     max_attempts: int = 3,
-) -> None:
+) -> str:
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
-        await OutboxRepository(uow.session, registry=registry).add(
+        event = await OutboxRepository(uow.session, registry=registry).add(
             event_type="business.created",
             aggregate_type="business_record",
             aggregate_id="record-1",
@@ -369,6 +412,8 @@ async def _add_event(
             payload=_payload(),
             max_attempts=max_attempts,
         )
+        await uow.session.flush()
+        return event.id
 
 
 async def _first_event(session_factory: async_sessionmaker[AsyncSession]) -> OutboxEvent:
@@ -386,3 +431,44 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "request_id": "req_test",
         **overrides,
     }
+
+
+def _install_handler_module(monkeypatch: pytest.MonkeyPatch, **handlers: object) -> None:
+    import sys
+    import types
+
+    handler_module = types.ModuleType("fake_idempotent_handlers")
+    for name, handler in handlers.items():
+        setattr(handler_module, name, handler)
+    monkeypatch.setitem(sys.modules, "fake_idempotent_handlers", handler_module)
+
+
+async def _mark_handler_succeeded(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    event_id: str,
+    handler_key: str,
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        store = IdempotencyStore(uow.session)
+        claim = await store.claim(
+            tenant_id="tenant-a",
+            user_id="user-1",
+            route=f"outbox:business.created:v1:{handler_key}",
+            idempotency_key=event_id,
+            request_hash=hash_request_payload(
+                {
+                    "event_id": event_id,
+                    "event_type": "business.created",
+                    "event_version": 1,
+                    "handler_key": handler_key,
+                }
+            ),
+        )
+        await store.mark_succeeded(
+            claim.record,
+            response_code="OK",
+            response_body={"event_id": event_id, "handler_key": handler_key},
+            outbox_event_id=event_id,
+        )
