@@ -58,5 +58,6 @@ AuditLog
 - `AuditService` 会从 `RequestContext` 补齐 `tenant_id`、`actor_id`、`request_id`、`ip_address`、`user_agent`。
 - 入库前通过 `core.security.redact_sensitive_data()` 脱敏 password、token、secret、authorization 等字段。
 - 每条记录写入 `hash_prev` 和 `hash`，为生产 profile 的 hash chain/WORM/SIEM 适配预留证据链。
+- `core.permissions.AuthorizationService` 会在权限拒绝时写入 `authorization.denied` 审计。
 
 当前 hash chain 是数据库内轻量链路，不替代外部 WORM 或 SIEM。生产环境如果有合规要求，应把审计导出和不可篡改存储作为部署 profile 能力继续接上。

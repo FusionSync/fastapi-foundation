@@ -135,6 +135,9 @@ PermissionRegistry
 PolicyProjector / reconciliation
   src/core/permissions/projector.py
 
+AuthorizationService
+  查询 ProjectedPolicy，并在拒绝时写 authorization.denied 审计
+
 RoleGrantService
   写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
 ```

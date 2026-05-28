@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,9 @@ from core.exceptions import AppError
 from core.storage import StorageProvider, file_object_key
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 from platform_apps.files.models import FileObject
+
+if TYPE_CHECKING:
+    from core.permissions import AuthorizationService
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +80,9 @@ class FileService:
         owner_type: str,
         owner_id: str,
         tenant_status: TenantStatus = "active",
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
     ) -> FileDownload:
         assert_tenant_operation_allowed(
             tenant_id=tenant_id,
@@ -89,6 +96,21 @@ class FileService:
             owner_type=owner_type,
             owner_id=owner_id,
         )
+        if authorization is not None:
+            if user_id is None or not user_id.strip():
+                raise AppError(
+                    "VALIDATION_ERROR",
+                    "user_id is required when file authorization is enabled",
+                    status_code=400,
+                )
+            await authorization.require(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                resource="file",
+                action="download",
+                resource_id=file_object.id,
+                request_id=request_id,
+            )
         data = await self.storage.get_file(file_object.object_key)
         return FileDownload(
             file_id=file_object.id,

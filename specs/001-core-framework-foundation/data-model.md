@@ -142,6 +142,8 @@ Rules:
 - Policy projection is generated from role grants.
 - Tenant membership status and role grants are reconciled together when projecting policies.
 - Platform-scope grants may have no tenant_id; tenant-scope grants must have tenant_id.
+- Authorization decisions are made through the core authorization service, not by business apps querying projected policies directly.
+- Permission denials write security audit records when an audit recorder is provided.
 
 ## OutboxEvent
 

@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.exceptions import AppError
+from core.permissions import AuthorizationService, ProjectedPolicy
 from core.storage import LocalStorageProvider
+from platform_apps.audit import AuditLog, AuditService
 from platform_apps.files import FileObject, FileService
 
 
@@ -170,3 +172,80 @@ async def test_delete_marks_metadata_and_removes_storage_object(
             )
 
     assert download_deleted.value.code == "NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_download_can_require_projected_file_permission_and_audit_denials(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        file_object = await FileService(uow.session, storage).upload_bytes(
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            file_name="proposal.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            data=b"docx-bytes",
+            file_type="upload",
+        )
+        uow.session.add(
+            ProjectedPolicy(
+                tenant_id="tenant-a",
+                subject="user:user-1",
+                resource="file",
+                action="download",
+                effect="allow",
+                role_grant_id="grant-1",
+                policy_version=1,
+            )
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        download = await FileService(uow.session, storage).download_bytes(
+            file_id=file_object.id,
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
+        )
+
+    assert download.data == b"docx-bytes"
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        with pytest.raises(AppError) as denied:
+            await FileService(uow.session, storage).download_bytes(
+                file_id=file_object.id,
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                user_id="user-2",
+                request_id="req-file-denied",
+                authorization=AuthorizationService(
+                    uow.session,
+                    audit=AuditService(uow.session),
+                ),
+            )
+
+    audit_logs = await _audit_logs(session_factory)
+    assert denied.value.code == "PERMISSION_DENIED"
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == "authorization.denied"
+    assert audit_logs[0].resource_type == "file"
+    assert audit_logs[0].resource_id == file_object.id
+    assert audit_logs[0].actor_id == "user-2"
+    assert audit_logs[0].request_id == "req-file-denied"
+
+
+async def _audit_logs(session_factory: async_sessionmaker[AsyncSession]) -> list[AuditLog]:
+    async with session_factory() as session:
+        result = await session.execute(select(AuditLog).order_by(AuditLog.created_at))
+        audit_logs = list(result.scalars().all())
+        for audit_log in audit_logs:
+            session.expunge(audit_log)
+        return audit_logs

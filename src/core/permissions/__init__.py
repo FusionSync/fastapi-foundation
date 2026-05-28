@@ -1,3 +1,7 @@
+from core.permissions.authorization import (
+    AuthorizationDecision,
+    AuthorizationService,
+)
 from core.permissions.cache import PermissionCache
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
 from core.permissions.policies import (
@@ -13,6 +17,8 @@ from core.permissions.services import RoleGrantService
 from core.permissions.specs import PermissionSpec
 
 __all__ = [
+    "AuthorizationDecision",
+    "AuthorizationService",
     "ROLE_GRANT_CHANGED_EVENT",
     "PermissionCache",
     "PermissionRegistry",

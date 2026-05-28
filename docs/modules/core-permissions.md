@@ -37,7 +37,7 @@ src/core/permissions/
 业务 app 只调用 core 抽象：
 
 ```python
-await authorize(
+decision = await AuthorizationService(session).authorize(
     user_id=current_user.id,
     tenant_id=current_tenant.id,
     resource="workspace",
@@ -47,6 +47,14 @@ await authorize(
 
 禁止业务 app 直接操作 Casbin enforcer。
 平台级权限使用 `scope=platform` 的 RoleGrant，不允许通过 `CurrentUser.is_platform_admin` 绕过授权接口。
+
+当前实现提供 `AuthorizationService`：
+
+- `authorize()` 查询 `ProjectedPolicy`，返回 `AuthorizationDecision`，不抛异常。
+- `require()` 查询并在拒绝时抛 `PERMISSION_DENIED`。
+- 拒绝时如果传入 `AuditService`，会在同一个数据库 session 中写入 `authorization.denied` 审计。
+- 第一版 subject 固定为 `user:{user_id}`，tenant domain 固定为 `tenant_id`。
+- 业务 app 不直接查询 `ProjectedPolicy`；文件、任务、业务资源等入口应接入 `AuthorizationService`。
 
 ## 权限点注册
 
