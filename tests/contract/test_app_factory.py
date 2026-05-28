@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from core.app import create_app
 from core.config import Settings
+from core.operations import DependencyProbeResult
 
 
 def test_health_endpoints_use_envelope() -> None:
@@ -23,7 +24,12 @@ def test_health_endpoints_use_envelope() -> None:
 
 
 def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
-    app = create_app(Settings(installed_apps=["apps.example_domain.module"]))
+    app = create_app(
+        Settings(
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            installed_apps=["apps.example_domain.module"],
+        )
+    )
     client = TestClient(app)
 
     response = client.get("/readyz")
@@ -35,10 +41,27 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
     assert body["data"]["checks"] == {
         "config_loaded": True,
         "database_configured": True,
+        "database_reachable": True,
         "app_registry_loaded": True,
         "metrics_registry_loaded": True,
     }
     assert body["data"]["details"]["installed_apps"] == ["example_domain"]
+    assert body["data"]["details"]["dependencies"]["database"]["ok"] is True
+
+
+def test_ready_endpoint_returns_503_when_dependency_probe_fails() -> None:
+    app = create_app(Settings(database={"url": "sqlite+aiosqlite:///:memory:"}))
+    app.state.readiness_database_probe = _FailingReadinessProbe()
+    client = TestClient(app)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "OK"
+    assert body["data"]["status"] == "not_ready"
+    assert body["data"]["checks"]["database_reachable"] is False
+    assert body["data"]["details"]["dependencies"]["database"]["error"] == "database down"
 
 
 def test_cloud_profile_rejects_always_200_mode() -> None:
@@ -187,3 +210,12 @@ def _purge_runtime_apps() -> None:
     for name in list(sys.modules):
         if name == "runtime_apps" or name.startswith("runtime_apps."):
             del sys.modules[name]
+
+
+class _FailingReadinessProbe:
+    async def check(self) -> DependencyProbeResult:
+        return DependencyProbeResult(
+            ok=False,
+            details={"service": "database"},
+            error="database down",
+        )

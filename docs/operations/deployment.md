@@ -93,7 +93,8 @@ server /healthz
   process alive
 
 server /readyz
-  config loaded, database configured, AppRegistry loaded, MetricsRegistry loaded
+  config loaded, database configured, database reachable, AppRegistry loaded, MetricsRegistry loaded
+  returns HTTP 503 when not ready
 
 worker health
   queue reachable, database reachable, worker heartbeat fresh

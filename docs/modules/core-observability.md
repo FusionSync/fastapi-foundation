@@ -45,7 +45,7 @@ GET /version
 GET /metrics
 ```
 
-`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、AppRegistry 和 MetricsRegistry。
+`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、数据库可连接性、AppRegistry 和 MetricsRegistry。`readyz` 不通过时必须返回 HTTP 503，避免平台探针把不可服务实例加入流量。
 worker、scheduler 和 outbox-dispatcher 也必须提供等价探针或 CLI health check。
 非 HTTP 角色通过 `process_heartbeats` 保存最近一次心跳事实；健康检查读取最新
 `ProcessHeartbeatSnapshot` 后，按角色匹配、状态和 freshness 窗口判定是否可用。

@@ -12,7 +12,7 @@ from core.events import EventRegistry
 from core.exceptions import register_exception_handlers
 from core.migrations import MigrationRegistry
 from core.observability import HttpMetricsMiddleware, MetricsRegistry, render_metrics_contract
-from core.operations import check_app_readiness
+from core.operations import DatabaseReadinessProbe, check_app_readiness
 from core.permissions import PermissionRegistry
 from core.scheduler import ScheduleRegistry
 from core.security import (
@@ -39,6 +39,7 @@ def create_app(
     app = FastAPI(title=resolved_settings.app.name, version=resolved_settings.app.version)
     app.state.settings = resolved_settings
     app.state.metrics_registry = MetricsRegistry()
+    app.state.readiness_database_probe = DatabaseReadinessProbe(resolved_settings.database.url)
 
     _register_security_middleware(app, resolved_settings)
     app.add_middleware(RequestContextMiddleware)
@@ -76,12 +77,19 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
         return ok({"status": "alive"})
 
     @app.get("/readyz", include_in_schema=False)
-    async def readyz() -> dict[str, object]:
+    async def readyz(response: Response) -> dict[str, object]:
+        database_probe = getattr(app.state, "readiness_database_probe", None)
+        dependency_results = {}
+        if database_probe is not None:
+            dependency_results["database"] = await database_probe.check()
         readiness = check_app_readiness(
             settings=settings,
             app_registry=getattr(app.state, "app_registry", None),
             metrics_registry=getattr(app.state, "metrics_registry", None),
+            dependency_results=dependency_results,
         )
+        if not readiness.ok:
+            response.status_code = 503
         return ok(readiness.to_dict())
 
     @app.get("/version", include_in_schema=False)

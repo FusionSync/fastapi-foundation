@@ -6,12 +6,19 @@ from core.operations.heartbeat import (
     ProcessHeartbeatRepository,
     ProcessHeartbeatSnapshot,
 )
-from core.operations.readiness import ReadinessResult, check_app_readiness
+from core.operations.readiness import (
+    DatabaseReadinessProbe,
+    DependencyProbeResult,
+    ReadinessResult,
+    check_app_readiness,
+)
 from core.operations.smoke import SmokeResult, run_deployment_smoke
 
 __all__ = [
     "BackupReadinessResult",
     "ConfigCheckResult",
+    "DatabaseReadinessProbe",
+    "DependencyProbeResult",
     "ProcessHeartbeat",
     "ProcessHeartbeatRepository",
     "ProcessHeartbeatSnapshot",

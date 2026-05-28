@@ -26,7 +26,7 @@ src/core/app/
 - 注册全局异常处理器。
 - 注册请求 ID、日志、CORS、租户上下文等中间件。
 - 暴露健康检查和版本信息。
-- `/readyz` 使用 `check_app_readiness()` 输出 config、database、AppRegistry、MetricsRegistry 检查明细。
+- `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
 
 ## 不负责
 
