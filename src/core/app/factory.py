@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.admin import AdminRegistry
 from core.apps import AppRegistry
 from core.apps.conformance import AppCheckResult, check_apps
-from core.auth import DatabaseRequestSecurityPipeline
+from core.auth.request_security import DatabaseRequestSecurityPipeline
 from core.config import Settings, get_settings, validate_startup_settings
 from core.context import RequestContextMiddleware
 from core.events import EventRegistry

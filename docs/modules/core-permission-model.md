@@ -100,6 +100,7 @@ viewer
 ```
 
 平台角色和租户角色必须分离。
+`RoleTemplate.permissions` 虽然以 JSON 保存，但不是自由格式。投影和 reconciliation 在注入 `PermissionRegistry` 时必须校验每条 `resource/action/scope` 已在权限目录中注册，避免角色模板生成目录外的授权事实。
 
 `is_platform_admin` 不能作为 `CurrentUser` 上的绕过开关。平台管理员必须来自 platform scope 的 `RoleGrant` 或外部身份 claim 到 RoleGrant 的可审计映射。第一版使用固定 platform domain `__platform__` 表达平台级授权事实。
 

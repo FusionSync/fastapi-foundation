@@ -13,8 +13,11 @@ from core.permissions import (
     ROLE_GRANT_CHANGED_EVENT,
     AuthorizationDecision,
     PermissionCache,
+    PermissionRegistry,
+    PermissionSpec,
     PolicyProjector,
     ProjectedPolicy,
+    RegisteredPermission,
     RoleGrant,
     RoleGrantService,
     RoleTemplate,
@@ -257,6 +260,52 @@ async def test_permission_reconciliation_detects_and_repairs_missing_policy(
     assert repaired.repaired is True
     assert repaired.ok is True
     assert len(await _policies(session_factory)) == 1
+
+
+@pytest.mark.asyncio
+async def test_policy_projector_rejects_role_template_permissions_missing_from_registry(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        role_template = RoleTemplate(
+            id="template-unregistered",
+            scope="tenant",
+            name="bad-viewer",
+            version=1,
+            permissions=[{"resource": "unregistered", "action": "read"}],
+        )
+        grant = RoleGrant(
+            id="grant-unregistered",
+            tenant_id="tenant-a",
+            subject_type="user",
+            subject_id="user-1",
+            role_template_id=role_template.id,
+            policy_version=1,
+        )
+        uow.session.add_all([role_template, grant])
+        registry = PermissionRegistry(
+            permissions=[
+                RegisteredPermission(
+                    "example",
+                    PermissionSpec(resource="example", action="read", scope="tenant"),
+                )
+            ]
+        )
+
+        with pytest.raises(AppError) as rejected:
+            await PolicyProjector(uow.session, permission_registry=registry).project_grant(
+                grant,
+                role_template,
+            )
+
+    assert rejected.value.code == "VALIDATION_ERROR"
+    assert rejected.value.details == {
+        "resource": "unregistered",
+        "action": "read",
+        "scope": "tenant",
+    }
+    assert await _policies(session_factory) == []
 
 
 @pytest.mark.asyncio

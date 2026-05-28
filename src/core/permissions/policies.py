@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from core.exceptions import AppError
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
+from core.permissions.registry import PermissionRegistry
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,8 +58,14 @@ class ReconciliationResult:
         }
 
 
-def rules_for_grant(grant: RoleGrant, role_template: RoleTemplate) -> list[PolicyRule]:
+def rules_for_grant(
+    grant: RoleGrant,
+    role_template: RoleTemplate,
+    *,
+    permission_registry: PermissionRegistry | None = None,
+) -> list[PolicyRule]:
     subject = f"{grant.subject_type}:{grant.subject_id}"
+    _validate_role_template_permissions(role_template, permission_registry=permission_registry)
     return [
         PolicyRule(
             tenant_id=grant.tenant_id,
@@ -69,6 +77,41 @@ def rules_for_grant(grant: RoleGrant, role_template: RoleTemplate) -> list[Polic
         )
         for permission in role_template.permissions
     ]
+
+
+def _validate_role_template_permissions(
+    role_template: RoleTemplate,
+    *,
+    permission_registry: PermissionRegistry | None,
+) -> None:
+    if permission_registry is None:
+        return
+    for permission in role_template.permissions:
+        resource = permission.get("resource")
+        action = permission.get("action")
+        if not isinstance(resource, str) or not isinstance(action, str):
+            raise AppError(
+                "VALIDATION_ERROR",
+                "RoleTemplate permission must include resource and action",
+                status_code=400,
+                details={"role_template_id": role_template.id},
+            )
+        if permission_registry.has_permission(
+            resource=resource,
+            action=action,
+            scope=role_template.scope,
+        ):
+            continue
+        raise AppError(
+            "VALIDATION_ERROR",
+            "RoleTemplate permission is not registered",
+            status_code=400,
+            details={
+                "resource": resource,
+                "action": action,
+                "scope": role_template.scope,
+            },
+        )
 
 
 def rule_from_policy(policy: ProjectedPolicy) -> PolicyRule:

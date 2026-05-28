@@ -64,6 +64,14 @@ class PermissionRegistry:
             "permissions": [permission.to_dict() for permission in self.permissions],
         }
 
+    def has_permission(self, *, resource: str, action: str, scope: str | None = None) -> bool:
+        return any(
+            permission.spec.resource == resource
+            and permission.spec.action == action
+            and (scope is None or permission.spec.scope == scope)
+            for permission in self.permissions
+        )
+
     def _register_permission(
         self,
         registered: RegisteredPermission,

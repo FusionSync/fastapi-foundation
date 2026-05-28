@@ -14,6 +14,7 @@ from core.permissions.policies import (
     rule_from_policy,
     rules_for_grant,
 )
+from core.permissions.registry import PermissionRegistry
 
 ROLE_GRANT_CHANGED_EVENT = "permissions.role_grant_changed"
 
@@ -24,9 +25,11 @@ class PolicyProjector:
         session: AsyncSession,
         *,
         cache: PermissionCache | None = None,
+        permission_registry: PermissionRegistry | None = None,
     ) -> None:
         self.session = session
         self.cache = cache or PermissionCache()
+        self.permission_registry = permission_registry
 
     async def handle_role_grant_changed(self, envelope: EventEnvelope) -> None:
         grant_id = envelope.payload.get("grant_id")
@@ -54,7 +57,11 @@ class PolicyProjector:
         grant: RoleGrant,
         role_template: RoleTemplate,
     ) -> list[PolicyRule]:
-        rules = rules_for_grant(grant, role_template)
+        rules = rules_for_grant(
+            grant,
+            role_template,
+            permission_registry=self.permission_registry,
+        )
         await self.session.execute(
             delete(ProjectedPolicy).where(ProjectedPolicy.role_grant_id == grant.id)
         )
@@ -81,7 +88,11 @@ class PolicyProjector:
             rule
             for grant in grants
             if grant.role_template_id in templates
-            for rule in rules_for_grant(grant, templates[grant.role_template_id])
+            for rule in rules_for_grant(
+                grant,
+                templates[grant.role_template_id],
+                permission_registry=self.permission_registry,
+            )
         ]
         policies = list((await self.session.execute(select(ProjectedPolicy))).scalars().all())
         expected_by_key = {rule.key: rule for rule in expected}
