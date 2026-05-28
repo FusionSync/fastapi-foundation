@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: response envelope、标准/兼容 HTTP status、错误码 registry、headers 和 OpenAPI response_model gate 已落地。
+- Done: response envelope、标准/兼容 HTTP status、错误码 registry、headers、OpenAPI response_model gate，以及分页/过滤/排序 query schema contract 已落地。
 - Next:
-  - [ ] 补分页、过滤和排序的统一 schema contract。
   - [ ] 将非 JSON/binary response 的例外路径纳入 conformance 白名单。
 
 ## 职责
@@ -120,7 +119,12 @@ page
 page_size
 ```
 
-默认 `page_size=20`，最大值由配置控制。
+列表接口必须通过 `ListQuerySchema` 或其子类声明分页入参：
+
+- `page` 从 1 开始，默认 `1`。
+- `page_size` 默认 `20`，当前 contract 上限为 `200`。
+- `offset = (page - 1) * page_size`，`limit = page_size`。
+- 响应必须通过 `query.to_pagination(total=...)` 生成 envelope 中的 `pagination`。
 
 ## 过滤和排序
 
@@ -135,6 +139,10 @@ page_size
 ```text
 ?sort=-created_at,name
 ```
+
+排序字段必须由具体 query schema 的 `sortable_fields` 白名单声明；`-field` 表示降序，`field` 或 `+field` 表示升序。字段名只允许稳定 schema 字段名，禁止把客户端传入值直接拼到 SQL。
+
+过滤字段必须由 query schema 的字段和 `filterable_fields` 白名单声明；`keyword` 是通用搜索字段，业务字段如 `status`、`title` 由具体 app 子类补充。repository 层通过 `apply_list_query()` 接收显式 `sort_columns` / `filter_columns` 映射后再应用到 ORM 查询。
 
 ## 错误码
 

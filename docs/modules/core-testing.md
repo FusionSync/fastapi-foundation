@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、app registry version/capability diagnostics、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、app registry version/capability diagnostics、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle、API list query contract、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
 

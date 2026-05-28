@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository 和 route security policy 已被上层 gate 使用。
+- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository、route security policy、ListQuerySchema 分页/过滤/排序 helper 和 repository 查询应用 helper 已被上层 gate 或 contract tests 使用。
 - Next:
   - [ ] 用 conformance 或 lint 强制业务 repository 继承约定。
-  - [ ] 补分页、过滤、排序 helper 的可复用基类。
 
 ## 职责
 
@@ -73,6 +72,26 @@ ListQuerySchema
   page_size
   sort
   keyword
+  offset
+  limit
+  sort_terms()
+  filter_values()
+  to_pagination(total)
+```
+
+列表 query schema 应继承 `ListQuerySchema`，并用 `sortable_fields`、`filterable_fields`
+和可选 `default_sort` 声明该接口允许的排序和过滤面。业务过滤字段直接作为 schema 字段补充，例如：
+
+```python
+from typing import ClassVar
+
+
+class ExampleListQuery(ListQuerySchema):
+    sortable_fields: ClassVar[frozenset[str] | None] = frozenset({"created_at", "title"})
+    filterable_fields: ClassVar[frozenset[str] | None] = frozenset({"keyword", "title"})
+    default_sort: ClassVar[tuple[str, ...]] = ("-created_at",)
+
+    title: str | None = None
 ```
 
 所有对外 schema 必须继承 core schema 基类，避免序列化规则不一致。
@@ -146,6 +165,7 @@ TenantScopedRepository
   自动注入 tenant_id
   自动过滤 deleted_at
   create 时自动写 tenant_id
+  apply_list_query
 
 CrossTenantRepository
   仅 platform scope 使用
@@ -156,5 +176,7 @@ CrossTenantRepository
 
 - 简单 app 也可以复用 core 提供的 generic repository，但不能直接调用 ORM manager。
 - service 不直接写 tenant-scoped ORM 查询。
+- 列表查询通过 `apply_list_query(statement, query, sort_columns=..., filter_columns=...)`
+  应用过滤、排序和分页；字段到 ORM column 的映射必须显式传入。
 - raw SQL 必须使用 `core.db.sql` wrapper。
 - app conformance test 和 lint 必须拒绝业务 app 绕过 tenant-safe repository/query。

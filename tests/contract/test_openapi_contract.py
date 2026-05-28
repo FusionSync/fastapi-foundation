@@ -22,6 +22,24 @@ def test_example_route_openapi_uses_typed_response_envelope() -> None:
     assert _schema_ref_name(data_schema) == "ExamplePing"
 
 
+def test_example_list_route_openapi_exposes_standard_query_contract() -> None:
+    client = TestClient(create_app(Settings(installed_apps=["apps.example_domain.module"])))
+
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    document = response.json()
+    operation = document["paths"]["/api/v1/examples"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+
+    assert {"page", "page_size", "sort", "keyword", "title"} <= set(parameters)
+    assert parameters["page"]["in"] == "query"
+    assert parameters["page"]["schema"]["minimum"] == 1
+    assert parameters["page_size"]["schema"]["maximum"] == 200
+    assert _schema_ref_name(response_schema).startswith("ListEnvelope")
+
+
 def _resolve_schema(document: dict[str, object], schema: dict[str, object]) -> dict[str, object]:
     ref_name = _schema_ref_name(schema)
     return document["components"]["schemas"][ref_name]  # type: ignore[index]

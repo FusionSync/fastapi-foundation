@@ -33,3 +33,32 @@ def test_app_factory_registers_example_app_router() -> None:
     assert body["code"] == "OK"
     assert body["data"] == {"app": "example_domain", "status": "ready"}
     assert app.state.app_registry.modules[0].label == "example_domain"
+
+
+def test_example_app_list_route_uses_standard_query_contract() -> None:
+    app = create_app(Settings(installed_apps=["apps.example_domain.module"]))
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/v1/examples",
+        params={"page": 2, "page_size": 1, "sort": "-created_at", "title": "demo"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == "OK"
+    assert body["list"] == [
+        {
+            "id": "example-2",
+            "created_at": "2026-05-28T10:00:00Z",
+            "updated_at": "2026-05-28T10:00:00Z",
+            "tenant_id": "tenant-demo",
+            "title": "demo contract",
+        }
+    ]
+    assert body["pagination"] == {
+        "total": 2,
+        "page": 2,
+        "page_size": 1,
+        "has_next": False,
+    }

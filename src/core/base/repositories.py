@@ -1,14 +1,17 @@
+from collections.abc import Callable, Mapping
 from typing import Any, Generic, TypeVar
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.base.models import BaseModel
+from core.base.schemas import ListQuerySchema
 from core.context import get_current_context
 from core.exceptions import AppError
 from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+FilterApplier = Callable[[Select[tuple[Any]], Any], Select[tuple[Any]]]
 
 
 class TenantScopedQuery(Generic[ModelT]):
@@ -37,6 +40,55 @@ class BaseRepository(Generic[ModelT]):
 
     def query(self) -> Select[tuple[ModelT]]:
         return select(self.model)
+
+    def apply_list_query(
+        self,
+        statement: Select[tuple[ModelT]],
+        query: ListQuerySchema,
+        *,
+        sort_columns: Mapping[str, Any],
+        filter_columns: Mapping[str, Any | FilterApplier] | None = None,
+    ) -> Select[tuple[ModelT]]:
+        statement = self.apply_list_filters(
+            statement,
+            query,
+            filter_columns=filter_columns or {},
+        )
+        statement = self.apply_list_sort(statement, query, sort_columns=sort_columns)
+        return statement.offset(query.offset).limit(query.limit)
+
+    def apply_list_filters(
+        self,
+        statement: Select[tuple[ModelT]],
+        query: ListQuerySchema,
+        *,
+        filter_columns: Mapping[str, Any | FilterApplier],
+    ) -> Select[tuple[ModelT]]:
+        for field_name, value in query.filter_values().items():
+            column_or_applier = filter_columns.get(field_name)
+            if column_or_applier is None:
+                raise ValueError(f"missing filter column for {field_name!r}")
+            if callable(column_or_applier) and not hasattr(column_or_applier, "__clause_element__"):
+                statement = column_or_applier(statement, value)
+            else:
+                statement = statement.where(column_or_applier == value)
+        return statement
+
+    def apply_list_sort(
+        self,
+        statement: Select[tuple[ModelT]],
+        query: ListQuerySchema,
+        *,
+        sort_columns: Mapping[str, Any],
+    ) -> Select[tuple[ModelT]]:
+        for term in query.sort_terms():
+            column = sort_columns.get(term.field)
+            if column is None:
+                raise ValueError(f"missing sort column for {term.field!r}")
+            statement = statement.order_by(
+                column.desc() if term.direction == "desc" else column.asc()
+            )
+        return statement
 
     async def get(self, record_id: object) -> ModelT | None:
         result = await self.session.execute(self.query().where(self.model.id == record_id))  # type: ignore[attr-defined]
