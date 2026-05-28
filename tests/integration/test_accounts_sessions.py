@@ -11,7 +11,7 @@ from core.events import EventRegistry
 from core.exceptions import AppError
 from core.outbox import OutboxRepository
 from core.security import PasswordHasher
-from core.tenancy import Tenant, TenantLifecycleService
+from core.tenancy import Tenant, TenantLifecycleService, TenantMember
 from platform_apps.accounts import (
     AccountsAuthSessionStore,
     AccountsService,
@@ -45,6 +45,7 @@ async def test_create_user_and_session_for_active_user(
             auth_provider="local",
             external_id="owner@example.com",
         )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         session = await accounts.create_session(
             user_id=user.id,
             tenant_id="tenant-a",
@@ -71,6 +72,7 @@ async def test_disabled_user_cannot_create_new_session_and_existing_sessions_are
             auth_provider="local",
             external_id="owner@example.com",
         )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         active_session = await accounts.create_session(
             user_id=user.id,
             tenant_id="tenant-a",
@@ -113,6 +115,8 @@ async def test_tenant_lifecycle_can_revoke_tenant_sessions_through_hook(
             auth_provider="local",
             external_id="owner@example.com",
         )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
+        _add_tenant_member(uow.session, tenant_id="tenant-b", user_id=user.id)
         await accounts.create_session(
             user_id=user.id,
             tenant_id="tenant-a",
@@ -122,15 +126,6 @@ async def test_tenant_lifecycle_can_revoke_tenant_sessions_through_hook(
             user_id=user.id,
             tenant_id="tenant-b",
             auth_provider="local",
-        )
-        uow.session.add(
-            Tenant(
-                id="tenant-a",
-                name="Tenant A",
-                code="tenant-a",
-                status="active",
-                deployment_mode="local",
-            )
         )
 
     async with unit_of_work(session_factory) as uow:
@@ -168,6 +163,7 @@ async def test_local_password_flow_and_auth_session_validator_share_session_fact
             display_name="Owner",
             password="CorrectHorse1",
         )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         verified_user = await accounts.verify_local_password(
             email="owner@example.com",
             password="CorrectHorse1",
@@ -214,6 +210,7 @@ async def test_auth_session_validator_rejects_revoked_session_and_disabled_user(
             auth_provider="local",
             external_id="owner@example.com",
         )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         user_session = await accounts.create_session(
             user_id=user.id,
             tenant_id="tenant-a",
@@ -233,6 +230,73 @@ async def test_auth_session_validator_rejects_revoked_session_and_disabled_user(
 
     assert rejected.value.code == "AUTH_INVALID_TOKEN"
     assert rejected.value.details == {"reason": "session_not_active"}
+
+
+@pytest.mark.asyncio
+async def test_create_session_requires_active_tenant_membership(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(uow.session)
+        user = await accounts.create_user(
+            email="owner@example.com",
+            display_name="Owner",
+            auth_provider="local",
+            external_id="owner@example.com",
+        )
+        _add_tenant(uow.session, tenant_id="tenant-a")
+
+        with pytest.raises(AppError) as non_member:
+            await accounts.create_session(
+                user_id=user.id,
+                tenant_id="tenant-a",
+                auth_provider="local",
+            )
+
+        uow.session.add(
+            TenantMember(tenant_id="tenant-a", user_id=user.id, status="inactive")
+        )
+        with pytest.raises(AppError) as inactive_member:
+            await accounts.create_session(
+                user_id=user.id,
+                tenant_id="tenant-a",
+                auth_provider="local",
+            )
+
+    assert non_member.value.code == "TENANT_ACCESS_DENIED"
+    assert inactive_member.value.code == "TENANT_ACCESS_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_create_session_requires_tenant_login_allowed(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(uow.session)
+        user = await accounts.create_user(
+            email="owner@example.com",
+            display_name="Owner",
+            auth_provider="local",
+            external_id="owner@example.com",
+        )
+        _add_tenant_member(
+            uow.session,
+            tenant_id="tenant-deleting",
+            user_id=user.id,
+            status="active",
+            tenant_status="deleting",
+        )
+
+        with pytest.raises(AppError) as rejected:
+            await accounts.create_session(
+                user_id=user.id,
+                tenant_id="tenant-deleting",
+                auth_provider="local",
+            )
+
+    assert rejected.value.code == "TENANT_STATE_FORBIDDEN"
 
 
 async def _user(session_factory: async_sessionmaker[AsyncSession], user_id: str) -> User:
@@ -261,3 +325,32 @@ async def _credentials(
         for credential in credentials:
             session.expunge(credential)
         return credentials
+
+
+def _add_tenant_member(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    user_id: str,
+    status: str = "active",
+    tenant_status: str = "active",
+) -> None:
+    _add_tenant(session, tenant_id=tenant_id, status=tenant_status)
+    session.add(TenantMember(tenant_id=tenant_id, user_id=user_id, status=status))
+
+
+def _add_tenant(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    status: str = "active",
+) -> None:
+    session.add(
+        Tenant(
+            id=tenant_id,
+            name=tenant_id,
+            code=tenant_id,
+            status=status,
+            deployment_mode="local",
+        )
+    )

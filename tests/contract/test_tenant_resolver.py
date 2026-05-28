@@ -16,6 +16,7 @@ def test_resolve_current_tenant_injects_frozen_context() -> None:
         tenant_id = resolve_current_tenant(
             current_user=_user("user-1", "tenant-a"),
             header_tenant_id="tenant-a",
+            tenant=TenantRecord(tenant_id="tenant-a", status="active"),
         )
 
         context = get_current_context()
@@ -47,6 +48,16 @@ def test_inactive_membership_is_rejected() -> None:
 
     with pytest.raises(AppError) as exc_info:
         resolve_current_tenant(current_user=user, header_tenant_id="tenant-a")
+
+    assert exc_info.value.code == "TENANT_ACCESS_DENIED"
+
+
+def test_tenant_resolution_requires_loaded_tenant_record() -> None:
+    with pytest.raises(AppError) as exc_info:
+        resolve_current_tenant(
+            current_user=_user("user-1", "tenant-a"),
+            header_tenant_id="tenant-a",
+        )
 
     assert exc_info.value.code == "TENANT_ACCESS_DENIED"
 

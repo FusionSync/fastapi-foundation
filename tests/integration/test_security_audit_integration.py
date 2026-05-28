@@ -9,7 +9,7 @@ from core.db import unit_of_work
 from core.events import EventRegistry
 from core.outbox import OutboxEvent, OutboxRepository
 from core.permissions import RoleGrant, RoleGrantService, RoleTemplate
-from core.tenancy import TENANT_CREATED_EVENT, Tenant, TenantLifecycleService
+from core.tenancy import TENANT_CREATED_EVENT, Tenant, TenantLifecycleService, TenantMember
 from platform_apps.accounts import AccountsService, User
 from platform_apps.audit import AuditLog, AuditService
 
@@ -161,6 +161,16 @@ async def test_disable_user_writes_security_audit_and_revokes_sessions(
             auth_provider="local",
             external_id="owner@example.com",
         )
+        uow.session.add(
+            Tenant(
+                id="tenant-a",
+                code="tenant-a",
+                name="Tenant A",
+                status="active",
+                deployment_mode="local",
+            )
+        )
+        uow.session.add(TenantMember(tenant_id="tenant-a", user_id=user.id, status="active"))
         await accounts.create_session(
             user_id=user.id,
             tenant_id="tenant-a",

@@ -18,6 +18,7 @@ async def execute_tenant_scoped(
     tenant_id: str | None = None,
 ) -> Any:
     resolved_tenant_id = tenant_id or _current_tenant_id()
+    _validate_tenant_predicate(statement)
     params = dict(parameters or {})
     provided_tenant_id = params.get("tenant_id")
     if provided_tenant_id is not None and provided_tenant_id != resolved_tenant_id:
@@ -28,6 +29,17 @@ async def execute_tenant_scoped(
         )
     params["tenant_id"] = resolved_tenant_id
     return await session.execute(text(statement), params)
+
+
+def _validate_tenant_predicate(statement: str) -> None:
+    normalized = " ".join(statement.lower().split())
+    if "tenant_id" in normalized and ":tenant_id" in normalized:
+        return
+    raise AppError(
+        "TENANT_ACCESS_DENIED",
+        "Tenant-scoped SQL must include an explicit tenant_id predicate",
+        status_code=403,
+    )
 
 
 async def execute_cross_tenant(

@@ -51,6 +51,22 @@ async def test_tenant_scoped_sql_rejects_conflicting_tenant_parameter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tenant_scoped_sql_rejects_missing_tenant_predicate() -> None:
+    token = set_current_context(RequestContext(request_id="req_test", tenant_id="tenant-a"))
+    try:
+        with pytest.raises(AppError) as exc_info:
+            await execute_tenant_scoped(
+                _FakeSession(),  # type: ignore[arg-type]
+                "select * from records where status = :status",
+                {"status": "active"},
+            )
+
+        assert exc_info.value.code == "TENANT_ACCESS_DENIED"
+    finally:
+        reset_current_context(token)
+
+
+@pytest.mark.asyncio
 async def test_cross_tenant_sql_requires_reason_and_platform_permission() -> None:
     with pytest.raises(AppError) as missing_reason:
         await execute_cross_tenant(

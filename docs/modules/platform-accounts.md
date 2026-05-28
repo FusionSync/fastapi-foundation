@@ -64,7 +64,7 @@ PATCH /api/v1/me
 - `platform_apps.accounts.models.User` 保存本地用户基础资料和 `token_version`。
 - `UserCredential` 和 `ExternalIdentity` 预留本地密码与 OIDC/Logto/Keycloak subject 映射。
 - `UserSession` 保存 session_id、tenant_id、auth_provider、status 和创建时的 token_version。
-- `AccountsService.create_session()` 只允许 active user 创建 session。
+- `AccountsService.create_session()` 只允许 active user 创建 session；如果 session 绑定 tenant，必须先验证 Tenant 存在、用户是 active member，并通过 tenant lifecycle 的 `login` gate。
 - `AccountsService.create_local_user()` 创建 local user 并写 `UserCredential.password_hash`。
 - `AccountsService.verify_local_password()` 使用 `core.security.PasswordHasher` 校验本地密码。
 - `AccountsService.disable_user()` 会把 user 标记为 disabled、递增 token_version，并撤销该用户所有 active sessions。

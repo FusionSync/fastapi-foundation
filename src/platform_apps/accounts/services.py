@@ -9,6 +9,7 @@ from core.audit import AuditRecorder
 from core.auth import invalid_auth_token
 from core.exceptions import AppError
 from core.security import PasswordHasher
+from core.tenancy import Tenant, TenantMember, assert_tenant_operation_allowed
 from platform_apps.accounts.models import ExternalIdentity, User, UserCredential, UserSession
 
 
@@ -115,6 +116,8 @@ class AccountsService:
                 "disabled users cannot create sessions",
                 status_code=403,
             )
+        if tenant_id is not None:
+            await self._assert_tenant_login_allowed(user_id=user.id, tenant_id=tenant_id)
         session = UserSession(
             user_id=user.id,
             tenant_id=tenant_id,
@@ -125,6 +128,34 @@ class AccountsService:
         self.session.add(session)
         await self.session.flush()
         return session
+
+    async def _assert_tenant_login_allowed(self, *, user_id: str, tenant_id: str) -> None:
+        tenant = await self.session.get(Tenant, tenant_id)
+        if tenant is None:
+            raise AppError(
+                "TENANT_ACCESS_DENIED",
+                "tenant membership is required to create a session",
+                status_code=403,
+                details={"tenant_id": tenant_id},
+            )
+        result = await self.session.execute(
+            select(TenantMember)
+            .where(TenantMember.tenant_id == tenant_id)
+            .where(TenantMember.user_id == user_id)
+            .where(TenantMember.status == "active")
+        )
+        if result.scalars().first() is None:
+            raise AppError(
+                "TENANT_ACCESS_DENIED",
+                "active tenant membership is required to create a session",
+                status_code=403,
+                details={"tenant_id": tenant_id, "user_id": user_id},
+            )
+        assert_tenant_operation_allowed(
+            tenant_id=tenant_id,
+            status=tenant.status,  # type: ignore[arg-type]
+            operation="login",
+        )
 
     async def disable_user(
         self,

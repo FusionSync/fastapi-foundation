@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
 from core.exceptions import AppError
 from core.outbox import OutboxRepository
-from core.permissions.models import RoleGrant
+from core.permissions.models import ProjectedPolicy, RoleGrant
 from core.permissions.projector import ROLE_GRANT_CHANGED_EVENT
 
 
@@ -116,6 +117,9 @@ class RoleGrantService:
                     "role_template_id": grant.role_template_id,
                 },
             )
+        await self.session.execute(
+            delete(ProjectedPolicy).where(ProjectedPolicy.role_grant_id == grant.id)
+        )
         await self.session.delete(grant)
         await self.session.flush()
         return grant

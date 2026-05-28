@@ -65,7 +65,14 @@ def resolve_current_tenant(
             details={"tenant_id": selected_tenant_id},
         )
 
-    tenant_record = tenant or TenantRecord(tenant_id=selected_tenant_id)
+    if tenant is None:
+        raise AppError(
+            "TENANT_ACCESS_DENIED",
+            "Tenant record must be loaded before tenant resolution",
+            status_code=403,
+            details={"tenant_id": selected_tenant_id},
+        )
+    tenant_record = tenant
     if tenant_record.tenant_id != selected_tenant_id:
         raise AppError(
             "TENANT_CONTEXT_CONFLICT",
