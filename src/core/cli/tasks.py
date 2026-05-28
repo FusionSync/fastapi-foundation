@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -34,6 +35,20 @@ def register_task_commands(subparsers: argparse._SubParsersAction) -> None:
     retry_parser.add_argument("--json", action="store_true", dest="as_json")
     retry_parser.set_defaults(handler=_handle_failed_retry)
 
+    running_parser = tasks_subparsers.add_parser("running")
+    running_subparsers = running_parser.add_subparsers(
+        dest="running_command",
+        required=True,
+    )
+
+    recover_parser = running_subparsers.add_parser("recover")
+    recover_parser.add_argument("--database-url")
+    recover_parser.add_argument("--older-than-seconds", type=int, required=True)
+    recover_parser.add_argument("--limit", type=int, default=50)
+    recover_parser.add_argument("--yes", action="store_true")
+    recover_parser.add_argument("--json", action="store_true", dest="as_json")
+    recover_parser.set_defaults(handler=_handle_running_recover)
+
 
 def _handle_failed_list(args: argparse.Namespace) -> int:
     payload = asyncio.run(
@@ -64,12 +79,58 @@ def _handle_failed_retry(args: argparse.Namespace) -> int:
     return 0 if payload["ok"] else 1
 
 
+def _handle_running_recover(args: argparse.Namespace) -> int:
+    if not args.yes:
+        print_payload(
+            {"ok": False, "error": "tasks running recover requires --yes"},
+            as_json=args.as_json,
+        )
+        return 1
+    payload = asyncio.run(
+        _recover_running_tasks(
+            database_url=_database_url(args.database_url),
+            older_than_seconds=args.older_than_seconds,
+            limit=args.limit,
+        )
+    )
+    print_payload(payload, as_json=args.as_json)
+    return 0 if payload["ok"] else 1
+
+
 async def _list_failed_tasks(*, database_url: str, limit: int) -> dict[str, object]:
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:
             tasks = await TaskRunRepository(session).list_failed(limit=limit)
+            return {
+                "ok": True,
+                "count": len(tasks),
+                "tasks": [_task_run_to_dict(task_run) for task_run in tasks],
+            }
+    finally:
+        await engine.dispose()
+
+
+async def _recover_running_tasks(
+    *,
+    database_url: str,
+    older_than_seconds: int,
+    limit: int,
+) -> dict[str, object]:
+    if older_than_seconds <= 0:
+        return {"ok": False, "error": "older-than-seconds must be positive"}
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    older_than = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            if uow.session is None:
+                return {"ok": False, "error": "database session was not initialized"}
+            tasks = await TaskRunRepository(uow.session).recover_stale_running(
+                older_than=older_than,
+                limit=limit,
+            )
             return {
                 "ok": True,
                 "count": len(tasks),

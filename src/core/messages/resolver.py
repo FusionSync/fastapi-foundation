@@ -18,6 +18,7 @@ _EN_US_CORE_MESSAGES = {
     "QUOTA_EXCEEDED": "Quota exceeded",
     "RATE_LIMITED": "Too many requests",
     "SYSTEM_ERROR": "System error",
+    "TASK_IDEMPOTENCY_KEY_CONFLICT": "Task idempotency key conflict",
     "TENANT_ACCESS_DENIED": "Tenant access denied",
     "TENANT_CONTEXT_CONFLICT": "Tenant context conflict",
     "TENANT_STATE_FORBIDDEN": "Tenant state does not allow this operation",

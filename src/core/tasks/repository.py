@@ -118,6 +118,32 @@ class TaskRunRepository:
         )
         return list(result.scalars().all())
 
+    async def recover_stale_running(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 50,
+        error_message: str = "Task run recovered after worker interruption",
+        now: datetime | None = None,
+    ) -> list[TaskRun]:
+        resolved_now = now or datetime.now(UTC)
+        result = await self.session.execute(
+            select(TaskRun)
+            .where(TaskRun.status == "running")
+            .where(TaskRun.started_at < older_than)
+            .order_by(TaskRun.started_at.asc())
+            .limit(limit)
+        )
+        task_runs = list(result.scalars().all())
+        for task_run in task_runs:
+            task_run.status = (
+                "dead_letter" if task_run.attempt_count >= task_run.max_attempts else "failed"
+            )
+            task_run.error_message = error_message
+            task_run.finished_at = resolved_now
+        await self.session.flush()
+        return task_runs
+
     async def start_retry(
         self,
         task_run: TaskRun,

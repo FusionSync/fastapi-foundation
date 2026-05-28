@@ -77,7 +77,7 @@ OpenAPI 中成功响应必须声明为 typed envelope，例如 `Envelope[Example
 - 无权限使用 `403 + PERMISSION_DENIED`。
 - 配额不足使用 `403 + QUOTA_EXCEEDED`。
 - 资源不存在使用 `404 + *_NOT_FOUND`。
-- 资源冲突、幂等冲突或锁竞争使用 `409 + CONFLICT/IDEMPOTENCY_KEY_CONFLICT/LOCK_NOT_ACQUIRED`。
+- 资源冲突、幂等冲突或锁竞争使用 `409 + CONFLICT/IDEMPOTENCY_KEY_CONFLICT/TASK_IDEMPOTENCY_KEY_CONFLICT/LOCK_NOT_ACQUIRED`。
 - 限流使用 `429 + RATE_LIMITED`，并返回 `Retry-After`。
 - 外部依赖错误使用 `502 + EXTERNAL_SERVICE_ERROR`；后续如需区分超时/熔断，再增加稳定子码。
 - 未知系统错误使用 `500 + SYSTEM_ERROR`。

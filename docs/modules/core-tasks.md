@@ -74,6 +74,7 @@ finished_at
 - 任务日志关联 request_id、tenant_id 和 task_id。
 - worker 执行前必须检查 tenant lifecycle gate；`suspended/deleting` 租户按行为矩阵拒绝或跳过任务。
 - 任务失败先进入 `failed`，重试达到 `max_attempts` 后进入 `dead_letter`，并提供 CLI 重试。
+- worker 崩溃留下的长期 `running` 任务必须有恢复入口；恢复时未达重试上限的任务进入 `failed`，已达上限的任务进入 `dead_letter`。
 - outbox dispatcher 和 task worker 是不同进程角色；可靠任务提交优先通过 outbox 触发。
 
 ## 当前实现
@@ -90,6 +91,8 @@ finished_at
 - `TaskRunRepository.start_once()` 使用 insert-first + 唯一约束处理 task idempotency；`SyncTaskProvider.submit()` 遇到 duplicate 时返回已有运行记录，不重新执行 handler。
 - `SyncTaskProvider.retry()` 可基于已落库 `TaskRun` 重新执行同一个 `TaskEnvelope`，并复用 tenant lifecycle gate。
 - `core tasks failed list` 输出 `failed/dead_letter` 任务；`core tasks failed retry --task-id <id> --yes` 显式重试注册过的任务处理器。
+- `TaskRunRepository.recover_stale_running()` 可把超过阈值的 `running` 任务恢复为 `failed/dead_letter`，避免 worker 崩溃后幂等键永久被占用。
+- `core tasks running recover --older-than-seconds <n> --yes` 执行恢复，输出被恢复的任务列表。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过 `SyncTaskProvider` 或未来队列 provider，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
 
 后续接入 RQ 或 Celery 时，provider 必须复用 `TaskEnvelope`、`TaskRegistry`、`TaskRun` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。

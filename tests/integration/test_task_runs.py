@@ -1,6 +1,7 @@
 import sys
 import types
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -247,6 +248,61 @@ async def test_sync_task_provider_rejects_idempotency_key_payload_conflict(
     assert await _task_run_count(session_factory) == 1
 
 
+@pytest.mark.asyncio
+async def test_task_repository_recovers_stale_running_tasks(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    stale_started_at = datetime(2026, 1, 1, tzinfo=UTC)
+    fresh_started_at = datetime(2026, 1, 2, tzinfo=UTC)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add_all(
+            [
+                _running_task(
+                    "task-stale-retryable",
+                    started_at=stale_started_at,
+                    attempt_count=1,
+                    max_attempts=2,
+                ),
+                _running_task(
+                    "task-stale-dead-letter",
+                    started_at=stale_started_at,
+                    attempt_count=2,
+                    max_attempts=2,
+                ),
+                _running_task(
+                    "task-fresh",
+                    started_at=fresh_started_at,
+                    attempt_count=1,
+                    max_attempts=2,
+                ),
+            ]
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        recovered = await TaskRunRepository(uow.session).recover_stale_running(
+            older_than=fresh_started_at - timedelta(seconds=1),
+            now=fresh_started_at,
+        )
+
+    retryable = await _task_run(session_factory, "task-stale-retryable")
+    dead_letter = await _task_run(session_factory, "task-stale-dead-letter")
+    fresh = await _task_run(session_factory, "task-fresh")
+
+    assert [task_run.id for task_run in recovered] == [
+        "task-stale-retryable",
+        "task-stale-dead-letter",
+    ]
+    assert retryable.status == "failed"
+    assert retryable.error_message == "Task run recovered after worker interruption"
+    assert retryable.finished_at == fresh_started_at.replace(tzinfo=None)
+    assert dead_letter.status == "dead_letter"
+    assert fresh.status == "running"
+    assert fresh.error_message is None
+
+
 def _task_registry(
     monkeypatch: pytest.MonkeyPatch,
     **handlers,
@@ -283,3 +339,28 @@ async def _task_run_count(session_factory: async_sessionmaker[AsyncSession]) -> 
     async with session_factory() as session:
         result = await session.execute(select(TaskRun))
         return len(result.scalars().all())
+
+
+def _running_task(
+    task_id: str,
+    *,
+    started_at: datetime,
+    attempt_count: int,
+    max_attempts: int,
+) -> TaskRun:
+    return TaskRun(
+        id=task_id,
+        tenant_id="tenant-a",
+        task_type="example.refresh",
+        idempotency_key=f"example.refresh:tenant-a:{task_id}",
+        status="running",
+        progress=0,
+        input_payload={"value": task_id},
+        result_payload=None,
+        error_message=None,
+        queue="default",
+        attempt_count=attempt_count,
+        max_attempts=max_attempts,
+        request_id=f"req-{task_id}",
+        started_at=started_at,
+    )

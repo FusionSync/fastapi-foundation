@@ -37,6 +37,12 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
     "EXTERNAL_SERVICE_ERROR": ErrorCodeSpec("EXTERNAL_SERVICE_ERROR", 502, "外部服务错误"),
     "IDEMPOTENCY_KEY_CONFLICT": ErrorCodeSpec("IDEMPOTENCY_KEY_CONFLICT", 409, "幂等键冲突"),
     "IDEMPOTENCY_IN_PROGRESS": ErrorCodeSpec("IDEMPOTENCY_IN_PROGRESS", 409, "请求正在处理中"),
+    "TASK_IDEMPOTENCY_KEY_CONFLICT": ErrorCodeSpec(
+        "TASK_IDEMPOTENCY_KEY_CONFLICT",
+        409,
+        "任务幂等键冲突",
+        owner_module="core.tasks",
+    ),
     "LOCK_NOT_ACQUIRED": ErrorCodeSpec("LOCK_NOT_ACQUIRED", 409, "资源正在处理中"),
     "QUOTA_EXCEEDED": ErrorCodeSpec("QUOTA_EXCEEDED", 403, "配额不足"),
     "RATE_LIMITED": ErrorCodeSpec("RATE_LIMITED", 429, "请求过于频繁"),

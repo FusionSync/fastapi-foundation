@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import types
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,57 @@ def test_tasks_failed_retry_runs_registered_handler(tmp_path: Path, capsys) -> N
     assert payload["result"]["result_payload"] == {"retried": "task-failed"}
 
 
+def test_tasks_running_recover_requires_yes(tmp_path: Path, capsys) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'tasks.db'}"
+    asyncio.run(_seed_running_task(database_url))
+
+    exit_code = main(
+        [
+            "tasks",
+            "running",
+            "recover",
+            "--database-url",
+            database_url,
+            "--older-than-seconds",
+            "60",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload == {"ok": False, "error": "tasks running recover requires --yes"}
+    assert asyncio.run(_task_status(database_url, "task-running")) == "running"
+
+
+def test_tasks_running_recover_marks_stale_tasks_failed(tmp_path: Path, capsys) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'tasks.db'}"
+    asyncio.run(_seed_running_task(database_url))
+
+    exit_code = main(
+        [
+            "tasks",
+            "running",
+            "recover",
+            "--database-url",
+            database_url,
+            "--older-than-seconds",
+            "60",
+            "--yes",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["count"] == 1
+    assert payload["tasks"][0]["task_id"] == "task-running"
+    assert payload["tasks"][0]["status"] == "failed"
+    assert payload["tasks"][0]["error_message"] == "Task run recovered after worker interruption"
+    assert asyncio.run(_task_status(database_url, "task-running")) == "failed"
+
+
 async def _seed_failed_task(database_url: str) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
@@ -103,6 +155,36 @@ async def _seed_failed_task(database_url: str) -> None:
                     attempt_count=1,
                     max_attempts=2,
                     request_id="req-task",
+                )
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _seed_running_task(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            session.add(
+                TaskRun(
+                    id="task-running",
+                    tenant_id="tenant-a",
+                    task_type="example.refresh",
+                    idempotency_key="example.refresh:tenant-a:running",
+                    status="running",
+                    progress=0,
+                    input_payload={"value": "recover"},
+                    result_payload=None,
+                    error_message=None,
+                    queue="default",
+                    attempt_count=1,
+                    max_attempts=2,
+                    request_id="req-task-running",
+                    started_at=datetime(2026, 1, 1, tzinfo=UTC),
                 )
             )
             await session.commit()
