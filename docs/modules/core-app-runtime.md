@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、`serve --run` 启动计划和 profile 进程模板。
+- Done: app factory 已串联 config、database runtime、middleware、app registry、runtime registries、request security、system routes、AppModule lifecycle hooks、`serve --run` 启动计划、profile 进程模板和部署产物渲染。
 - Next:
-  - [ ] 将 profile 进程模板接入部署产物生成和运行时配置校验。
   - [ ] 将 lifecycle hook 执行结果接入结构化日志和启动诊断。
 
 ## 职责
@@ -72,6 +71,7 @@ app = create_app(settings, request_security_pipeline=pipeline)
 
 `core serve --run --dry-run` 会走同一个 `create_app()` 装配路径，输出启动计划、route_count 和 server `ProcessHealth`；去掉 `--dry-run` 后由 CLI 使用同一配置启动 Uvicorn。
 `core config template --profile <profile> --json` 为 `server`、`worker`、`scheduler`、`outbox-dispatcher` 和 `migrate` 输出统一启动命令、replica 建议和验证命令，后续 profile 部署产物必须从这个矩阵派生。
+`core config artifacts --profile <profile> --target <docker-compose|systemd|helm-values> --json` 会把同一个进程矩阵渲染为部署产物内容；每个进程角色会写入自己的 `OBSERVABILITY__SERVICE_ROLE`。传入 `--actual KEY=VALUE` 时复用配置漂移检查，配合 `--role` 可校验单个运行时角色，产物与运行时配置不一致会返回非零 exit code。
 生命周期 hook handler 必须正好接受一个 `AppLifecycleContext` 参数。startup hook 失败会阻止 lifespan 启动并释放数据库 runtime；shutdown hook 在数据库释放前执行，失败会以 `RuntimeError` 暴露给运行时。
 
 ## 稳定性要求

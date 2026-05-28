@@ -126,6 +126,42 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
     }
 
 
+def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
+    exit_code = main(
+        [
+            "config",
+            "drift-check",
+            "--profile",
+            "private",
+            "--role",
+            "worker",
+            "--actual",
+            "APP__ENV=private",
+            "--actual",
+            "DATABASE__URL=postgresql+asyncpg://app:runtime-password@postgres:5432/wps_bid",
+            "--actual",
+            "API__ERROR_HTTP_STATUS_MODE=standard",
+            "--actual",
+            "SECURITY__JWT_SECRET_REF=APP_JWT_SECRET",
+            "--actual",
+            'SECURITY__TRUSTED_HOSTS=["api.internal.example"]',
+            "--actual",
+            'SECURITY__CORS_ORIGINS=["https://console.internal.example"]',
+            "--actual",
+            "OBSERVABILITY__SERVICE_ROLE=worker",
+            "--actual",
+            "INSTALLED_APPS=[]",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["role"] == "worker"
+    assert payload["drift"]["has_drift"] is False
+
+
 def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> None:
     exit_code = main(
         [
@@ -152,6 +188,129 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
     assert payload["drift"]["missing"][0] == {
         "key": "SECURITY__JWT_SECRET_REF",
         "expected": "APP_JWT_SECRET",
+    }
+    assert {
+        "key": "APP__ENV",
+        "expected": "private",
+        "actual": "local",
+    } in payload["drift"]["mismatched"]
+    assert any(
+        mismatch["key"] == "DATABASE__URL"
+        and "wrong-host" in mismatch["actual"]
+        and "***" in mismatch["actual"]
+        for mismatch in payload["drift"]["mismatched"]
+    )
+    assert "super-secret" not in payload_text
+
+
+def test_private_profile_renders_docker_compose_deployment_artifacts(capsys) -> None:
+    exit_code = main(
+        [
+            "config",
+            "artifacts",
+            "--profile",
+            "private",
+            "--target",
+            "docker-compose",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "config artifacts"
+    assert payload["profile"] == "private"
+    assert payload["target"] == "docker-compose"
+    assert payload["source_template_command"] == "core config template --profile private --json"
+    assert payload["drift_check_command"] == "core config drift-check --profile private --json"
+    assert payload["validation_commands"] == [
+        "core check-config --profile private --json",
+        "core config drift-check --profile private --json",
+        "core serve --run --dry-run --json",
+        "core migrate run --backup-ready --json",
+        "core smoke --profile private --json",
+    ]
+    assert [file["path"] for file in payload["files"]] == ["docker-compose.private.yml"]
+
+    compose = payload["files"][0]["content"]
+    assert "services:" in compose
+    assert "server:" in compose
+    assert "worker:" in compose
+    assert "scheduler:" in compose
+    assert "outbox-dispatcher:" in compose
+    assert "migrate:" in compose
+    assert 'APP__ENV: "private"' in compose
+    assert "DATABASE__URL:" in compose
+    assert "SECURITY__JWT_SECRET_REF:" in compose
+    assert "SECURITY__JWT_SECRET:" not in compose
+    assert 'command: ["sh", "-lc", "core serve --run --host 0.0.0.0 --port 8000"]' in compose
+    assert 'OBSERVABILITY__SERVICE_ROLE: "server"' in compose
+    assert 'OBSERVABILITY__SERVICE_ROLE: "worker"' in compose
+    assert 'OBSERVABILITY__SERVICE_ROLE: "scheduler"' in compose
+    assert 'OBSERVABILITY__SERVICE_ROLE: "outbox-dispatcher"' in compose
+    assert 'OBSERVABILITY__SERVICE_ROLE: "migrate"' in compose
+    assert "replicas: 2" in compose
+    assert 'profiles: ["release"]' in compose
+
+
+def test_cloud_profile_renders_helm_values_from_process_matrix(capsys) -> None:
+    exit_code = main(
+        [
+            "config",
+            "artifacts",
+            "--profile",
+            "cloud",
+            "--target",
+            "helm-values",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    values = payload["files"][0]["content"]
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["target"] == "helm-values"
+    assert payload["files"][0]["path"] == "values.cloud.yaml"
+    assert 'profile: "cloud"' in values
+    assert "workloads:" in values
+    assert "server:" in values
+    assert 'replicas: "autoscale"' in values
+    assert 'command: "core worker --run --instance-id ${INSTANCE_ID}"' in values
+    assert 'API__ERROR_HTTP_STATUS_MODE: "standard"' in values
+    assert 'SECURITY__JWT_SECRET_REF: "APP_JWT_SECRET"' in values
+    assert "validationCommands:" in values
+    assert '  - "core config drift-check --profile cloud --json"' in values
+
+
+def test_deployment_artifacts_validate_actual_env_with_redacted_drift(capsys) -> None:
+    exit_code = main(
+        [
+            "config",
+            "artifacts",
+            "--profile",
+            "private",
+            "--target",
+            "systemd",
+            "--actual",
+            "APP__ENV=local",
+            "--actual",
+            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/wps_bid",
+            "--json",
+        ]
+    )
+
+    payload_text = capsys.readouterr().out
+    payload = json.loads(payload_text)
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["command"] == "config artifacts"
+    assert payload["target"] == "systemd"
+    assert payload["drift"]["has_drift"] is True
+    assert payload["drift"]["missing"][0] == {
+        "key": "API__ERROR_HTTP_STATUS_MODE",
+        "expected": "standard",
     }
     assert {
         "key": "APP__ENV",

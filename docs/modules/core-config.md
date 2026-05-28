@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出和配置 drift-check 已落地。
+- Done: settings、profile 校验、secret provider、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、配置 drift-check 和 profile 派生部署产物渲染已落地。
 - Next:
-  - [ ] 将 profile 模板和 drift-check 接入真实部署产物生成。
   - [ ] 将运行时配置漂移结果接入发布 gate 和告警。
 
 ## 职责
@@ -91,6 +90,7 @@ cloud
 ## Config Drift Check
 
 `core config drift-check --profile <profile> --json` 会把实际环境变量与 profile 模板中的 `env` 对比；也可以通过重复 `--actual KEY=VALUE` 显式传入待检查环境，便于 CI/CD 在不读取宿主环境的情况下验证发布参数。
+校验具体进程角色时传 `--role <server|worker|scheduler|outbox-dispatcher|migrate>`，`OBSERVABILITY__SERVICE_ROLE` 会按角色期望值检查，而不是固定使用 profile 的默认 server 值。
 
 漂移报告输出：
 
@@ -99,6 +99,16 @@ cloud
 - `mismatched`：实际值与模板不一致的项。
 
 模板值中的 `${PLACEHOLDER}` 会作为非空通配符处理，因此 `DATABASE__URL=postgresql+asyncpg://app:${DATABASE_PASSWORD}@postgres:5432/wps_bid` 可匹配运行时注入的真实密码。报告中的数据库 URL password、secret、token、password 字段必须脱敏。
+
+## Deployment Artifacts
+
+`core config artifacts --profile <profile> --target <docker-compose|systemd|helm-values> --json` 从同一个 profile template 派生部署文件内容，输出：
+
+- `files`：待写入部署仓库或安装包的文件名和内容。
+- `validation_commands`：发布脚本必须执行的校验命令，包含 `check-config`、`config drift-check`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
+- `source_template_command` / `drift_check_command`：产物来源和配置漂移校验入口。
+
+如果同时传入重复 `--actual KEY=VALUE`，命令会在输出产物时执行同一套 drift-check；发现缺失或不匹配时返回 exit code `1`，并在 `drift` 中输出脱敏报告。配合 `--role` 使用时，校验对象是该进程角色的运行时环境。
 
 ## Secret Provider
 

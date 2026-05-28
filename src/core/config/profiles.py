@@ -68,8 +68,10 @@ def render_profile_template(profile: DeploymentMode) -> ProfileTemplate:
 def check_profile_drift(
     profile: DeploymentMode,
     actual_env: dict[str, str],
+    *,
+    role: str | None = None,
 ) -> ConfigDriftReport:
-    expected_env = render_profile_template(profile).env
+    expected_env = expected_profile_env(profile, role=role)
     checked = list(expected_env)
     missing: list[dict[str, str]] = []
     mismatched: list[dict[str, str]] = []
@@ -92,6 +94,20 @@ def check_profile_drift(
         missing=missing,
         mismatched=mismatched,
     )
+
+
+def expected_profile_env(
+    profile: DeploymentMode,
+    *,
+    role: str | None = None,
+) -> dict[str, str]:
+    template = render_profile_template(profile)
+    env = dict(template.env)
+    if role is not None:
+        if role not in template.processes:
+            raise ValueError(f"Unknown process role for {profile} profile: {role}")
+        env["OBSERVABILITY__SERVICE_ROLE"] = role
+    return env
 
 
 def _local_template() -> ProfileTemplate:

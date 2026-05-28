@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、config template/drift-check、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
+- Done: `check-app`、`list-apps`、config template/drift-check/artifacts、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
 - Next:
   - [ ] 为发布脚本补完整 checkpoint suite 和 profile 参数矩阵。
-  - [ ] 将 profile 模板输出接入真实 Docker Compose/Helm/进程管理示例。
 
 ## 职责
 
@@ -58,7 +57,8 @@ migrate run
 `migrate run` 是 migrate 进程角色入口；默认按 `plan -> preflight -> dry-run` 输出发布流水线 envelope，传 `--apply --yes` 后复用 `migrate apply` 门禁和 executor 路径。
 `serve --run --dry-run` 加载 `create_app()` 和已安装 app，输出 host、port、route_count 与 server `ProcessHealth`；不传 `--dry-run` 时使用同一配置启动 Uvicorn。
 `config template --profile <profile>` 输出 profile 环境变量、五类进程启动命令和发布验证命令，是后续 Docker Compose/Helm/systemd 模板的单一来源。
-`config drift-check --profile <profile>` 对比实际环境变量与 profile 模板，缺失或不匹配时返回非零 exit code 和脱敏漂移报告；发布脚本可用重复 `--actual KEY=VALUE` 传入待验证配置。
+`config drift-check --profile <profile>` 对比实际环境变量与 profile 模板，缺失或不匹配时返回非零 exit code 和脱敏漂移报告；发布脚本可用重复 `--actual KEY=VALUE` 传入待验证配置，也可传 `--role <role>` 校验具体进程角色的 `OBSERVABILITY__SERVICE_ROLE`。
+`config artifacts --profile <profile> --target <docker-compose|systemd|helm-values>` 从 profile 模板生成部署产物内容；重复传入 `--actual KEY=VALUE` 时会附带执行配置 drift-check，并用非零 exit code 阻断漂移产物；配合 `--role` 可校验单个进程角色环境。
 `outbox dispatch-once` 必须通过 `--installed-app` 或 settings 加载 AppModule 后构建 `EventRegistry`，领取 pending/failed outbox event，投递到已注册 handler，并输出 claimed/published/failed/dead_lettered JSON。
 `outbox-dispatcher --run` 是运行角色入口；不传 `--max-iterations` 时持续循环，传入后用于本地 smoke/CI 做有限轮验证；传 `--instance-id` 时写入进程 heartbeat。
 `scheduler --run-once` 通过 `--installed-app` 加载 schedule/task handler，触发指定 `--schedule-id`，写入 `TaskRun` 和 `ScheduleTriggerLog`，用于 local profile、运维手动触发和 CI smoke。
