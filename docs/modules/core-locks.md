@@ -25,6 +25,7 @@ src/core/locks/
 
 ```text
 acquire
+require_acquire
 release
 extend
 locked
@@ -49,3 +50,16 @@ fencing_token
 - 长任务必须支持续租；续租失败后任务必须停止写入或进入补偿流程。
 - 对外部副作用或数据库写入，优先使用幂等记录/唯一约束作为持久保护，锁只作为并发优化。
 - 多实例调度使用锁时必须记录 `fencing_token`，避免旧 owner 在锁过期后继续写入。
+
+## 当前实现
+
+已落地 `LockProvider`、`LockHandle` 和 `MemoryLockProvider`：
+
+- `acquire()` 返回 `LockHandle`，不抛业务冲突；调用方可检查 `acquired`。
+- `require_acquire()` 在锁已被持有时抛 `LOCK_NOT_ACQUIRED`，用于 route/dependency 直接转换统一 API 响应。
+- `release()` 和 `extend()` 都校验 owner token，错误 owner 不能释放或续租。
+- 每次新 owner 成功获取同一 `lock_key` 都递增 `fencing_token`；旧 owner 即使锁过期后继续执行，也可以被下游用 fencing token 拒绝。
+- TTL 必填且必须大于 0；没有永久锁。
+- 内存 provider 只适合 local profile、测试和单机版。private/cloud profile 必须使用 Redis、数据库 advisory lock 或等价 provider。
+
+Locks 只解决并发窗口，不替代 `IdempotencyRecord`、业务唯一约束或 outbox handler 幂等。
