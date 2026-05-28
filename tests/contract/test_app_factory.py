@@ -46,6 +46,11 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
         "metrics_registry_loaded": True,
     }
     assert body["data"]["details"]["installed_apps"] == ["example_domain"]
+    assert body["data"]["details"]["app_registry"]["ok"] is True
+    assert body["data"]["details"]["app_registry"]["load_order"] == ["example_domain"]
+    assert body["data"]["details"]["app_registry"]["modules"][0]["module_path"] == (
+        "apps.example_domain.module"
+    )
     assert body["data"]["details"]["dependencies"]["database"]["ok"] is True
 
 

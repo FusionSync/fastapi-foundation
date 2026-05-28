@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查已接入。
+- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、core version/capability gate 和 CLI/readiness 共用装载诊断已接入。
 - Next:
-  - [ ] 增加 app 版本兼容和可选 capability gate。
-  - [ ] 输出更完整的模块装载诊断，供 CLI 和 readiness 共用。
+  - [ ] 将 capability 列表与真实外部 provider/部署 profile 的启用状态绑定。
 
 ## 职责
 
@@ -27,7 +26,10 @@ src/core/apps/
 ```text
 label
 version
+min_core_version
 dependencies
+required_capabilities
+provided_capabilities
 routers
 models
 migrations
@@ -49,7 +51,10 @@ admin_permissions
 
 - `label`：稳定 app 标识，不能随意重命名。
 - `version`：app contract version，用于迁移、兼容和诊断。
+- `min_core_version`：可选的 core runtime 最低版本要求；不满足时 AppRegistry 启动前失败。
 - `dependencies`：显式声明依赖的 app label。
+- `required_capabilities`：app 需要 runtime 提供的可选能力，例如搜索、外部队列或特定 provider。
+- `provided_capabilities`：app 对其他 app 或运维诊断暴露的能力标签。
 - `routers`：对外 API router。
 - `models`：ORM model module 列表。
 - `migrations`：迁移路径和依赖声明。
@@ -97,6 +102,8 @@ apps.example_domain.module
 - 依赖环必须启动前失败。
 - `registry.modules` 必须按 dependency-first 顺序输出，不依赖 settings 中的人工排列。
 - 迁移、权限、事件、任务和调度注册应复用这个顺序，避免各模块重复实现依赖治理。
+- AppRegistry 必须在依赖排序后执行 core version/capability gate；不兼容 app 不进入 runtime 装配。
+- AppRegistry 必须维护 `diagnostics`，包含 module path、label、version、load_order、runtime capabilities、缺失 capability 和错误列表，供 `list-apps` 与 `/readyz` 复用。
 - `create_app()` 必须把 `PermissionRegistry`、`MigrationRegistry`、`EventRegistry`、`TaskRegistry`、`ScheduleRegistry` 和 `AdminRegistry` 从同一个 `AppRegistry` 装配到 `app.state`。
 - 同一运行时只能有一个 app 声明 `auth_session_store`；如需替换认证事实来源，使用新的账号 app 或显式传入 `request_security_pipeline`。
 

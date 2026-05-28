@@ -68,6 +68,9 @@ def _handle_list_apps(args: argparse.Namespace) -> int:
                 "label": module.label,
                 "version": module.version,
                 "dependencies": module.dependencies,
+                "min_core_version": module.min_core_version,
+                "required_capabilities": module.required_capabilities,
+                "provided_capabilities": module.provided_capabilities,
                 "routers": len(module.routers),
                 "permissions": [
                     {
@@ -80,6 +83,7 @@ def _handle_list_apps(args: argparse.Namespace) -> int:
             }
             for module in registry.modules
         ],
+        "diagnostics": registry.diagnostics.to_dict(),
     }
     print_payload(payload, as_json=args.as_json)
     return 0

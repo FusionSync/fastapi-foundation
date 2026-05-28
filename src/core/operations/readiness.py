@@ -89,6 +89,9 @@ def check_app_readiness(
         ]
         if app_registry is not None
         else [],
+        "app_registry": app_registry.diagnostics.to_dict()
+        if app_registry is not None
+        else None,
         "dependencies": {},
     }
     for dependency_name, result in (dependency_results or {}).items():

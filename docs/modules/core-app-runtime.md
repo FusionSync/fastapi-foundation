@@ -35,7 +35,7 @@ src/core/app/
 - 如果已安装 app 在 `AppModule.auth_session_store` 声明会话事实适配器，`create_app()` 会自动基于 `settings.database.url` 和 `settings.security.jwt_secret` 挂载 HTTP 请求安全流水线。
 - 仍可通过 `request_security_pipeline` 显式覆盖默认请求安全流水线。
 - 暴露健康检查和版本信息。
-- `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
+- `/readyz` 使用 `check_app_readiness()` 输出 config、database、数据库可连接性、AppRegistry diagnostics、MetricsRegistry 检查明细；不 ready 时返回 HTTP 503。
 - `AppModule.lifecycle_hooks` 声明的 startup/shutdown hook 会挂入 FastAPI lifespan；startup 按 dependency-first app 顺序执行，shutdown 按反向顺序执行。
 
 ## 不负责

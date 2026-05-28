@@ -62,6 +62,9 @@ class AppModule:
     label: str
     version: str
     dependencies: list[str] = field(default_factory=list)
+    min_core_version: str | None = None
+    required_capabilities: list[str] = field(default_factory=list)
+    provided_capabilities: list[str] = field(default_factory=list)
     routers: list[APIRouter] = field(default_factory=list)
     models: list[str] = field(default_factory=list)
     migrations: MigrationSpec | None = None
@@ -85,11 +88,35 @@ def validate_app_module(module: AppModule) -> AppModule:
         raise ValueError(f"Invalid app label: {module.label!r}")
     if not module.version:
         raise ValueError(f"App {module.label!r} must declare version")
+    if module.min_core_version is not None:
+        _validate_non_empty_path(
+            module.min_core_version,
+            f"App {module.label!r} min_core_version",
+        )
+    _validate_list(module.dependencies, f"App {module.label!r} dependencies")
+    _validate_list(
+        module.required_capabilities,
+        f"App {module.label!r} required_capabilities",
+    )
+    _validate_list(
+        module.provided_capabilities,
+        f"App {module.label!r} provided_capabilities",
+    )
     for dependency in module.dependencies:
         if not _LABEL_PATTERN.match(dependency):
             raise ValueError(f"App {module.label!r} has invalid dependency: {dependency!r}")
     if module.label in module.dependencies:
         raise ValueError(f"App {module.label!r} cannot depend on itself")
+    for capability in module.required_capabilities:
+        _validate_non_empty_path(
+            capability,
+            f"App {module.label!r} required_capability",
+        )
+    for capability in module.provided_capabilities:
+        _validate_non_empty_path(
+            capability,
+            f"App {module.label!r} provided_capability",
+        )
     for model in module.models:
         if not isinstance(model, str) or not model:
             raise TypeError(f"App {module.label!r} model path must be a non-empty string")
@@ -175,3 +202,8 @@ def validate_app_module(module: AppModule) -> AppModule:
 def _validate_non_empty_path(value: str, label: str) -> None:
     if not isinstance(value, str) or not value:
         raise TypeError(f"{label} must be a non-empty string")
+
+
+def _validate_list(value: object, label: str) -> None:
+    if not isinstance(value, list):
+        raise TypeError(f"{label} must be a list")

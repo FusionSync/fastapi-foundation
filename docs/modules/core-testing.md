@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、app registry version/capability diagnostics、tenant isolation、security、outbox、migration、permission facts/projection、task/scheduler、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
 
@@ -44,6 +44,7 @@ src/core/testing/
 - serialization golden test 已覆盖 datetime、Decimal、UUID、Enum、空值和列表响应；新增编码规则时必须先扩展 golden test。
 - 兼容模式 `always_200` 必须单独测试，不能影响默认生产模式。
 - CLI contract test 必须覆盖成功输出、参数错误 exit code `2`、显式确认缺失、运行期异常和 JSON error envelope，保证发布脚本只依赖 stdout 与进程退出码。
+- App registry contract test 必须覆盖 dependency-first 排序、core version gate、capability gate、`list-apps` diagnostics 和 `/readyz` diagnostics。
 - Config profile contract test 必须覆盖模板输出、生产 secret reference、按进程角色执行的 drift-check 成功/失败路径、部署产物渲染和敏感值脱敏。
 - Release checkpoint contract test 必须覆盖 profile 参数矩阵、部署产物、按角色 drift gate、backup readiness、migrate dry-run 和 smoke 聚合输出。
 - App runtime contract test 必须覆盖 lifecycle startup/shutdown 执行顺序、handler 签名 conformance 和 startup 失败策略。

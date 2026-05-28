@@ -8,12 +8,14 @@ from core.apps.module import (
     TaskHandlerSpec,
     validate_app_module,
 )
-from core.apps.registry import AppRegistry
+from core.apps.registry import AppModuleDiagnostic, AppRegistry, AppRegistryDiagnostics
 
 __all__ = [
-    "AppModule",
     "AppDependencyValidation",
+    "AppModule",
+    "AppModuleDiagnostic",
     "AppRegistry",
+    "AppRegistryDiagnostics",
     "EventHandlerSpec",
     "LifecycleHookSpec",
     "MigrationSpec",

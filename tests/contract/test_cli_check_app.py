@@ -84,6 +84,9 @@ def test_list_apps_json_output(capsys) -> None:
             "label": "example_domain",
             "version": "0.1.0",
             "dependencies": [],
+            "min_core_version": None,
+            "required_capabilities": [],
+            "provided_capabilities": [],
             "routers": 1,
             "permissions": [
                 {"resource": "example", "action": "read", "scope": "tenant"},
@@ -91,6 +94,9 @@ def test_list_apps_json_output(capsys) -> None:
             ],
         }
     ]
+    assert payload["diagnostics"]["ok"] is True
+    assert payload["diagnostics"]["load_order"] == ["example_domain"]
+    assert payload["diagnostics"]["modules"][0]["module_path"] == "apps.example_domain.module"
 
 
 def test_list_apps_invalid_module_has_stable_json_error(capsys) -> None:

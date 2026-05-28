@@ -136,6 +136,22 @@ def test_invalid_event_task_and_schedule_specs_are_rejected() -> None:
                 ],
             )
         )
+    with pytest.raises(TypeError, match="required_capabilities must be a list"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                required_capabilities="search",  # type: ignore[arg-type]
+            )
+        )
+    with pytest.raises(TypeError, match="provided_capabilities must be a list"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                provided_capabilities="demo.public_api",  # type: ignore[arg-type]
+            )
+        )
 
 
 def test_duplicate_labels_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -174,6 +190,77 @@ def test_registry_loads_modules_in_dependency_order(monkeypatch: pytest.MonkeyPa
     registry = AppRegistry(["fake_app_consumer", "fake_app_provider"]).load()
 
     assert [module.label for module in registry.modules] == ["provider", "consumer"]
+    assert registry.diagnostics.to_dict()["load_order"] == ["provider", "consumer"]
+
+
+def test_registry_rejects_incompatible_core_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = types.ModuleType("fake_app_requires_new_core")
+    fake.module = AppModule(
+        label="demo",
+        version="0.1.0",
+        min_core_version="0.2.0",
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_requires_new_core", fake)
+
+    with pytest.raises(ValueError, match="requires core >= 0.2.0"):
+        AppRegistry(["fake_app_requires_new_core"], core_version="0.1.0").load()
+
+
+def test_registry_rejects_missing_runtime_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = types.ModuleType("fake_app_requires_capability")
+    fake.module = AppModule(
+        label="demo",
+        version="0.1.0",
+        required_capabilities=["search"],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_requires_capability", fake)
+
+    with pytest.raises(ValueError, match="missing capabilities: search"):
+        AppRegistry(
+            ["fake_app_requires_capability"],
+            runtime_capabilities={"tasks"},
+        ).load()
+
+
+def test_registry_diagnostics_include_capability_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = types.ModuleType("fake_app_with_capabilities")
+    fake.module = AppModule(
+        label="demo",
+        version="0.1.0",
+        min_core_version="0.1.0",
+        required_capabilities=["tasks"],
+        provided_capabilities=["demo.public_api"],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_with_capabilities", fake)
+
+    registry = AppRegistry(
+        ["fake_app_with_capabilities"],
+        core_version="0.1.0",
+        runtime_capabilities={"tasks"},
+    ).load()
+
+    assert registry.diagnostics.to_dict() == {
+        "ok": True,
+        "core_version": "0.1.0",
+        "runtime_capabilities": ["tasks"],
+        "load_order": ["demo"],
+        "modules": [
+            {
+                "module_path": "fake_app_with_capabilities",
+                "label": "demo",
+                "version": "0.1.0",
+                "status": "loaded",
+                "dependencies": [],
+                "min_core_version": "0.1.0",
+                "required_capabilities": ["tasks"],
+                "provided_capabilities": ["demo.public_api"],
+                "core_version_compatible": True,
+                "missing_capabilities": [],
+                "errors": [],
+            }
+        ],
+        "errors": [],
+    }
 
 
 def test_circular_dependency_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
