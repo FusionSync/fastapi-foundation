@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.events import EventEnvelope, EventRegistry
@@ -105,6 +105,12 @@ class OutboxRepository:
         event.locked_by = None
         event.locked_until = None
         await self.session.flush()
+
+    async def count_by_status(self, status: str) -> int:
+        count = await self.session.scalar(
+            select(func.count()).select_from(OutboxEvent).where(OutboxEvent.status == status)
+        )
+        return int(count or 0)
 
     def to_envelope(self, event: OutboxEvent) -> EventEnvelope:
         return EventEnvelope(

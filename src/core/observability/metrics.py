@@ -10,6 +10,7 @@ METRIC_NAMES = {
     "outbox_events_pending": "Gauge for pending outbox events.",
     "outbox_events_publishing": "Gauge for events claimed by outbox dispatchers.",
     "outbox_events_dead_letter": "Gauge for outbox dead-letter events.",
+    "outbox_dispatch_events_total": "Counter for outbox dispatcher outcomes.",
     "outbox_dispatch_duration_seconds": "Histogram for outbox handler dispatch latency.",
     "migration_preflight_total": "Counter for migration preflight results.",
     "migration_apply_total": "Counter for migration apply results.",
@@ -21,6 +22,7 @@ METRIC_NAMES = {
 
 _COUNTERS = {
     "http_requests_total",
+    "outbox_dispatch_events_total",
     "migration_preflight_total",
     "migration_apply_total",
     "tenant_isolation_guard_failures_total",

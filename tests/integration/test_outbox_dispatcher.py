@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
+from core.observability import MetricsRegistry
 from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
 
 
@@ -28,6 +29,7 @@ async def test_dispatcher_publishes_claimed_event(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     delivered: list[str] = []
+    metrics = MetricsRegistry()
     registry = EventRegistry()
     registry.register("business.created", 1, lambda event: delivered.append(event.event_id))
     await _add_event(session_factory, registry)
@@ -35,15 +37,23 @@ async def test_dispatcher_publishes_claimed_event(
     async with unit_of_work(session_factory) as uow:
         assert uow.session is not None
         repository = OutboxRepository(uow.session, registry=registry)
-        dispatcher = OutboxDispatcher(repository, registry, dispatcher_id="dispatcher-1")
+        dispatcher = OutboxDispatcher(
+            repository,
+            registry,
+            dispatcher_id="dispatcher-1",
+            metrics=metrics,
+        )
         stats = await dispatcher.dispatch_once()
 
     event = await _first_event(session_factory)
+    rendered_metrics = metrics.render()
     assert stats.claimed == 1
     assert stats.published == 1
     assert delivered == [event.id]
     assert event.status == "published"
     assert event.published_at is not None
+    assert 'outbox_dispatch_events_total{outcome="claimed"} 1' in rendered_metrics
+    assert 'outbox_dispatch_events_total{outcome="published"} 1' in rendered_metrics
 
 
 @pytest.mark.asyncio
@@ -96,6 +106,7 @@ async def test_dispatcher_retries_failed_event_then_publishes(
 async def test_dispatcher_moves_exhausted_event_to_dead_letter(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    metrics = MetricsRegistry()
     registry = EventRegistry()
     registry.register(
         "business.created",
@@ -111,14 +122,19 @@ async def test_dispatcher_moves_exhausted_event_to_dead_letter(
             registry,
             dispatcher_id="dispatcher-1",
             retry_delay_seconds=0,
+            metrics=metrics,
         )
         stats = await dispatcher.dispatch_once()
 
     event = await _first_event(session_factory)
+    rendered_metrics = metrics.render()
     assert stats.failed == 1
     assert stats.dead_lettered == 1
     assert event.status == "dead_letter"
     assert event.dead_letter_reason is not None
+    assert 'outbox_dispatch_events_total{outcome="failed"} 1' in rendered_metrics
+    assert 'outbox_dispatch_events_total{outcome="dead_lettered"} 1' in rendered_metrics
+    assert "outbox_events_dead_letter 1" in rendered_metrics
 
 
 @pytest.mark.asyncio

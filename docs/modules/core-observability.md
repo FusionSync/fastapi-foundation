@@ -69,6 +69,7 @@ http_request_duration_seconds
 outbox_events_pending
 outbox_events_publishing
 outbox_events_dead_letter
+outbox_dispatch_events_total
 outbox_dispatch_duration_seconds
 migration_preflight_total
 migration_apply_total
@@ -80,8 +81,9 @@ external_http_requests_total
 
 `GET /metrics` 暴露 Prometheus text/plain 响应。底座启动时会创建进程内 `MetricsRegistry`，
 HTTP middleware 已记录 `http_requests_total{method,route,status_class}`，rate limit 和 quota 拒绝路径已分别记录
-`rate_limit_hits_total{reason,route,rule}`、`quota_exceeded_total{metric,scope}`。其他 task、outbox、migration
-指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
+`rate_limit_hits_total{reason,route,rule}`、`quota_exceeded_total{metric,scope}`。Outbox dispatcher 可注入
+`MetricsRegistry`，记录 `outbox_dispatch_events_total{outcome}` 并刷新 pending/publishing/dead_letter gauge。
+其他 task、migration 指标后续复用同一个 registry 写入，指标名称必须沿用上面的 contract，避免看板和告警反复迁移。
 
 ## 设计要求
 

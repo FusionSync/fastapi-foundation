@@ -151,6 +151,7 @@ dispatcher 需要：
 - 支持指数退避或固定退避。
 - 达到最大重试后进入 dead letter。
 - 提供 dead letter 重放命令。
+- 可注入 `MetricsRegistry`，每次 `dispatch_once()` 后记录 claimed/published/failed/dead_lettered outcome，并刷新 pending/publishing/dead_letter gauge。
 
 崩溃恢复：
 

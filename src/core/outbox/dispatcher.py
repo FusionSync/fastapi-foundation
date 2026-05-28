@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.events import EventRegistry
+from core.observability import MetricsRegistry
 from core.outbox.repository import OutboxRepository
 
 
@@ -23,12 +24,14 @@ class OutboxDispatcher:
         dispatcher_id: str,
         batch_size: int = 20,
         retry_delay_seconds: int = 30,
+        metrics: MetricsRegistry | None = None,
     ) -> None:
         self.repository = repository
         self.registry = registry
         self.dispatcher_id = dispatcher_id
         self.batch_size = batch_size
         self.retry_delay_seconds = retry_delay_seconds
+        self.metrics = metrics
 
     async def dispatch_once(self) -> DispatchStats:
         events = await self.repository.claim_batch(
@@ -53,9 +56,39 @@ class OutboxDispatcher:
             else:
                 await self.repository.mark_published(event)
                 published += 1
-        return DispatchStats(
+        stats = DispatchStats(
             claimed=len(events),
             published=published,
             failed=failed,
             dead_lettered=dead_lettered,
+        )
+        await self._record_metrics(stats)
+        return stats
+
+    async def _record_metrics(self, stats: DispatchStats) -> None:
+        if self.metrics is None:
+            return
+        for outcome, value in {
+            "claimed": stats.claimed,
+            "published": stats.published,
+            "failed": stats.failed,
+            "dead_lettered": stats.dead_lettered,
+        }.items():
+            if value > 0:
+                self.metrics.increment(
+                    "outbox_dispatch_events_total",
+                    {"outcome": outcome},
+                    amount=value,
+                )
+        self.metrics.set_gauge(
+            "outbox_events_pending",
+            await self.repository.count_by_status("pending"),
+        )
+        self.metrics.set_gauge(
+            "outbox_events_publishing",
+            await self.repository.count_by_status("publishing"),
+        )
+        self.metrics.set_gauge(
+            "outbox_events_dead_letter",
+            await self.repository.count_by_status("dead_letter"),
         )
