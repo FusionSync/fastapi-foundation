@@ -1,7 +1,16 @@
+import asyncio
 import json
+import sys
+import types
 from datetime import UTC, datetime
+from pathlib import Path
 
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from core.apps import AppModule, EventHandlerSpec
+from core.base.models import BaseModel
 from core.cli.main import main
+from core.outbox import OutboxEvent
 
 
 def test_check_config_local_profile_passes(capsys) -> None:
@@ -32,6 +41,45 @@ def test_process_role_commands_return_health_json(capsys) -> None:
         assert payload["ok"] is True
         assert payload["command"] == command
         assert payload["checks"]["database_configured"] is True
+
+
+def test_outbox_dispatcher_role_can_run_one_iteration(tmp_path: Path, monkeypatch, capsys) -> None:
+    delivered: list[str] = []
+    _install_outbox_app(monkeypatch, delivered)
+    database_url = _sqlite_url(tmp_path)
+    event_id = asyncio.run(_seed_pending_event(database_url))
+
+    exit_code = main(
+        [
+            "outbox-dispatcher",
+            "--run",
+            "--max-iterations",
+            "1",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_outbox_app",
+            "--dispatcher-id",
+            "role-dispatcher",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {
+        "ok": True,
+        "command": "outbox-dispatcher",
+        "role": "outbox-dispatcher",
+        "dispatcher_id": "role-dispatcher",
+        "iterations": 1,
+        "claimed": 1,
+        "published": 1,
+        "failed": 0,
+        "dead_lettered": 0,
+    }
+    assert delivered == [event_id]
+    assert asyncio.run(_event_status(database_url, event_id)) == "published"
 
 
 def test_local_deployment_smoke_passes(capsys) -> None:
@@ -81,3 +129,70 @@ def test_backup_check_accepts_recent_backup(capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["ok"] is True
+
+
+def _sqlite_url(tmp_path: Path) -> str:
+    return f"sqlite+aiosqlite:///{tmp_path / 'operations-outbox.db'}"
+
+
+async def _seed_pending_event(database_url: str) -> str:
+    engine = create_async_engine(database_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            event = OutboxEvent(
+                tenant_id="tenant-a",
+                event_type="business.created",
+                event_version=1,
+                aggregate_type="business_record",
+                aggregate_id="record-1",
+                payload={
+                    "tenant_id": "tenant-a",
+                    "actor_id": "user-1",
+                    "request_id": "req_test",
+                },
+                status="pending",
+            )
+            session.add(event)
+            await session.commit()
+            return event.id
+    finally:
+        await engine.dispose()
+
+
+async def _event_status(database_url: str, event_id: str) -> str:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            event = await session.get(OutboxEvent, event_id)
+            assert event is not None
+            return event.status
+    finally:
+        await engine.dispose()
+
+
+def _install_outbox_app(monkeypatch, delivered: list[str]) -> None:
+    handler_module = types.ModuleType("fake_operations_outbox_handlers")
+
+    def handle_business_created(envelope) -> None:
+        delivered.append(envelope.event_id)
+
+    handler_module.handle_business_created = handle_business_created
+    monkeypatch.setitem(sys.modules, "fake_operations_outbox_handlers", handler_module)
+
+    app_module = types.ModuleType("fake_operations_outbox_app")
+    app_module.module = AppModule(
+        label="operations_outbox_app",
+        version="0.1.0",
+        event_handlers=[
+            EventHandlerSpec(
+                event_type="business.created",
+                event_version=1,
+                handler_path="fake_operations_outbox_handlers.handle_business_created",
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_operations_outbox_app", app_module)

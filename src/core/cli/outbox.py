@@ -5,16 +5,13 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps import AppRegistry
 from core.cli.common import installed_apps, print_payload
 from core.config import get_settings
 from core.db import unit_of_work
-from core.events import EventRegistry
 from core.outbox import (
-    OutboxDispatcher,
-    OutboxRepository,
     list_dead_letter_events,
     replay_dead_letter_by_id,
+    run_outbox_dispatch_once,
 )
 
 
@@ -111,30 +108,13 @@ async def _dispatch_once(
     dispatcher_id: str,
     batch_size: int,
 ) -> dict[str, object]:
-    registry = EventRegistry.from_app_registry(AppRegistry(module_paths).load())
-    engine = create_async_engine(database_url)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    try:
-        async with unit_of_work(session_factory) as uow:
-            if uow.session is None:
-                return {"ok": False, "error": "database session was not initialized"}
-            stats = await OutboxDispatcher(
-                OutboxRepository(uow.session, registry=registry),
-                registry,
-                dispatcher_id=dispatcher_id,
-                batch_size=batch_size,
-            ).dispatch_once()
-            ok = stats.failed == 0 and stats.dead_lettered == 0
-            return {
-                "ok": ok,
-                "dispatcher_id": dispatcher_id,
-                "claimed": stats.claimed,
-                "published": stats.published,
-                "failed": stats.failed,
-                "dead_lettered": stats.dead_lettered,
-            }
-    finally:
-        await engine.dispose()
+    result = await run_outbox_dispatch_once(
+        database_url=database_url,
+        module_paths=module_paths,
+        dispatcher_id=dispatcher_id,
+        batch_size=batch_size,
+    )
+    return result.to_dict(include_iterations=False)
 
 
 async def _list_dead_letters(*, database_url: str, limit: int) -> dict[str, object]:

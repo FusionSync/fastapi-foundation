@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、有限重试、dead-letter replay 和 lease 完成校验已落地。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、有限重试、dead-letter replay 和 lease 完成校验已落地。
 - Next:
-  - [ ] 接长驻 worker/outbox-dispatcher 运行角色。
   - [ ] 接跨进程锁、handler schema/version 和幂等 side-effect 指南。
+  - [ ] 为 outbox-dispatcher 增加 heartbeat、shutdown signal 和部署 profile 参数。
 
 ## 为什么需要 Outbox
 
@@ -175,6 +175,7 @@ dispatcher 需要：
 
 ```bash
 core outbox dispatch-once --installed-app apps.example_domain.module --database-url sqlite+aiosqlite:///./data/local.db --json
+core outbox-dispatcher --run --installed-app apps.example_domain.module --database-url sqlite+aiosqlite:///./data/local.db --json
 core outbox dead-letter list --database-url sqlite+aiosqlite:///./data/local.db --json
 core outbox dead-letter replay --event-id <event_id> --database-url sqlite+aiosqlite:///./data/local.db --yes --json
 ```
@@ -182,6 +183,7 @@ core outbox dead-letter replay --event-id <event_id> --database-url sqlite+aiosq
 行为：
 
 - `dispatch-once` 通过 `--installed-app` 或 settings 加载 app 事件处理器，领取一批待投递事件，调用 handler，并输出 claimed/published/failed/dead_lettered。
+- `outbox-dispatcher --run` 复用同一个运行层；默认持续循环，`--max-iterations` 可限制轮数，便于 CI 和本地 smoke。
 - `list` 输出 `dead_letter` 事件的稳定 JSON，包含 tenant、event type、aggregate、attempt、last_error 和 dead_letter_reason。
 - `replay` 必须显式传 `--yes`，避免误操作。
 - `replay` 只允许重放 `dead_letter` 事件，成功后把状态改回 `pending`，清理 `dead_letter_reason`、`last_error`、`next_retry_at` 和锁字段。
