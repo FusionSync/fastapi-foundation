@@ -118,6 +118,19 @@ def test_check_apps_rejects_missing_dependency(isolated_apps: Path) -> None:
     assert "missing dependencies: ['missing']" in result.errors
 
 
+def test_check_apps_rejects_duplicate_labels(isolated_apps: Path) -> None:
+    _write_app(isolated_apps, "first_domain", label="shared")
+    _write_app(isolated_apps, "second_domain", label="shared")
+
+    results = check_apps(["apps.first_domain.module", "apps.second_domain.module"])
+
+    assert any(
+        "Duplicate app label: shared" in error
+        for result in results
+        for error in result.errors
+    )
+
+
 def test_check_apps_rejects_circular_dependency(isolated_apps: Path) -> None:
     _write_app(isolated_apps, "alpha", dependencies=["beta"])
     _write_app(isolated_apps, "beta", dependencies=["alpha"])

@@ -115,3 +115,4 @@ apps.foo -> platform_apps.tenants.models
 - 每个 app 必须使用标准文件名：`schemas.py`、`models.py`、`router.py`、`services.py`。
 - 每个 app 的 migrations、tasks、events、schedules 必须通过 `AppModule` 注册。
 - app contract check 必须拒绝循环依赖、非法导入和缺失标准文件。
+- app registry 必须按 dependency-first 顺序装载模块；业务代码不能依赖 `settings.installed_apps` 的人工顺序来规避缺失依赖声明。

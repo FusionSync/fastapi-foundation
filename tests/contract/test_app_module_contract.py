@@ -115,6 +115,23 @@ def test_missing_dependency_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None
         AppRegistry(["fake_app_with_dependency"]).load()
 
 
+def test_registry_loads_modules_in_dependency_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    consumer = types.ModuleType("fake_app_consumer")
+    consumer.module = AppModule(
+        label="consumer",
+        version="0.1.0",
+        dependencies=["provider"],
+    )
+    provider = types.ModuleType("fake_app_provider")
+    provider.module = AppModule(label="provider", version="0.1.0")
+    monkeypatch.setitem(sys.modules, "fake_app_consumer", consumer)
+    monkeypatch.setitem(sys.modules, "fake_app_provider", provider)
+
+    registry = AppRegistry(["fake_app_consumer", "fake_app_provider"]).load()
+
+    assert [module.label for module in registry.modules] == ["provider", "consumer"]
+
+
 def test_circular_dependency_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     first = types.ModuleType("fake_app_alpha")
     first.module = AppModule(label="alpha", version="0.1.0", dependencies=["beta"])
@@ -123,5 +140,5 @@ def test_circular_dependency_is_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setitem(sys.modules, "fake_app_alpha", first)
     monkeypatch.setitem(sys.modules, "fake_app_beta", second)
 
-    with pytest.raises(ValueError, match="Circular app dependency detected"):
+    with pytest.raises(ValueError, match="circular dependencies: alpha -> beta -> alpha"):
         AppRegistry(["fake_app_alpha", "fake_app_beta"]).load()

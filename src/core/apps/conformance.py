@@ -6,6 +6,7 @@ from importlib import util
 from pathlib import Path
 
 from core.apps.boundaries import check_public_api_boundaries
+from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
 
 REQUIRED_APP_FILES = (
@@ -75,30 +76,21 @@ def check_app(module_path: str) -> AppCheckResult:
 
 def check_apps(module_paths: list[str]) -> list[AppCheckResult]:
     results = [check_app(path) for path in module_paths]
-    labels: dict[str, str] = {}
+    modules_by_result: list[tuple[AppCheckResult, AppModule]] = []
+    results_by_label: dict[str, list[AppCheckResult]] = {}
     for result in results:
         if not result.label:
             continue
-        if result.label in labels:
-            result.errors.append(
-                f"duplicate app label {result.label!r}; first declared by {labels[result.label]}"
-            )
-        labels[result.label] = result.module_path
-
-    known_labels = set(labels)
-    for result in results:
-        if not result.ok:
+        app_module = _load_checked_app_module(result)
+        if app_module is None:
             continue
-        imported = importlib.import_module(result.module_path)
-        app_module: AppModule = imported.module
-        missing = [
-            dependency
-            for dependency in app_module.dependencies
-            if dependency not in known_labels
-        ]
-        if missing:
-            result.errors.append(f"missing dependencies: {missing}")
-    _check_dependency_cycles(results)
+        modules_by_result.append((result, app_module))
+        results_by_label.setdefault(app_module.label, []).append(result)
+
+    validation = validate_app_dependencies([module for _, module in modules_by_result])
+    for label, errors in validation.errors_by_label.items():
+        for result in results_by_label.get(label, []):
+            result.errors.extend(errors)
     return results
 
 
@@ -119,40 +111,9 @@ def _check_migration_metadata(app_module: AppModule, result: AppCheckResult) -> 
         result.errors.append(f"migrations.path cannot be imported: {app_module.migrations.path}")
 
 
-def _check_dependency_cycles(results: list[AppCheckResult]) -> None:
-    modules: dict[str, AppModule] = {}
-    module_paths_by_label: dict[str, str] = {}
-    for result in results:
-        if not result.ok or not result.label:
-            continue
+def _load_checked_app_module(result: AppCheckResult) -> AppModule | None:
+    try:
         imported = importlib.import_module(result.module_path)
-        module = validate_app_module(imported.module)
-        modules[module.label] = module
-        module_paths_by_label[module.label] = result.module_path
-
-    graph = {label: list(module.dependencies) for label, module in modules.items()}
-    visiting: set[str] = set()
-    visited: set[str] = set()
-    path: list[str] = []
-
-    def visit(label: str) -> None:
-        if label in visited:
-            return
-        if label in visiting:
-            cycle_start = path.index(label)
-            cycle = [*path[cycle_start:], label]
-            target_label = path[cycle_start]
-            target = next(result for result in results if result.label == target_label)
-            target.errors.append(f"circular dependencies: {' -> '.join(cycle)}")
-            return
-        visiting.add(label)
-        path.append(label)
-        for dependency in graph[label]:
-            if dependency in graph:
-                visit(dependency)
-        path.pop()
-        visiting.remove(label)
-        visited.add(label)
-
-    for label in module_paths_by_label:
-        visit(label)
+        return validate_app_module(imported.module)
+    except Exception:
+        return None
