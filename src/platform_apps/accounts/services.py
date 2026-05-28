@@ -113,6 +113,7 @@ class AccountsService:
         user_id: str,
         tenant_id: str | None,
         auth_provider: str,
+        request_id: str | None = None,
     ) -> UserSession:
         user = await self._get_user(user_id)
         if user.status != "active":
@@ -132,6 +133,19 @@ class AccountsService:
         )
         self.session.add(session)
         await self.session.flush()
+        if self.audit is not None:
+            await self.audit.record(
+                action="session.created",
+                resource_type="user_session",
+                resource_id=session.id,
+                result="success",
+                tenant_id=tenant_id,
+                actor_id=user.id,
+                auth_provider=auth_provider,
+                session_id=session.id,
+                request_id=request_id,
+                payload={"token_version": session.token_version},
+            )
         return session
 
     async def _assert_tenant_login_allowed(self, *, user_id: str, tenant_id: str) -> None:

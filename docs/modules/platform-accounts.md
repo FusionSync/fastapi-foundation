@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: local user/password credential、session fact、auth session store、permissions 和基础 account integration tests 已落地。
+- Done: local user/password credential、session fact、auth session store、permissions、session.created 强一致审计和基础 account integration tests 已落地。
 - Next:
   - [ ] 补用户资料、password reset、外部身份绑定和 session 管理 API。
-  - [ ] 将账号安全事件接入 audit/outbox 和 token refresh 流程。
+  - [ ] 将账号安全事件 outbox、token refresh 和失败登录审计流程接入。
 
 ## 职责
 
@@ -74,6 +74,7 @@ PATCH /api/v1/me
 - `UserCredential` 和 `ExternalIdentity` 预留本地密码与 OIDC/Logto/Keycloak subject 映射。
 - `UserSession` 保存 session_id、tenant_id、auth_provider、status 和创建时的 token_version。
 - `AccountsService.create_session()` 只允许 active user 创建 session；如果 session 绑定 tenant，必须先验证 Tenant 存在、用户是 active member，并通过 tenant lifecycle 的 `login` gate。
+- `AccountsService.create_session()` 可注入 `AuditService` 写 `session.created` 强一致审计，记录 session、tenant、auth_provider、request_id 和 token_version。
 - `AccountsService.create_local_user()` 创建 local user 并写 `UserCredential.password_hash`。
 - `AccountsService.verify_local_password()` 使用 `core.security.PasswordHasher` 校验本地密码。
 - `AccountsService.disable_user()` 需要 platform scope 的 `user.manage` / `user.disable` `AuthorizationDecision`；通过后会把 user 标记为 disabled、递增 token_version，并撤销该用户所有 active sessions。

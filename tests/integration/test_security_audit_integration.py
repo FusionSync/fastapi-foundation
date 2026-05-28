@@ -198,14 +198,17 @@ async def test_disable_user_writes_security_audit_and_revokes_sessions(
     audit_logs = await _audit_logs(session_factory)
     assert disabled_user.status == "disabled"
     assert disabled_user.token_version == 2
-    assert len(audit_logs) == 1
-    assert audit_logs[0].action == "user.disabled"
-    assert audit_logs[0].actor_id == "admin-1"
-    assert audit_logs[0].resource_type == "user"
-    assert audit_logs[0].resource_id == user.id
-    assert audit_logs[0].reason == "security incident"
-    assert audit_logs[0].request_id == "req-disable"
-    assert audit_logs[0].payload == {"revoked_sessions": 1, "token_version": 2}
+    assert [audit_log.action for audit_log in audit_logs] == [
+        "session.created",
+        "user.disabled",
+    ]
+    user_disabled_audit = audit_logs[1]
+    assert user_disabled_audit.actor_id == "admin-1"
+    assert user_disabled_audit.resource_type == "user"
+    assert user_disabled_audit.resource_id == user.id
+    assert user_disabled_audit.reason == "security incident"
+    assert user_disabled_audit.request_id == "req-disable"
+    assert user_disabled_audit.payload == {"revoked_sessions": 1, "token_version": 2}
 
 
 @pytest.mark.asyncio

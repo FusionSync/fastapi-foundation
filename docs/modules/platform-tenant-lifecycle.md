@@ -2,11 +2,11 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: tenant lifecycle 状态机、provision/suspend/reactivate/delete/archive service、outbox event、session revocation hook、audit hook 和权限 decision 校验已落地。
+- Status: `connected`
+- Done: tenant lifecycle 状态机、provision/suspend/reactivate/delete/archive service、outbox event、session revocation hook、audit hook、权限 decision 校验、login/read/write/task/file download gate 和端到端 checkpoint suite 已落地。
 - Next:
-  - [ ] 用统一 lifecycle gate 覆盖 login/read/write/task/file download。
-  - [ ] 补 tenant lifecycle matrix 的端到端 checkpoint suite。
+  - [ ] 补删除/归档异步清理、任务取消和文件对象清理编排。
+  - [ ] 将 archived/suspended 可配置策略接入配置和运维诊断。
 
 ## 职责
 
@@ -110,7 +110,7 @@ TenantLifecycleService
   finish_delete_tenant()
 ```
 
-创建、暂停、恢复、删除和归档流程都会写入租户生命周期 outbox event。暂停和删除流程会调用 session revocation hook。`TenantLifecycleService` 可注入 `AuditService`，在同一事务写租户状态流转审计，记录 from/to 状态、事件类型和是否撤销 session。API 层、任务执行、文件下载和后台清理应统一调用 lifecycle gate，而不是各自判断 `status` 字段。
+创建、暂停、恢复、删除和归档流程都会写入租户生命周期 outbox event。暂停和删除流程会调用 session revocation hook。`TenantLifecycleService` 可注入 `AuditService`，在同一事务写租户状态流转审计，记录 from/to 状态、事件类型和是否撤销 session。API 层、账号登录、任务执行、文件下载和后台清理统一调用 lifecycle gate，而不是各自判断 `status` 字段；checkpoint suite 覆盖 login/read/write/task/file download 的关键矩阵。
 
 Tenant lifecycle mutation 是高权限写操作，不能只依赖 `actor_id`。`provision_tenant()`、`suspend_tenant()`、`reactivate_tenant()`、`begin_delete_tenant()` 和 `finish_delete_tenant()` 都需要 platform scope 的 `tenant.manage` / 对应 mutation `AuthorizationDecision`。service 会校验 decision 已允许、actor 与 decision user 一致、tenant domain 为 `__platform__`，并且 resource/action 覆盖当前操作。
 

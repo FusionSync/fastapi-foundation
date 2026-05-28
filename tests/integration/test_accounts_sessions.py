@@ -20,6 +20,7 @@ from platform_apps.accounts import (
     UserCredential,
     UserSession,
 )
+from platform_apps.audit import AuditLog, AuditService
 
 
 @pytest.fixture
@@ -58,6 +59,40 @@ async def test_create_user_and_session_for_active_user(
     assert session.status == "active"
     assert session.token_version == 1
     assert session.tenant_id == "tenant-a"
+
+
+@pytest.mark.asyncio
+async def test_create_session_writes_security_audit_when_audit_is_configured(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(uow.session, audit=AuditService(uow.session))
+        user = await accounts.create_user(
+            email="owner@example.com",
+            display_name="Owner",
+            auth_provider="local",
+            external_id="owner@example.com",
+        )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
+        user_session = await accounts.create_session(
+            user_id=user.id,
+            tenant_id="tenant-a",
+            auth_provider="local",
+            request_id="req-login",
+        )
+
+    audit_logs = await _audit_logs(session_factory)
+    assert len(audit_logs) == 1
+    assert audit_logs[0].action == "session.created"
+    assert audit_logs[0].resource_type == "user_session"
+    assert audit_logs[0].resource_id == user_session.id
+    assert audit_logs[0].tenant_id == "tenant-a"
+    assert audit_logs[0].actor_id == user.id
+    assert audit_logs[0].auth_provider == "local"
+    assert audit_logs[0].session_id == user_session.id
+    assert audit_logs[0].request_id == "req-login"
+    assert audit_logs[0].payload == {"token_version": 1}
 
 
 @pytest.mark.asyncio
@@ -392,6 +427,15 @@ async def _credentials(
         for credential in credentials:
             session.expunge(credential)
         return credentials
+
+
+async def _audit_logs(session_factory: async_sessionmaker[AsyncSession]) -> list[AuditLog]:
+    async with session_factory() as session:
+        result = await session.execute(select(AuditLog).order_by(AuditLog.created_at))
+        audit_logs = list(result.scalars().all())
+        for audit_log in audit_logs:
+            session.expunge(audit_log)
+        return audit_logs
 
 
 def _add_tenant_member(
