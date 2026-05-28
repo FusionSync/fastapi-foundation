@@ -72,17 +72,20 @@ class OutboxRepository:
         dispatcher_id: str,
         now: datetime | None = None,
     ) -> None:
-        self._assert_dispatch_lease(
+        resolved_now = now or datetime.now(UTC)
+        await self._conditioned_dispatch_update(
             event,
             dispatcher_id=dispatcher_id,
             operation="published",
+            values={
+                "status": "published",
+                "published_at": resolved_now,
+                "locked_by": None,
+                "locked_until": None,
+                "last_error": None,
+            },
+            now=resolved_now,
         )
-        event.status = "published"
-        event.published_at = now or datetime.now(UTC)
-        event.locked_by = None
-        event.locked_until = None
-        event.last_error = None
-        await self.session.flush()
 
     async def mark_failed(
         self,
@@ -93,24 +96,37 @@ class OutboxRepository:
         retry_delay_seconds: int = 30,
         now: datetime | None = None,
     ) -> None:
-        self._assert_dispatch_lease(
+        resolved_now = now or datetime.now(UTC)
+        next_attempt_count = event.attempt_count + 1
+        last_error = f"{type(error).__name__}: {error}"
+        values: dict[str, Any] = {
+            "attempt_count": next_attempt_count,
+            "last_error": last_error,
+            "locked_by": None,
+            "locked_until": None,
+        }
+        if next_attempt_count >= event.max_attempts:
+            values.update(
+                {
+                    "status": "dead_letter",
+                    "dead_letter_reason": last_error,
+                    "next_retry_at": None,
+                }
+            )
+        else:
+            values.update(
+                {
+                    "status": "failed",
+                    "next_retry_at": resolved_now + timedelta(seconds=retry_delay_seconds),
+                }
+            )
+        await self._conditioned_dispatch_update(
             event,
             dispatcher_id=dispatcher_id,
             operation="failed",
+            values=values,
+            now=resolved_now,
         )
-        resolved_now = now or datetime.now(UTC)
-        event.attempt_count += 1
-        event.last_error = f"{type(error).__name__}: {error}"
-        event.locked_by = None
-        event.locked_until = None
-        if event.attempt_count >= event.max_attempts:
-            event.status = "dead_letter"
-            event.dead_letter_reason = event.last_error
-            event.next_retry_at = None
-        else:
-            event.status = "failed"
-            event.next_retry_at = resolved_now + timedelta(seconds=retry_delay_seconds)
-        await self.session.flush()
 
     async def replay_dead_letter(self, event: OutboxEvent) -> None:
         if event.status != "dead_letter":
@@ -169,12 +185,13 @@ class OutboxRepository:
                 status="publishing",
                 locked_by=dispatcher_id,
                 locked_until=lock_until,
+                claim_version=OutboxEvent.claim_version + 1,
             )
             .execution_options(synchronize_session=False)
         )
         if result.rowcount != 1:
             return None
-        return await self.session.get(OutboxEvent, event_id)
+        return await self.session.get(OutboxEvent, event_id, populate_existing=True)
 
     def _eligible_filter(self, now: datetime) -> object:
         unlocked = or_(OutboxEvent.locked_until.is_(None), OutboxEvent.locked_until <= now)
@@ -213,27 +230,39 @@ class OutboxRepository:
                 status_code=403,
             )
 
-    def _assert_dispatch_lease(
+    async def _conditioned_dispatch_update(
         self,
         event: OutboxEvent,
         *,
         dispatcher_id: str,
         operation: str,
+        values: dict[str, Any],
+        now: datetime,
     ) -> None:
-        if (
-            event.status == "publishing"
-            and event.locked_by == dispatcher_id
-            and event.locked_until is not None
-        ):
+        result = await self.session.execute(
+            update(OutboxEvent)
+            .where(OutboxEvent.id == event.id)
+            .where(OutboxEvent.status == "publishing")
+            .where(OutboxEvent.locked_by == dispatcher_id)
+            .where(OutboxEvent.claim_version == event.claim_version)
+            .where(OutboxEvent.locked_until.is_not(None))
+            .where(OutboxEvent.locked_until > now)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 1:
+            await self.session.refresh(event)
             return
+        current = await self.session.get(OutboxEvent, event.id, populate_existing=True)
         raise AppError(
             "CONFLICT",
             f"Outbox event cannot be marked {operation} without an active dispatcher lease",
             status_code=409,
             details={
                 "event_id": event.id,
-                "status": event.status,
-                "locked_by": event.locked_by,
+                "status": current.status if current else None,
+                "locked_by": current.locked_by if current else None,
+                "claim_version": current.claim_version if current else None,
                 "dispatcher_id": dispatcher_id,
             },
         )

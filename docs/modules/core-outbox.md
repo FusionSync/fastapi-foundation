@@ -92,6 +92,7 @@ aggregate_type
 aggregate_id
 payload
 status
+claim_version
 attempt_count
 max_attempts
 next_retry_at
@@ -147,8 +148,8 @@ dispatcher 需要：
 - 支持批量领取。
 - 使用条件更新领取事件，条件至少包含 `status in (pending, failed)`、`next_retry_at <= now`、`locked_until is null or locked_until < now`。
 - PostgreSQL profile 可使用 `FOR UPDATE SKIP LOCKED` 优化领取；SQLite/local profile 可使用单 worker。
-- 领取成功后设置 `status=publishing`、`locked_by`、`locked_until`。
-- 标记 `published` 或 `failed/dead_letter` 时必须再次校验 dispatcher lease：事件仍为 `publishing`、`locked_by` 等于当前 dispatcher，并且 `locked_until` 存在；未领取、已完成、死信或非当前 dispatcher 持有的事件不得被完成。
+- 领取成功后设置 `status=publishing`、`locked_by`、`locked_until`，并递增 `claim_version` 作为 fencing token。
+- 标记 `published` 或 `failed/dead_letter` 时必须使用条件更新再次校验 dispatcher lease：事件仍为 `publishing`、`locked_by` 等于当前 dispatcher、`claim_version` 等于领取时的 token，并且 `locked_until` 仍未过期；未领取、已完成、死信、非当前 dispatcher 持有、锁已过期或已被重新领取的事件不得被完成。
 - 支持指数退避或固定退避。
 - 达到最大重试后进入 dead letter。
 - 提供 dead letter 重放命令。

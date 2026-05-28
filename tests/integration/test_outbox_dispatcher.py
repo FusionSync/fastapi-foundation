@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -271,6 +271,54 @@ async def test_mark_published_rejects_non_owner_dispatcher(
     assert current.status == "publishing"
     assert current.locked_by == "dispatcher-1"
     assert current.published_at is None
+
+
+@pytest.mark.asyncio
+async def test_expired_old_dispatcher_lease_cannot_mark_reclaimed_event_published(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+    claimed_at = datetime(2026, 5, 28, 10, 0, tzinfo=UTC)
+
+    old_session = session_factory()
+    try:
+        old_repository = OutboxRepository(old_session, registry=registry)
+        old_claim = await old_repository.claim_batch(
+            dispatcher_id="dispatcher-1",
+            batch_size=1,
+            lock_seconds=1,
+            now=claimed_at,
+        )
+        assert len(old_claim) == 1
+        old_event = old_claim[0]
+        await old_session.commit()
+
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            new_claim = await OutboxRepository(uow.session, registry=registry).claim_batch(
+                dispatcher_id="dispatcher-2",
+                batch_size=1,
+                lock_seconds=60,
+                now=claimed_at + timedelta(seconds=2),
+            )
+            assert len(new_claim) == 1
+
+        with pytest.raises(AppError) as exc_info:
+            await old_repository.mark_published(
+                old_event,
+                dispatcher_id="dispatcher-1",
+                now=claimed_at + timedelta(seconds=3),
+            )
+
+        current = await _first_event(session_factory)
+        assert exc_info.value.code == "CONFLICT"
+        assert current.status == "publishing"
+        assert current.locked_by == "dispatcher-2"
+        assert current.published_at is None
+    finally:
+        await old_session.close()
 
 
 @pytest.mark.asyncio
