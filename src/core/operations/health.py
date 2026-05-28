@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Literal
 
 from core.config import Settings
+from core.operations.heartbeat import ProcessHeartbeatSnapshot
 
 ProcessRole = Literal["server", "worker", "scheduler", "outbox-dispatcher", "migrate"]
 
@@ -24,7 +26,14 @@ class ProcessHealth:
         }
 
 
-def check_process_health(role: ProcessRole, settings: Settings | None = None) -> ProcessHealth:
+def check_process_health(
+    role: ProcessRole,
+    settings: Settings | None = None,
+    *,
+    heartbeat: ProcessHeartbeatSnapshot | None = None,
+    now: datetime | None = None,
+    heartbeat_max_age_seconds: int = 120,
+) -> ProcessHealth:
     resolved_settings = settings or Settings()
     checks = {
         "config_loaded": True,
@@ -46,4 +55,24 @@ def check_process_health(role: ProcessRole, settings: Settings | None = None) ->
         checks["outbox_claim_loop_configured"] = True
     if role == "migrate":
         checks["migration_cli_available"] = True
+    if heartbeat is not None:
+        heartbeat_now = _ensure_aware(now or datetime.now(UTC))
+        heartbeat_seen_at = _ensure_aware(heartbeat.last_seen_at)
+        heartbeat_age_seconds = max(0, int((heartbeat_now - heartbeat_seen_at).total_seconds()))
+
+        checks["heartbeat_role_matches"] = heartbeat.role == role
+        checks["heartbeat_status_healthy"] = heartbeat.status == "healthy"
+        checks["heartbeat_fresh"] = heartbeat_age_seconds <= heartbeat_max_age_seconds
+        details["heartbeat_instance_id"] = heartbeat.instance_id
+        details["heartbeat_status"] = heartbeat.status
+        details["heartbeat_last_seen_at"] = heartbeat_seen_at.isoformat()
+        details["heartbeat_age_seconds"] = heartbeat_age_seconds
+        details["heartbeat_max_age_seconds"] = heartbeat_max_age_seconds
+        details["heartbeat_details"] = heartbeat.details
     return ProcessHealth(ok=all(checks.values()), role=role, checks=checks, details=details)
+
+
+def _ensure_aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value

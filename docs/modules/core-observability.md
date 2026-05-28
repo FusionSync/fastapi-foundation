@@ -47,6 +47,9 @@ GET /metrics
 
 `healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、AppRegistry 和 MetricsRegistry。
 worker、scheduler 和 outbox-dispatcher 也必须提供等价探针或 CLI health check。
+非 HTTP 角色通过 `process_heartbeats` 保存最近一次心跳事实；健康检查读取最新
+`ProcessHeartbeatSnapshot` 后，按角色匹配、状态和 freshness 窗口判定是否可用。
+没有传入 heartbeat 时，`ProcessHealth` 只表示配置级检查结果，适合本地 CLI smoke 和启动前检查。
 
 ## 指标
 
