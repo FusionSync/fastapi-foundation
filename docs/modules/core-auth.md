@@ -73,6 +73,7 @@ token_version
 - `AuthSessionValidator` 通过 `AuthSessionStore` 协议加载 session/user fact，统一校验 session 是否 active、user 是否 active、token_version 是否匹配、tenant 是否匹配。
 - `StaticAuthSessionStore` 用于测试和本地 contract。
 - 认证失败统一抛 `AUTH_INVALID_TOKEN`，并带 `WWW-Authenticate: Bearer`。
+- `LocalJwtProvider` 提供本地 HS256 JWT 签发和校验，校验签名、issuer、audience 和过期时间，并把 `session_id`、`token_version`、`tenant_id` 转换为统一 `TokenClaims`。
 - `platform_apps.accounts.AccountsAuthSessionStore` 是当前 SQLAlchemy 适配器，读取 `UserSession` 和 `User`。
 
 当前先由 `platform_apps.accounts` 落地会话事实：
@@ -84,12 +85,14 @@ token_version
 - `AccountsService.create_local_user()` 使用 `core.security.PasswordHasher` 创建本地密码凭据。
 - `AccountsService.verify_local_password()` 校验本地密码，失败时抛 `AUTH_INVALID_TOKEN`。
 
-后续 JWT/OIDC provider 必须先完成 token 签名、issuer、audience 和过期时间校验，然后把 claims 交给 `AuthSessionValidator`：
+请求认证流程应先由 token provider 完成 token 层校验，再把 claims 交给 `AuthSessionValidator`：
 
 ```text
+LocalJwtProvider.verify_token()
+  -> TokenClaims
 token.session_id 对应 UserSession.status == active
 token.token_version == User.token_version
 User.status == active
 ```
 
-这样本地 JWT、Logto 或 Keycloak 适配都能复用同一套撤销事实。
+这样本地 JWT、后续 OIDC/Logto 或 Keycloak 适配都能复用同一套撤销事实。

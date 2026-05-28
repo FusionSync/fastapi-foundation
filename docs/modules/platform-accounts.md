@@ -72,4 +72,4 @@ PATCH /api/v1/me
 - `AccountsService.revoke_tenant_sessions()` 可作为 `TenantLifecycleService` 的 `session_revocation_hook`，在租户暂停/删除时撤销对应 tenant 的 active sessions。
 - `AccountsAuthSessionStore` 适配 `core.auth.AuthSessionValidator`，把 UserSession/User fact 转换为 core 统一认证主体。
 
-当前实现只负责本地密码凭据、会话事实和撤销收敛，不负责 JWT 签发。后续本地 JWT provider 应把 `session_id` 和 `token_version` 写入 token，并在请求认证时调用 `AuthSessionValidator`。
+当前实现只负责本地密码凭据、会话事实和撤销收敛，不直接签发 JWT。`core.auth.LocalJwtProvider` 可基于 `UserSession.id`、`UserSession.token_version` 和 `User.token_version` 签发/校验本地 token；请求认证时仍必须调用 `AuthSessionValidator`，确保禁用用户、撤销 session 和租户生命周期变更能收敛到访问控制。
