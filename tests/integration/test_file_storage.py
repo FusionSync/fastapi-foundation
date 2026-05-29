@@ -9,6 +9,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.exceptions import AppError
 from core.permissions import AuthorizationService, ProjectedPolicy
+from core.quotas import MemoryQuotaUsageStore, QuotaRule, QuotaService
 from core.security import UploadSecurityPolicy
 from core.storage import LocalStorageProvider
 from platform_apps.audit import AuditLog, AuditService
@@ -140,6 +141,82 @@ async def test_upload_rejects_file_before_storage_when_security_policy_fails(
     async with session_factory() as session:
         persisted = await session.scalar(select(FileObject))
         assert persisted is None
+
+
+@pytest.mark.asyncio
+async def test_upload_reserves_storage_quota_before_writing_storage(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    quota_store = MemoryQuotaUsageStore()
+    quota_service = QuotaService(quota_store)
+    quota_rule = QuotaRule(metric="storage_bytes", limit=4, scope="tenant")
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
+        with pytest.raises(AppError) as exceeded:
+            await FileService(
+                uow.session,
+                storage,
+                quota_service=quota_service,
+                upload_quota_rules=(quota_rule,),
+            ).upload_bytes(
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                file_name="proposal.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=b"docx-bytes",
+                file_type="upload",
+                user_id="user-1",
+                authorization=AuthorizationService(uow.session),
+            )
+
+    assert exceeded.value.code == "QUOTA_EXCEEDED"
+    assert await quota_store.get_usage("quota:storage_bytes:tenant_id=tenant-a") == 0
+    assert list(tmp_path.rglob("*")) == []
+    async with session_factory() as session:
+        persisted = await session.scalar(select(FileObject))
+        assert persisted is None
+
+
+@pytest.mark.asyncio
+async def test_upload_rolls_back_earlier_quota_reservations_when_later_quota_fails(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    quota_store = MemoryQuotaUsageStore()
+    quota_service = QuotaService(quota_store)
+    file_count = QuotaRule(metric="file_count", limit=10, scope="tenant")
+    storage_bytes = QuotaRule(metric="storage_bytes", limit=4, scope="tenant")
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
+        with pytest.raises(AppError) as exceeded:
+            await FileService(
+                uow.session,
+                storage,
+                quota_service=quota_service,
+                upload_quota_rules=(file_count, storage_bytes),
+            ).upload_bytes(
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                file_name="proposal.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=b"docx-bytes",
+                file_type="upload",
+                user_id="user-1",
+                authorization=AuthorizationService(uow.session),
+            )
+
+    assert exceeded.value.code == "QUOTA_EXCEEDED"
+    assert await quota_store.get_usage("quota:file_count:tenant_id=tenant-a") == 0
+    assert await quota_store.get_usage("quota:storage_bytes:tenant_id=tenant-a") == 0
 
 
 @pytest.mark.asyncio

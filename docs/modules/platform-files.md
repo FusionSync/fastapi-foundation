@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: file metadata、local storage provider、owner/authorization gate、upload/download/delete 权限和基础 storage tests 已落地。
+- Done: file metadata、local storage provider、owner/authorization gate、upload quota gate、upload/download/delete 权限和基础 storage tests 已落地。
 - Next:
-  - [ ] 接 MinIO/S3、virus scan、retention 和 quota gate。
+  - [ ] 接 MinIO/S3、virus scan 和 retention。
   - [ ] 将业务资源级文件权限替换 owner-only 最小门禁。
 
 ## 职责
@@ -66,6 +66,7 @@ DELETE /api/v1/files/{id}
 
 - `platform_apps.files.models.FileObject` 保存文件 metadata，不依赖具体 storage provider。
 - `FileService.upload_bytes()` 必须传入 `AuthorizationService` 和 `user_id`，先要求 `file.upload` 权限，再经过 `core.security.UploadSecurityPolicy` 校验，最后写 storage 和 FileObject metadata。
+- `FileService.upload_bytes()` 可注入 `QuotaService` 和 upload quota rules；storage 写入前会 reserve quota，超限时不写对象、不落 metadata，部分 reserve 失败时会释放已扣用量。
 - `FileService.download_bytes()` 执行 tenant lifecycle `file_download` gate，再校验 tenant、owner_type、owner_id，并要求 `file.download` 权限后读取 storage。
 - `FileService.delete_file()` 校验 tenant、owner_type、owner_id，并要求 `file.delete` 权限后，将 metadata 标记为 `deleted`，再删除 storage object。
 - 文件权限拒绝时复用权限模块的 `authorization.denied` 审计；缺少 `AuthorizationService` 时直接返回 `PERMISSION_DENIED`，避免服务层绕过 route 权限。

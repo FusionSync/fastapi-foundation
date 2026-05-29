@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: quota provider、rule、usage 抽象和数据库持久 usage store 已落地。
+- Done: quota provider、rule、usage 抽象、数据库持久 usage store 和文件上传 quota gate 已落地。
 - Next:
-  - [ ] 将配额检查接入文件、任务和业务 mutation 的统一 gate。
+  - [ ] 将配额检查接入任务和业务 mutation 的统一 gate。
 
 ## 职责
 
@@ -67,6 +67,7 @@ file_count
 - `QuotaService.require_reserve()` 在配额不足时抛 `QUOTA_EXCEEDED`，并带稳定 details。
 - `QuotaService.release()` 支持释放并发类配额，例如 `concurrent_tasks`。
 - `DatabaseQuotaUsageStore` 使用 `quota_usage` 表持久化 usage key 和 used 值；`reserve()` 通过数据库条件更新实现 check-and-increment，超限时不增加用量。
+- `FileService.upload_bytes()` 可注入 `QuotaService` 和上传 quota rule，在写 storage 前 reserve；任一 quota 失败或后续写入失败时会释放已 reserve 的上传 quota。
 - 配额不足时会写可选 `MetricsRegistry` 的 `quota_exceeded_total{metric,scope}`，并可通过 `AuditRecorder` 写 `quota.exceeded` 审计。
 - 指标契约已预留 `quota_exceeded_total`。
 

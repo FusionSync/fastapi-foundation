@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -8,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AppError
+from core.quotas import QuotaRule, QuotaService, QuotaSubject
 from core.security import DEFAULT_UPLOAD_SECURITY_POLICY, UploadSecurityPolicy, validate_upload
 from core.storage import StorageProvider, file_object_key
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
@@ -34,10 +36,14 @@ class FileService:
         storage: StorageProvider,
         *,
         upload_policy: UploadSecurityPolicy | None = None,
+        quota_service: QuotaService | None = None,
+        upload_quota_rules: Sequence[QuotaRule] = (),
     ) -> None:
         self.session = session
         self.storage = storage
         self.upload_policy = upload_policy or DEFAULT_UPLOAD_SECURITY_POLICY
+        self.quota_service = quota_service
+        self.upload_quota_rules = tuple(upload_quota_rules)
 
     async def upload_bytes(
         self,
@@ -72,26 +78,34 @@ class FileService:
             file_type=file_type,
             expected_checksum=expected_checksum,
         )
-        file_id = str(uuid4())
-        object_key = file_object_key(tenant_id=tenant_id, file_id=file_id)
-        stored = await self.storage.put_file(object_key, data)
-        file_object = FileObject(
-            id=file_id,
-            tenant_id=tenant_id,
-            owner_type=owner_type,
-            owner_id=owner_id,
-            bucket=stored.bucket,
-            object_key=stored.object_key,
-            file_name=file_name,
-            content_type=content_type,
-            size=stored.size,
-            checksum=stored.checksum,
-            file_type=file_type,
-            status="available",
-        )
-        self.session.add(file_object)
-        await self.session.flush()
-        return file_object
+        reserved_quotas = await self._reserve_upload_quotas(tenant_id=tenant_id, data=data)
+        try:
+            file_id = str(uuid4())
+            object_key = file_object_key(tenant_id=tenant_id, file_id=file_id)
+            stored = await self.storage.put_file(object_key, data)
+            file_object = FileObject(
+                id=file_id,
+                tenant_id=tenant_id,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                bucket=stored.bucket,
+                object_key=stored.object_key,
+                file_name=file_name,
+                content_type=content_type,
+                size=stored.size,
+                checksum=stored.checksum,
+                file_type=file_type,
+                status="available",
+            )
+            self.session.add(file_object)
+            await self.session.flush()
+            return file_object
+        except Exception:
+            await self._release_upload_quotas(
+                tenant_id=tenant_id,
+                reserved_quotas=reserved_quotas,
+            )
+            raise
 
     async def download_bytes(
         self,
@@ -260,3 +274,44 @@ class FileService:
             expected_checksum=expected_checksum,
             policy=self.upload_policy,
         )
+
+    async def _reserve_upload_quotas(
+        self,
+        *,
+        tenant_id: str,
+        data: bytes,
+    ) -> list[tuple[QuotaRule, int]]:
+        if not self.upload_quota_rules:
+            return []
+        if self.quota_service is None:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "quota_service is required when upload_quota_rules are configured",
+                status_code=400,
+            )
+        subject = QuotaSubject(tenant_id=tenant_id)
+        reserved: list[tuple[QuotaRule, int]] = []
+        for rule in self.upload_quota_rules:
+            amount = len(data) if rule.metric == "storage_bytes" else 1
+            try:
+                await self.quota_service.require_reserve(rule, subject, amount=amount)
+            except Exception:
+                await self._release_upload_quotas(
+                    tenant_id=tenant_id,
+                    reserved_quotas=reserved,
+                )
+                raise
+            reserved.append((rule, amount))
+        return reserved
+
+    async def _release_upload_quotas(
+        self,
+        *,
+        tenant_id: str,
+        reserved_quotas: list[tuple[QuotaRule, int]],
+    ) -> None:
+        if self.quota_service is None:
+            return
+        subject = QuotaSubject(tenant_id=tenant_id)
+        for rule, amount in reversed(reserved_quotas):
+            await self.quota_service.release(rule, subject, amount=amount)

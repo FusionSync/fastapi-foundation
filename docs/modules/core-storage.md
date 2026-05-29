@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: storage provider、local backend、key path 规则和 platform files 接入点已落地。
+- Done: storage provider、local backend、key path 规则和 platform files permission/quota 接入点已落地。
 - Next:
   - [ ] 接 MinIO/S3 provider。
-  - [ ] 将 tenant lifecycle、permission、quota 和 virus scan gate 串进文件访问链路。
+  - [ ] 将 tenant lifecycle、permission、virus scan gate 串进文件访问链路。
 
 ## 职责
 
@@ -84,5 +84,6 @@ cloud:
 - local provider 会校验 object key，拒绝绝对路径和 `..` 路径穿越。
 - `file_object_key()` 固定上传原始文件 key：`tenants/{tenant_id}/files/{file_id}/original.bin`。
 - `resource_object_key()` 固定资源关联文件 key：`tenants/{tenant_id}/resources/{resource_type}/{resource_id}/{file_id}.bin`。
+- platform files 上传链路已在写 storage 前接入 permission、upload security 和 quota gate。
 
 后续接入 MinIO/S3 时，provider 必须沿用相同 object key 约定，业务 app 只能通过 provider 和 FileObject metadata 访问文件。
