@@ -6,7 +6,12 @@ from typing import Any
 from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.events import EventEnvelope, EventRegistry
+from core.events import (
+    EventEnvelope,
+    EventPayloadValidationError,
+    EventRegistry,
+    classify_event_handler_error,
+)
 from core.exceptions import AppError
 from core.outbox.models import OutboxEvent
 
@@ -98,14 +103,15 @@ class OutboxRepository:
     ) -> None:
         resolved_now = now or datetime.now(UTC)
         next_attempt_count = event.attempt_count + 1
-        last_error = f"{type(error).__name__}: {error}"
+        classification = classify_event_handler_error(error)
+        last_error = f"{classification.kind}: {type(error).__name__}: {error}"
         values: dict[str, Any] = {
             "attempt_count": next_attempt_count,
             "last_error": last_error,
             "locked_by": None,
             "locked_until": None,
         }
-        if next_attempt_count >= event.max_attempts:
+        if not classification.retryable or next_attempt_count >= event.max_attempts:
             values.update(
                 {
                     "status": "dead_letter",
@@ -210,12 +216,24 @@ class OutboxRepository:
         payload: dict[str, Any],
         tenant_id: str,
     ) -> None:
-        if self.registry and not self.registry.has_event_type(event_type, event_version):
-            raise AppError(
-                "VALIDATION_ERROR",
-                f"Unregistered event type: {event_type} v{event_version}",
-                status_code=400,
-            )
+        if self.registry:
+            try:
+                self.registry.validate_event(
+                    event_type=event_type,
+                    event_version=event_version,
+                    tenant_id=tenant_id,
+                    payload=payload,
+                )
+            except EventPayloadValidationError as exc:
+                message = str(exc)
+                if message.startswith("Event payload tenant_id"):
+                    raise AppError(
+                        "TENANT_CONTEXT_CONFLICT",
+                        message,
+                        status_code=403,
+                    ) from exc
+                raise AppError("VALIDATION_ERROR", message, status_code=400) from exc
+            return
         missing_fields = {"tenant_id", "actor_id", "request_id"} - set(payload)
         if missing_fields:
             raise AppError(

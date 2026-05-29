@@ -21,6 +21,7 @@ ScheduleTrigger = Literal["interval", "cron", "date", "manual"]
 MisfirePolicy = Literal["skip", "run_once", "catch_up_limited"]
 LifecyclePhase = Literal["startup", "shutdown"]
 _LIFECYCLE_PHASES = {"startup", "shutdown"}
+_EVENT_SCHEMA_FIELD_TYPES = {"str", "int", "float", "number", "bool", "dict", "list"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,24 @@ class EventHandlerSpec:
     event_type: str
     event_version: int
     handler_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class EventSchemaSpec:
+    event_type: str
+    event_version: int
+    required_payload_fields: list[str] = field(default_factory=list)
+    field_types: dict[str, str] = field(default_factory=dict)
+    compatible_with: list[int] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "event_type": self.event_type,
+            "event_version": self.event_version,
+            "required_payload_fields": self.required_payload_fields,
+            "field_types": self.field_types,
+            "compatible_with": self.compatible_with,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +92,7 @@ class AppModule:
     permissions: list[PermissionSpec] = field(default_factory=list)
     error_codes: list[ErrorCodeSpec] = field(default_factory=list)
     message_catalogs: list[MessageCatalog] = field(default_factory=list)
+    event_schemas: list[EventSchemaSpec] = field(default_factory=list)
     event_handlers: list[EventHandlerSpec] = field(default_factory=list)
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
     schedules: list[ScheduleSpec] = field(default_factory=list)
@@ -142,6 +162,49 @@ def validate_app_module(module: AppModule) -> AppModule:
     for message_catalog in module.message_catalogs:
         if not isinstance(message_catalog, MessageCatalog):
             raise TypeError(f"App {module.label!r} message_catalog must be MessageCatalog")
+    for event_schema in module.event_schemas:
+        if not isinstance(event_schema, EventSchemaSpec):
+            raise TypeError(f"App {module.label!r} event_schema must be EventSchemaSpec")
+        if event_schema.event_version < 1:
+            raise ValueError(f"App {module.label!r} event_schema version must be positive")
+        _validate_non_empty_path(
+            event_schema.event_type,
+            f"App {module.label!r} event_schema event_type",
+        )
+        _validate_list(
+            event_schema.required_payload_fields,
+            f"App {module.label!r} event_schema required_payload_fields",
+        )
+        for field_name in event_schema.required_payload_fields:
+            _validate_non_empty_path(
+                field_name,
+                f"App {module.label!r} event_schema required_payload_fields item",
+            )
+        _validate_list(
+            event_schema.compatible_with,
+            f"App {module.label!r} event_schema compatible_with",
+        )
+        for version in event_schema.compatible_with:
+            if not isinstance(version, int) or version < 1:
+                raise ValueError(
+                    f"App {module.label!r} event_schema compatible_with "
+                    "versions must be positive integers"
+                )
+        if not isinstance(event_schema.field_types, dict):
+            raise TypeError(f"App {module.label!r} event_schema field_types must be a dict")
+        for field_name, field_type in event_schema.field_types.items():
+            _validate_non_empty_path(
+                field_name,
+                f"App {module.label!r} event_schema field name",
+            )
+            _validate_non_empty_path(
+                field_type,
+                f"App {module.label!r} event_schema field type",
+            )
+            if field_type not in _EVENT_SCHEMA_FIELD_TYPES:
+                raise ValueError(
+                    f"App {module.label!r} event_schema unsupported field type: {field_type}"
+                )
     for event_handler in module.event_handlers:
         if not isinstance(event_handler, EventHandlerSpec):
             raise TypeError(f"App {module.label!r} event_handler must be EventHandlerSpec")

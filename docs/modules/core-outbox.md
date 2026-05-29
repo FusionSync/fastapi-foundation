@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff 和 handler 幂等执行保护已落地。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff、handler schema/version 校验和 handler 幂等执行保护已落地。
 - Next:
-  - [ ] 接跨进程锁和 handler schema/version 校验。
+  - [ ] 接跨进程锁。
   - [ ] 补充 handler 外部 side-effect 幂等指南。
   - [ ] 为 outbox-dispatcher 增加 shutdown signal 和部署 profile 参数。
 
@@ -146,7 +146,7 @@ await service.run_in_transaction(
 
 - outbox 写入必须与业务数据使用同一个事务连接。
 - event payload 必须包含 `tenant_id`、`actor_id`、`request_id`；存在 `trace_id` 时 dispatcher 必须透传给 handler 背景上下文。
-- event_type 和 event_version 必须注册。
+- event_type 和 event_version 必须注册；如果 registry 中存在 `EventSchemaSpec`，写入时还会校验 schema 必填字段、字段类型和 tenant_id 一致性。
 - handler 必须以 `event_id` 做幂等；复杂业务可以额外使用业务唯一键。
 - 不要求第一版支持复杂事件溯源、全局顺序或跨服务 exactly-once。
 
@@ -160,6 +160,8 @@ dispatcher 需要：
 - 领取成功后设置 `status=publishing`、`locked_by`、`locked_until`，并递增 `claim_version` 作为 fencing token。
 - 标记 `published` 或 `failed/dead_letter` 时必须使用条件更新再次校验 dispatcher lease：事件仍为 `publishing`、`locked_by` 等于当前 dispatcher、`claim_version` 等于领取时的 token，并且 `locked_until` 仍未过期；未领取、已完成、死信、非当前 dispatcher 持有、锁已过期或已被重新领取的事件不得被完成。
 - 调用 handler 前通过 `IdempotencyStore` 以 `event_id + handler_key` 记录 handler 执行结果；已成功的 handler replay 时跳过，失败记录允许后续重试重新领取。
+- 调用 handler 前会再次通过 `EventRegistry.validate_event()` 校验 schema/version，防止 schema 变更后历史坏事件反复调用 handler；schema 错误按 permanent failure 直接进入 dead letter。
+- handler 未分类异常默认按 transient failure 重试；明确抛出 `EventHandlerPermanentError` 时直接 dead-letter，并在 `last_error` / `dead_letter_reason` 中保留 `permanent` 分类。
 - 支持指数退避或固定退避。
 - 达到最大重试后进入 dead letter。
 - 提供 dead letter 重放命令。

@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、错误码和 message catalog metadata/app 注册检查、repository 继承检查、route permission conformance 与权限拒绝审计、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、security hardening checklist、rate-limit middleware、observability request logging/monitoring contract、outbox、migration、permission facts/projection、route authorization dependency、task/scheduler trace handoff、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
+- Done: contract/integration 测试目录、app conformance gate、错误码和 message catalog metadata/app 注册检查、repository 继承检查、route permission conformance 与权限拒绝审计、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、security hardening checklist、rate-limit middleware、observability request logging/monitoring contract、outbox schema/version/error classification、migration、permission facts/projection、route authorization dependency、task/scheduler trace handoff、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
 - Next:
   - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
 
@@ -58,6 +58,7 @@ src/core/testing/
 - App conformance contract test 必须覆盖 message catalog owner/code/deprecated gate、registry 注册和 i18n fallback。
 - App conformance contract test 必须覆盖 route-level permission 格式，以及 route permission 必须在 `AppModule.permissions` 声明。
 - App conformance contract test 必须覆盖 tenant-scoped model repository 继承约束，拒绝裸 `BaseRepository` 访问租户模型。
+- Events/outbox contract test 必须覆盖 event schema 注册、版本兼容声明、payload schema 写入校验、dispatcher 投递前 schema 校验，以及 transient/permanent handler 错误分类。
 
 ## 最小测试矩阵
 

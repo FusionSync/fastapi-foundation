@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from core.apps import EventHandlerSpec
+from core.apps import EventHandlerSpec, EventSchemaSpec
 from core.base.models import BaseModel
 from core.context import (
     RequestContext,
@@ -15,7 +15,7 @@ from core.context import (
     set_current_context,
 )
 from core.db import unit_of_work
-from core.events import EventEnvelope, EventRegistry
+from core.events import EventEnvelope, EventHandlerPermanentError, EventRegistry
 from core.exceptions import AppError
 from core.idempotency import IdempotencyStore, hash_request_payload
 from core.observability import MetricsRegistry
@@ -228,6 +228,75 @@ async def test_dispatcher_moves_exhausted_event_to_dead_letter(
     assert 'outbox_dispatch_events_total{outcome="failed"} 1' in rendered_metrics
     assert 'outbox_dispatch_events_total{outcome="dead_lettered"} 1' in rendered_metrics
     assert "outbox_events_dead_letter 1" in rendered_metrics
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_dead_letters_permanent_handler_error_without_retry(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = EventRegistry()
+
+    def permanent_failure(event: EventEnvelope) -> None:
+        raise EventHandlerPermanentError("recipient is not valid")
+
+    registry.register("business.created", 1, permanent_failure)
+    await _add_event(session_factory, registry, max_attempts=3)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+            retry_delay_seconds=0,
+        ).dispatch_once()
+
+    event = await _first_event(session_factory)
+    assert stats.failed == 1
+    assert stats.dead_lettered == 1
+    assert event.status == "dead_letter"
+    assert event.attempt_count == 1
+    assert event.next_retry_at is None
+    assert event.dead_letter_reason is not None
+    assert "permanent" in event.dead_letter_reason
+    assert "recipient is not valid" in event.dead_letter_reason
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_dead_letters_schema_mismatch_before_calling_handler(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    called: list[str] = []
+    registry = EventRegistry()
+    registry.register_schema(
+        EventSchemaSpec(
+            event_type="business.created",
+            event_version=1,
+            required_payload_fields=["record_id"],
+            field_types={"record_id": "str"},
+        )
+    )
+    registry.register("business.created", 1, lambda event: called.append(event.event_id))
+    await _add_raw_event(session_factory, max_attempts=3)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+            retry_delay_seconds=0,
+        ).dispatch_once()
+
+    event = await _first_event(session_factory)
+    assert stats.failed == 1
+    assert stats.dead_lettered == 1
+    assert called == []
+    assert event.status == "dead_letter"
+    assert event.attempt_count == 1
+    assert event.dead_letter_reason is not None
+    assert "EventPayloadValidationError" in event.dead_letter_reason
+    assert "record_id" in event.dead_letter_reason
 
 
 @pytest.mark.asyncio
@@ -461,6 +530,28 @@ async def _add_event(
             payload=_payload(),
             max_attempts=max_attempts,
         )
+        await uow.session.flush()
+        return event.id
+
+
+async def _add_raw_event(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    max_attempts: int = 3,
+) -> str:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        event = OutboxEvent(
+            event_type="business.created",
+            event_version=1,
+            aggregate_type="business_record",
+            aggregate_id="record-1",
+            tenant_id="tenant-a",
+            payload=_payload(),
+            max_attempts=max_attempts,
+            status="pending",
+        )
+        uow.session.add(event)
         await uow.session.flush()
         return event.id
 

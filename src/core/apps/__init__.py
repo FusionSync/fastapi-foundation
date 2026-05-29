@@ -7,6 +7,7 @@ from core.apps.dependencies import AppDependencyValidation, validate_app_depende
 from core.apps.module import (
     AppModule,
     EventHandlerSpec,
+    EventSchemaSpec,
     LifecycleHookSpec,
     MigrationSpec,
     ScheduleSpec,
@@ -24,6 +25,7 @@ __all__ = [
     "BASE_RUNTIME_CAPABILITIES",
     "DEFAULT_RUNTIME_CAPABILITIES",
     "EventHandlerSpec",
+    "EventSchemaSpec",
     "LifecycleHookSpec",
     "MigrationSpec",
     "ScheduleSpec",

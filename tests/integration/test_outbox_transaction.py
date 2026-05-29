@@ -7,6 +7,7 @@ from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
+from core.apps import EventSchemaSpec
 from core.base.models import BaseModel, TenantScopedModel
 from core.db import unit_of_work
 from core.events import EventRegistry
@@ -113,6 +114,41 @@ async def test_outbox_rejects_unregistered_event_type(
                 aggregate_id="record-1",
                 tenant_id="tenant-a",
                 payload=_payload(),
+            )
+
+
+@pytest.mark.asyncio
+async def test_outbox_validates_registered_event_payload_schema(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = _registry()
+    registry.register_schema(
+        EventSchemaSpec(
+            event_type="business.updated",
+            event_version=1,
+            required_payload_fields=["record_id"],
+            field_types={"record_id": "str", "sequence": "int"},
+        )
+    )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        repository = OutboxRepository(uow.session, registry=registry)
+        with pytest.raises(AppError, match="record_id"):
+            await repository.add(
+                event_type="business.updated",
+                aggregate_type="business_record",
+                aggregate_id="record-1",
+                tenant_id="tenant-a",
+                payload=_payload(),
+            )
+        with pytest.raises(AppError, match="sequence.*int"):
+            await repository.add(
+                event_type="business.updated",
+                aggregate_type="business_record",
+                aggregate_id="record-1",
+                tenant_id="tenant-a",
+                payload=_payload(record_id="record-1", sequence="wrong"),
             )
 
 

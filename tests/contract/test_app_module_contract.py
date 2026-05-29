@@ -7,6 +7,7 @@ from core.apps import (
     AppModule,
     AppRegistry,
     EventHandlerSpec,
+    EventSchemaSpec,
     LifecycleHookSpec,
     ScheduleSpec,
     TaskHandlerSpec,
@@ -84,6 +85,34 @@ def test_invalid_event_task_and_schedule_specs_are_rejected() -> None:
                         event_type="demo.changed",
                         event_version=0,
                         handler_path="apps.demo.events.handle",
+                    )
+                ],
+            )
+        )
+    with pytest.raises(TypeError, match="event_schema required_payload_fields"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                event_schemas=[
+                    EventSchemaSpec(
+                        event_type="demo.changed",
+                        event_version=1,
+                        required_payload_fields=["resource_id", 1],  # type: ignore[list-item]
+                    )
+                ],
+            )
+        )
+    with pytest.raises(ValueError, match="unsupported field type"):
+        validate_app_module(
+            AppModule(
+                label="demo",
+                version="0.1.0",
+                event_schemas=[
+                    EventSchemaSpec(
+                        event_type="demo.changed",
+                        event_version=1,
+                        field_types={"resource_id": "uuid"},
                     )
                 ],
             )
