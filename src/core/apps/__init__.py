@@ -1,3 +1,4 @@
+from core.apps.bootstrap import AppBootstrapError, AppBootstrapResult, bootstrap_app
 from core.apps.capabilities import (
     BASE_RUNTIME_CAPABILITIES,
     DEFAULT_RUNTIME_CAPABILITIES,
@@ -22,6 +23,8 @@ __all__ = [
     "AppModuleDiagnostic",
     "AppRegistry",
     "AppRegistryDiagnostics",
+    "AppBootstrapError",
+    "AppBootstrapResult",
     "BASE_RUNTIME_CAPABILITIES",
     "DEFAULT_RUNTIME_CAPABILITIES",
     "EventHandlerSpec",
@@ -30,6 +33,7 @@ __all__ = [
     "MigrationSpec",
     "ScheduleSpec",
     "TaskHandlerSpec",
+    "bootstrap_app",
     "resolve_runtime_capabilities",
     "validate_app_module",
     "validate_app_dependencies",

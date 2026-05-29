@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、config template/drift-check/artifacts、release checkpoint、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、migration phase 参数和 execution records、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run/profile 参数、scheduler run-once/run/profile 参数、worker run-once/run、worker task queue provider/profile 参数、tasks、idempotency expire/diagnose、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
+- Done: `bootstrap-app`、`check-app`、`list-apps`、config template/drift-check/artifacts、release checkpoint、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、migration phase 参数和 execution records、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run/profile 参数、scheduler run-once/run/profile 参数、worker run-once/run、worker task queue provider/profile 参数、tasks、idempotency expire/diagnose、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
 - Next:
   - [ ] 将 checkpoint suite 扩展到真实队列/Redis/外部依赖 profile 的探活。
 
@@ -30,6 +30,7 @@ src/core/cli/
 check-config
 config template
 config drift-check
+bootstrap-app
 list-apps
 init-db
 migrate
@@ -61,6 +62,7 @@ migrate run
 `config template --profile <profile>` 输出 profile 环境变量、五类进程启动命令和发布验证命令，是后续 Docker Compose/Helm/systemd 模板的单一来源。
 `config drift-check --profile <profile>` 对比实际环境变量与 profile 模板，缺失或不匹配时返回非零 exit code 和脱敏漂移报告；发布脚本可用重复 `--actual KEY=VALUE` 传入待验证配置，也可传 `--role <role>` 校验具体进程角色的 `OBSERVABILITY__SERVICE_ROLE`。
 `config artifacts --profile <profile> --target <docker-compose|systemd|helm-values>` 从 profile 模板生成部署产物内容；重复传入 `--actual KEY=VALUE` 时会附带执行配置 drift-check，并用非零 exit code 阻断漂移产物；配合 `--role` 可校验单个进程角色环境。
+`bootstrap-app <app_name> --target-root src` 生成后端业务 app 骨架，默认写入 `src/apps/<app_name>`，包含 `module.py`、模型、schema、router、service、权限、迁移 manifest 和 contract test；目标目录已存在时返回非零 exit code，避免覆盖业务代码。
 `release checkpoint --profile <profile> --artifact-target <target>` 是发布脚本入口，会串联 profile template、部署产物、config check、backup readiness、按角色 config drift、migrate dry-run 和 smoke，并输出五个进程角色的参数矩阵。
 `migrate plan|preflight|dry-run|apply|run --phase <phase>` 可把迁移计划限制到 expand/backfill/contract/maintenance 单阶段；apply/dry-run 输出 `execution_records`，记录每条目标 migration 的 rollback strategy 和 forward-fix 要求。
 `outbox dispatch-once` 必须通过 `--installed-app` 或 settings 加载 AppModule 后构建 `EventRegistry`，领取 pending/failed outbox event，投递到已注册 handler，并输出 claimed/published/failed/dead_lettered JSON。

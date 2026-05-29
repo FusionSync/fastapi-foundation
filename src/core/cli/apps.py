@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 
 from core.apps import resolve_runtime_capabilities
+from core.apps.bootstrap import AppBootstrapError, bootstrap_app
 from core.apps.conformance import check_app, check_apps
 from core.apps.registry import AppRegistry
 from core.cli.common import (
+    CLI_RUNTIME_ERROR,
     CLI_USAGE_ERROR,
     error_payload,
     exception_error_payload,
@@ -16,6 +18,13 @@ from core.config import get_settings
 
 
 def register_app_commands(subparsers: argparse._SubParsersAction) -> None:
+    bootstrap_app_parser = subparsers.add_parser("bootstrap-app")
+    bootstrap_app_parser.add_argument("label")
+    bootstrap_app_parser.add_argument("--target-root", default="src")
+    bootstrap_app_parser.add_argument("--package", default="apps")
+    bootstrap_app_parser.add_argument("--json", action="store_true", dest="as_json")
+    bootstrap_app_parser.set_defaults(handler=_handle_bootstrap_app)
+
     check_app_parser = subparsers.add_parser("check-app")
     check_app_parser.add_argument("module_path", nargs="?")
     check_app_parser.add_argument("--all", action="store_true")
@@ -27,6 +36,29 @@ def register_app_commands(subparsers: argparse._SubParsersAction) -> None:
     list_apps_parser.add_argument("--installed-app", action="append", default=[])
     list_apps_parser.add_argument("--json", action="store_true", dest="as_json")
     list_apps_parser.set_defaults(handler=_handle_list_apps)
+
+
+def _handle_bootstrap_app(args: argparse.Namespace) -> int:
+    try:
+        result = bootstrap_app(
+            args.label,
+            target_root=args.target_root,
+            package=args.package,
+        )
+    except AppBootstrapError as exc:
+        print_payload(
+            error_payload(
+                code=CLI_RUNTIME_ERROR,
+                message=str(exc),
+                command="bootstrap-app",
+                exit_code=1,
+            ),
+            as_json=args.as_json,
+        )
+        return 1
+
+    print_payload(result.to_dict(), as_json=args.as_json)
+    return 0
 
 
 def _handle_check_app(args: argparse.Namespace) -> int:

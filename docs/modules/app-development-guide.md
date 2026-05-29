@@ -2,23 +2,63 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: 标准 app 目录、module 注册、分层边界、事务约束和测试要求已写入开发规范。
-- Next:
-  - [ ] 提供一个可复制的业务 app bootstrap 模板，默认通过 app conformance。
-  - [ ] 给业务 app 作者补充按大功能 checkpoint 推进的提交流程。
+- Status: `connected`
+- Done: 标准 app 目录、module 注册、分层边界、事务约束、测试要求、可复制后端业务 app bootstrap 模板和按大功能 checkpoint 推进流程已接入。
+- Next: _none_
 
 ## 新增业务 app 流程
 
-1. 在 `src/apps/{app_name}` 创建目录。
-2. 定义 `models.py`，需要租户隔离的模型继承 `TenantScopedModel`。
-3. 定义 `schemas.py`，区分 create、update、read/list schema。
-4. 定义 `services.py`，所有业务逻辑放在 service 层。
-5. 定义 `router.py`，只处理依赖、入参和响应封装。
-6. 在 `permissions.py` 声明权限点。
-7. 在 `module.py` 组装 `AppModule`。
-8. 把 module path 加入 `INSTALLED_APPS`。
-9. 生成迁移并补充测试。
+1. 运行 `core bootstrap-app {app_name} --target-root src` 生成后端业务 app 骨架。
+2. 运行 `core check-app apps.{app_name}.module --json`，确认初始骨架通过 conformance。
+3. 定义 `models.py`，需要租户隔离的模型继承 `TenantScopedModel`。
+4. 定义 `schemas.py`，区分 create、update、read/list schema。
+5. 定义 `services.py`，所有业务逻辑放在 service 层。
+6. 定义 `router.py`，只处理依赖、入参和响应封装。
+7. 在 `permissions.py` 声明权限点。
+8. 在 `module.py` 组装 `AppModule`。
+9. 把 module path 加入 `INSTALLED_APPS`。
+10. 生成迁移并补充测试。
+
+## Bootstrap 模板
+
+`core bootstrap-app` 生成的是后端业务 app 模板，不是前端模板。默认输出到 `src/apps/{app_name}`，并生成：
+
+```text
+src/apps/{app_name}/
+  __init__.py
+  module.py
+  schemas.py
+  models.py
+  router.py
+  services.py
+  permissions.py
+  public_api.py
+  events.py
+  tasks.py
+  migrations/
+    __init__.py
+    manifest.py
+  tests/
+    test_{app_name}_contract.py
+```
+
+模板默认使用 SQLAlchemy 2.x async 项目的模型基类、core response envelope、`create_router`、`AppModule` 和 `MigrationSpec`，生成后应能直接通过：
+
+```bash
+core check-app apps.{app_name}.module --json
+```
+
+如果目标目录已存在，`bootstrap-app` 会失败，不会覆盖已有业务代码。
+
+## Checkpoint 推进
+
+业务 app 按大功能 checkpoint 推进，不按零散文件反复修改：
+
+1. 在模块文档或任务说明中写清本 checkpoint 的用户流程、数据模型、权限、事件、任务和验收命令。
+2. 先补最小 contract/integration test，确认缺口可复现。
+3. 一次性连通 router、service、repository/model、权限、事件/outbox、任务或调度等必要链路。
+4. 完成该大功能后更新模块 Progress 的 Done/Next。
+5. 集中运行该 checkpoint 的测试、`check-app` 和相关 CLI smoke，再提交。
 
 ## 标准目录
 
