@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection、policy cache invalidation、reconciliation CLI 和 RoleGrant 事实源收敛已落地。
+- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection、resource instance authorization adapter、policy cache invalidation、reconciliation CLI 和 RoleGrant 事实源收敛已落地。
 - Next:
-  - [ ] 接资源实例级授权 adapter。
   - [ ] 接 Casbin/等价策略后端和分布式 policy cache。
 
 ## 职责
@@ -78,6 +77,7 @@ platform
 ```
 
 禁止只校验 `resource/action`，不校验资源实例归属。
+当前文件链路通过 `AuthorizationServiceFileResourceAdapter` 落地该约束：先确认 `FileObject` 所属 tenant/owner 与请求上下文匹配，再按 owner resource 和 owner id 调用 `AuthorizationService.require()`。
 
 ## 角色模型
 

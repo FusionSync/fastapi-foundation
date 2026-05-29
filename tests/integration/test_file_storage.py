@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -37,17 +38,34 @@ def _grant_file_permissions(
     actions: tuple[str, ...] = ("upload", "download", "delete"),
 ) -> None:
     for action in actions:
-        session.add(
-            ProjectedPolicy(
-                tenant_id=tenant_id,
-                subject=f"user:{user_id}",
-                resource="file",
-                action=action,
-                effect="allow",
-                role_grant_id=f"grant-{user_id}-{action}",
-                policy_version=1,
-            )
+        _grant_permission(
+            session,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            resource="file",
+            action=action,
         )
+
+
+def _grant_permission(
+    session: AsyncSession,
+    *,
+    user_id: str = "user-1",
+    tenant_id: str = "tenant-a",
+    resource: str,
+    action: str,
+) -> None:
+    session.add(
+        ProjectedPolicy(
+            tenant_id=tenant_id,
+            subject=f"user:{user_id}",
+            resource=resource,
+            action=action,
+            effect="allow",
+            role_grant_id=f"grant-{user_id}-{resource}-{action}-{uuid4()}",
+            policy_version=1,
+        )
+    )
 
 
 class RejectingVirusScanner:
@@ -507,6 +525,139 @@ async def test_retention_cleanup_purges_deleted_objects_after_lifecycle_gate(
         purged = await session.get(FileObject, file_object.id)
         assert purged is not None
         assert purged.status == "purged"
+
+
+@pytest.mark.asyncio
+async def test_resource_authorization_adapter_gates_file_owner_scope_operations(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    from platform_apps.files import AuthorizationServiceFileResourceAdapter
+
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    resource_authorization = AuthorizationServiceFileResourceAdapter()
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
+        with pytest.raises(AppError) as upload_denied:
+            await FileService(
+                uow.session,
+                storage,
+                resource_authorization=resource_authorization,
+            ).upload_bytes(
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                file_name="proposal.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=b"docx-bytes",
+                file_type="upload",
+                user_id="user-1",
+                authorization=AuthorizationService(uow.session),
+            )
+
+    assert upload_denied.value.code == "PERMISSION_DENIED"
+    assert upload_denied.value.details["resource"] == "bid"
+    assert upload_denied.value.details["action"] == "write"
+    assert list(tmp_path.rglob("*")) == []
+    async with session_factory() as session:
+        assert await session.scalar(select(FileObject)) is None
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
+        _grant_permission(uow.session, resource="bid", action="write")
+        file_object = await FileService(
+            uow.session,
+            storage,
+            resource_authorization=resource_authorization,
+        ).upload_bytes(
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            file_name="proposal.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            data=b"docx-bytes",
+            file_type="upload",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, user_id="user-2", actions=("download",))
+        with pytest.raises(AppError) as download_denied:
+            await FileService(
+                uow.session,
+                storage,
+                resource_authorization=resource_authorization,
+            ).download_bytes(
+                file_id=file_object.id,
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                user_id="user-2",
+                authorization=AuthorizationService(uow.session),
+            )
+
+    assert download_denied.value.code == "PERMISSION_DENIED"
+    assert download_denied.value.details["resource"] == "bid"
+    assert download_denied.value.details["action"] == "read"
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, user_id="user-2", actions=("download", "delete"))
+        _grant_permission(uow.session, user_id="user-2", resource="bid", action="read")
+        download = await FileService(
+            uow.session,
+            storage,
+            resource_authorization=resource_authorization,
+        ).download_bytes(
+            file_id=file_object.id,
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            user_id="user-2",
+            authorization=AuthorizationService(uow.session),
+        )
+        with pytest.raises(AppError) as delete_denied:
+            await FileService(
+                uow.session,
+                storage,
+                resource_authorization=resource_authorization,
+            ).delete_file(
+                file_id=file_object.id,
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                user_id="user-2",
+                authorization=AuthorizationService(uow.session),
+            )
+
+    assert download.data == b"docx-bytes"
+    assert delete_denied.value.code == "PERMISSION_DENIED"
+    assert delete_denied.value.details["resource"] == "bid"
+    assert delete_denied.value.details["action"] == "write"
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, user_id="user-2", actions=("delete",))
+        _grant_permission(uow.session, user_id="user-2", resource="bid", action="write")
+        await FileService(
+            uow.session,
+            storage,
+            resource_authorization=resource_authorization,
+        ).delete_file(
+            file_id=file_object.id,
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            user_id="user-2",
+            authorization=AuthorizationService(uow.session),
+        )
+
+    assert await storage.exists(file_object.object_key) is False
 
 
 @pytest.mark.asyncio

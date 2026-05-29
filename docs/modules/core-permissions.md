@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、route authorization dependency、route permission conformance、projection cache invalidation、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
+- Done: permission registry、authorization decision、platform/tenant scope 校验、route authorization dependency、route permission conformance、projection cache invalidation、resource owner adapter、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
 - Next:
-  - [ ] 补资源 owner adapter 和跨租户平台权限统一 gate。
+  - [ ] 补跨租户平台权限统一 gate。
 
 ## 职责
 
@@ -94,6 +94,7 @@ async def mutate_workspace(
 - `DatabaseRequestSecurityPipeline(audit_factory=...)` 会把 route permission 拒绝审计持久化，用于 HTTP 入口的权限拒绝追踪。
 - 第一版 subject 固定为 `user:{user_id}`，tenant domain 固定为 `tenant_id`。
 - 业务 app 不直接查询 `ProjectedPolicy`；文件、任务、业务资源等入口应接入 `AuthorizationService`。
+- `platform_apps.files.AuthorizationServiceFileResourceAdapter` 复用 `AuthorizationService`，把文件 `upload/download/delete` 映射到 owner resource 的 `write/read/write` 实例权限，并保留 tenant/owner 归属校验。
 
 ## 权限点注册
 

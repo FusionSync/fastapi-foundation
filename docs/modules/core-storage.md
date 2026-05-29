@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: storage provider、local backend、S3/MinIO-compatible backend、key path 规则和 platform files permission/quota/virus scan/retention cleanup 接入点已落地。
-- Next:
-  - [ ] 将业务资源级 permission adapter 串进文件访问链路。
+- Done: storage provider、local backend、S3/MinIO-compatible backend、key path 规则和 platform files permission/resource-permission/quota/virus scan/retention cleanup 接入点已落地。
+- Next: _none_
 
 ## 职责
 
@@ -85,7 +84,7 @@ cloud:
 - S3 provider 复用同样 object key 校验，并通过 client 生成私有对象的临时下载 URL。
 - `file_object_key()` 固定上传原始文件 key：`tenants/{tenant_id}/files/{file_id}/original.bin`。
 - `resource_object_key()` 固定资源关联文件 key：`tenants/{tenant_id}/resources/{resource_type}/{resource_id}/{file_id}.bin`。
-- platform files 上传链路已在写 storage 前接入 permission、upload security、virus scan 和 quota gate。
+- platform files 上传链路已在写 storage 前接入 file permission、业务资源级 permission adapter、upload security、virus scan 和 quota gate。
 - platform files 删除链路支持 retention window；对象清理由 tenant lifecycle `background_cleanup` gate 保护，过期后再 purge storage object。
 
-后续扩展 provider 或业务资源级文件权限时，必须沿用相同 object key 约定，业务 app 只能通过 provider 和 FileObject metadata 访问文件。
+后续扩展 provider 时，必须沿用相同 object key 约定，业务 app 只能通过 provider 和 FileObject metadata 访问文件。

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, Protocol
@@ -36,6 +36,7 @@ class FileDownload:
 
 
 FileScanStatus = Literal["clean", "infected"]
+FileResourceAction = Literal["upload", "download", "delete"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +72,102 @@ class AllowAllFileVirusScanner:
         return FileScanResult(status="clean", provider="allow-all")
 
 
+class FileResourceAuthorizationAdapter(Protocol):
+    async def require_resource_access(
+        self,
+        *,
+        file_object: FileObject | None,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        action: FileResourceAction,
+        user_id: str | None,
+        authorization: AuthorizationService | None,
+        request_id: str | None,
+    ) -> None:
+        raise NotImplementedError
+
+
+class OwnerOnlyFileResourceAuthorizationAdapter:
+    async def require_resource_access(
+        self,
+        *,
+        file_object: FileObject | None,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        action: FileResourceAction,
+        user_id: str | None,
+        authorization: AuthorizationService | None,
+        request_id: str | None,
+    ) -> None:
+        if file_object is None:
+            return
+        _assert_file_access(
+            file_object,
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+        )
+
+
+class AuthorizationServiceFileResourceAdapter:
+    def __init__(self, action_map: Mapping[FileResourceAction, str] | None = None) -> None:
+        self.action_map = dict(
+            action_map
+            or {
+                "upload": "write",
+                "download": "read",
+                "delete": "write",
+            }
+        )
+
+    async def require_resource_access(
+        self,
+        *,
+        file_object: FileObject | None,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        action: FileResourceAction,
+        user_id: str | None,
+        authorization: AuthorizationService | None,
+        request_id: str | None,
+    ) -> None:
+        if file_object is not None:
+            _assert_file_access(
+                file_object,
+                tenant_id=tenant_id,
+                owner_type=owner_type,
+                owner_id=owner_id,
+            )
+            owner_type = file_object.owner_type
+            owner_id = file_object.owner_id
+        if authorization is None:
+            raise AppError(
+                "PERMISSION_DENIED",
+                "File resource authorization requires AuthorizationService",
+                status_code=403,
+                details={"action": action, "resource": owner_type},
+            )
+        if user_id is None or not user_id.strip():
+            raise AppError(
+                "VALIDATION_ERROR",
+                "user_id is required for file resource authorization",
+                status_code=400,
+                details={"action": action, "resource": owner_type},
+            )
+        resource_action = self.action_map[action]
+        await authorization.require(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            resource=owner_type,
+            action=resource_action,
+            resource_id=owner_id,
+            request_id=request_id,
+        )
+
+
 class FileService:
     def __init__(
         self,
@@ -82,6 +179,7 @@ class FileService:
         upload_quota_rules: Sequence[QuotaRule] = (),
         virus_scanner: FileVirusScanner | None = None,
         delete_retention_seconds: int = 0,
+        resource_authorization: FileResourceAuthorizationAdapter | None = None,
     ) -> None:
         if delete_retention_seconds < 0:
             raise AppError(
@@ -96,6 +194,9 @@ class FileService:
         self.upload_quota_rules = tuple(upload_quota_rules)
         self.virus_scanner = virus_scanner or AllowAllFileVirusScanner()
         self.delete_retention_seconds = delete_retention_seconds
+        self.resource_authorization = (
+            resource_authorization or OwnerOnlyFileResourceAuthorizationAdapter()
+        )
 
     async def upload_bytes(
         self,
@@ -118,6 +219,16 @@ class FileService:
             user_id=user_id,
             authorization=authorization,
             resource_id=owner_id,
+            request_id=request_id,
+        )
+        await self._require_file_resource_access(
+            file_object=None,
+            action="upload",
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            user_id=user_id,
+            authorization=authorization,
             request_id=request_id,
         )
         validation = self._validate_upload(
@@ -182,11 +293,15 @@ class FileService:
             operation="file_download",
         )
         file_object = await self._load_available_file(file_id)
-        self._assert_file_access(
-            file_object,
+        await self._require_file_resource_access(
+            file_object=file_object,
+            action="download",
             tenant_id=tenant_id,
             owner_type=owner_type,
             owner_id=owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
         )
         await self._require_file_permission(
             action="download",
@@ -219,11 +334,15 @@ class FileService:
         now: datetime | None = None,
     ) -> None:
         file_object = await self._load_available_file(file_id)
-        self._assert_file_access(
-            file_object,
+        await self._require_file_resource_access(
+            file_object=file_object,
+            action="delete",
             tenant_id=tenant_id,
             owner_type=owner_type,
             owner_id=owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
         )
         await self._require_file_permission(
             action="delete",
@@ -274,26 +393,28 @@ class FileService:
             raise AppError("NOT_FOUND", f"FileObject {file_id!r} not found", status_code=404)
         return file_object
 
-    def _assert_file_access(
+    async def _require_file_resource_access(
         self,
-        file_object: FileObject,
         *,
+        file_object: FileObject | None,
+        action: FileResourceAction,
         tenant_id: str,
         owner_type: str,
         owner_id: str,
+        user_id: str | None,
+        authorization: AuthorizationService | None,
+        request_id: str | None,
     ) -> None:
-        if file_object.tenant_id != tenant_id:
-            raise AppError(
-                "TENANT_CONTEXT_CONFLICT",
-                "file tenant does not match current tenant",
-                status_code=403,
-            )
-        if file_object.owner_type != owner_type or file_object.owner_id != owner_id:
-            raise AppError(
-                "PERMISSION_DENIED",
-                "file owner scope is not allowed",
-                status_code=403,
-            )
+        await self.resource_authorization.require_resource_access(
+            file_object=file_object,
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            action=action,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
 
     async def _require_file_permission(
         self,
@@ -435,6 +556,27 @@ class FileService:
 
 def _scan_status(result: FileScanResult | Any) -> str:
     return str(getattr(result, "status", "")).lower()
+
+
+def _assert_file_access(
+    file_object: FileObject,
+    *,
+    tenant_id: str,
+    owner_type: str,
+    owner_id: str,
+) -> None:
+    if file_object.tenant_id != tenant_id:
+        raise AppError(
+            "TENANT_CONTEXT_CONFLICT",
+            "file tenant does not match current tenant",
+            status_code=403,
+        )
+    if file_object.owner_type != owner_type or file_object.owner_id != owner_id:
+        raise AppError(
+            "PERMISSION_DENIED",
+            "file owner scope is not allowed",
+            status_code=403,
+        )
 
 
 def _coerce_utc(value: datetime) -> datetime:
