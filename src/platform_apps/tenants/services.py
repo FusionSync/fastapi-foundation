@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from secrets import token_urlsafe
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
@@ -25,6 +25,7 @@ from core.tenancy import (
     TenantMember,
     publish_tenant_membership_event,
 )
+from platform_apps.tenants.schemas import TenantListQuery, TenantMemberListQuery
 
 TENANT_INVITATION_ISSUED_EVENT = "tenant.invitation_issued"
 TENANT_INVITATION_ACCEPTED_EVENT = "tenant.invitation_accepted"
@@ -35,6 +36,181 @@ TENANT_INVITATION_REVOKED_EVENT = "tenant.invitation_revoked"
 class TenantInvitationIssue:
     invitation: TenantInvitation
     token: str
+
+
+class TenantQueryService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def list_tenants(self, query: TenantListQuery) -> tuple[list[Tenant], int]:
+        filters = []
+        if query.status is not None:
+            filters.append(Tenant.status == query.status)
+        if query.keyword is not None:
+            keyword = f"%{query.keyword.strip().lower()}%"
+            filters.append(
+                or_(
+                    func.lower(Tenant.name).like(keyword),
+                    func.lower(Tenant.code).like(keyword),
+                )
+            )
+        total = await self.session.scalar(
+            select(func.count()).select_from(Tenant).where(*filters)
+        )
+        statement = (
+            select(Tenant)
+            .where(*filters)
+            .order_by(*_tenant_sort_columns(query))
+            .offset(query.offset)
+            .limit(query.limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all()), int(total or 0)
+
+
+class TenantMembershipService:
+    def __init__(self, session: AsyncSession, events: EventPublisher) -> None:
+        self.session = session
+        self.events = events
+
+    async def list_members(
+        self,
+        *,
+        tenant_id: str,
+        query: TenantMemberListQuery,
+        actor_id: str,
+        authorization_decision: AuthorizationDecision | None = None,
+    ) -> tuple[list[TenantMember], int]:
+        _assert_member_authorized(
+            authorization_decision=authorization_decision,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            actions={"read", "manage"},
+            operation="Tenant member read",
+        )
+        filters = [TenantMember.tenant_id == tenant_id]
+        if query.status is not None:
+            filters.append(TenantMember.status == query.status.strip())
+        if query.user_id is not None:
+            filters.append(TenantMember.user_id == query.user_id.strip())
+        if query.keyword is not None:
+            keyword = f"%{query.keyword.strip().lower()}%"
+            filters.append(func.lower(TenantMember.user_id).like(keyword))
+        total = await self.session.scalar(
+            select(func.count()).select_from(TenantMember).where(*filters)
+        )
+        statement = (
+            select(TenantMember)
+            .where(*filters)
+            .order_by(*_member_sort_columns(query))
+            .offset(query.offset)
+            .limit(query.limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all()), int(total or 0)
+
+    async def create_member(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        status: str,
+        actor_id: str,
+        request_id: str,
+        authorization_decision: AuthorizationDecision | None = None,
+    ) -> TenantMember:
+        _assert_member_authorized(
+            authorization_decision=authorization_decision,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            actions={"manage"},
+            operation="Tenant member mutation",
+        )
+        await self._assert_active_tenant(tenant_id)
+        resolved_status = _clean_member_status(status)
+        result = await self.session.execute(
+            select(TenantMember)
+            .where(TenantMember.tenant_id == tenant_id)
+            .where(TenantMember.user_id == user_id)
+        )
+        member = result.scalars().first()
+        previous_status: str | None
+        if member is None:
+            previous_status = None
+            member = TenantMember(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                status=resolved_status,
+            )
+            self.session.add(member)
+        else:
+            previous_status = member.status
+            member.status = resolved_status
+        await self.session.flush()
+        if member.status == "active" and previous_status != "active":
+            await publish_tenant_membership_event(
+                self.events,
+                TENANT_MEMBER_ACTIVATED_EVENT,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                member_id=member.id,
+                status=member.status,
+                actor_id=actor_id,
+                request_id=request_id,
+                extra={
+                    "change_type": "created" if previous_status is None else "activated",
+                },
+            )
+        return member
+
+    async def update_member_status(
+        self,
+        *,
+        tenant_id: str,
+        member_id: str,
+        status: str,
+        actor_id: str,
+        request_id: str,
+        authorization_decision: AuthorizationDecision | None = None,
+    ) -> TenantMember:
+        _assert_member_authorized(
+            authorization_decision=authorization_decision,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            actions={"manage"},
+            operation="Tenant member mutation",
+        )
+        member = await self.session.get(TenantMember, member_id)
+        if member is None or member.tenant_id != tenant_id:
+            raise AppError("NOT_FOUND", "Tenant member not found", status_code=404)
+        previous_status = member.status
+        member.status = _clean_member_status(status)
+        await self.session.flush()
+        if member.status == "active" and previous_status != "active":
+            await publish_tenant_membership_event(
+                self.events,
+                TENANT_MEMBER_ACTIVATED_EVENT,
+                tenant_id=tenant_id,
+                user_id=member.user_id,
+                member_id=member.id,
+                status=member.status,
+                actor_id=actor_id,
+                request_id=request_id,
+                extra={"change_type": "activated"},
+            )
+        return member
+
+    async def _assert_active_tenant(self, tenant_id: str) -> None:
+        tenant = await self.session.get(Tenant, tenant_id)
+        if tenant is None:
+            raise AppError("NOT_FOUND", f"Tenant {tenant_id!r} not found", status_code=404)
+        if tenant.status != "active":
+            raise AppError(
+                "TENANT_STATE_FORBIDDEN",
+                "Tenant must be active to manage members",
+                status_code=403,
+                details={"tenant_id": tenant_id, "status": tenant.status},
+            )
 
 
 class TenantInvitationService:
@@ -259,6 +435,17 @@ class TenantInvitationService:
         await self.session.flush()
         return invitation
 
+    async def get_invitation(
+        self,
+        *,
+        tenant_id: str,
+        invitation_id: str,
+    ) -> TenantInvitation:
+        invitation = await self.session.get(TenantInvitation, invitation_id)
+        if invitation is None or invitation.tenant_id != tenant_id:
+            raise AppError("NOT_FOUND", "Tenant invitation not found", status_code=404)
+        return invitation
+
     async def _assert_tenant_accepts_invitations(self, tenant_id: str) -> None:
         tenant = await self.session.get(Tenant, tenant_id)
         if tenant is None:
@@ -409,6 +596,58 @@ def _assert_role_grant_authorized(
     )
 
 
+def _assert_member_authorized(
+    *,
+    authorization_decision: AuthorizationDecision | None,
+    tenant_id: str,
+    actor_id: str,
+    actions: set[str],
+    operation: str,
+) -> None:
+    assert_authorization_decision(
+        authorization_decision,
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        resource="tenant_member",
+        actions=actions,
+        operation=operation,
+    )
+
+
+def _clean_member_status(status: str) -> str:
+    resolved = status.strip().lower()
+    if not resolved:
+        raise AppError("VALIDATION_ERROR", "Tenant member status is required", status_code=400)
+    return resolved
+
+
+def _tenant_sort_columns(query: TenantListQuery):
+    columns = {
+        "created_at": Tenant.created_at,
+        "code": Tenant.code,
+        "name": Tenant.name,
+        "status": Tenant.status,
+    }
+    return _sort_columns(query, columns)
+
+
+def _member_sort_columns(query: TenantMemberListQuery):
+    columns = {
+        "created_at": TenantMember.created_at,
+        "status": TenantMember.status,
+        "user_id": TenantMember.user_id,
+    }
+    return _sort_columns(query, columns)
+
+
+def _sort_columns(query: TenantListQuery | TenantMemberListQuery, columns: dict[str, object]):
+    resolved = []
+    for term in query.sort_terms():
+        column = columns[term.field]
+        resolved.append(column.desc() if term.direction == "desc" else column.asc())
+    return tuple(resolved)
+
+
 def _normalize_email(email: str) -> str:
     normalized = email.strip().lower()
     if not normalized or "@" not in normalized:
@@ -435,4 +674,6 @@ __all__ = [
     "TenantInvitationIssue",
     "TenantInvitationService",
     "TenantLifecycleService",
+    "TenantMembershipService",
+    "TenantQueryService",
 ]

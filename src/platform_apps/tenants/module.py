@@ -1,6 +1,13 @@
 from core.apps import AppModule, EventSchemaSpec, MigrationSpec
-from core.exceptions import ErrorCodeSpec
-from core.tenancy import TENANT_MEMBER_ACTIVATED_EVENT
+from core.tenancy import (
+    TENANT_ARCHIVED_EVENT,
+    TENANT_CREATED_EVENT,
+    TENANT_DELETED_EVENT,
+    TENANT_DELETING_EVENT,
+    TENANT_MEMBER_ACTIVATED_EVENT,
+    TENANT_REACTIVATED_EVENT,
+    TENANT_SUSPENDED_EVENT,
+)
 from platform_apps.tenants.permissions import PERMISSIONS
 from platform_apps.tenants.router import (
     invitation_accept_router,
@@ -30,17 +37,43 @@ module = AppModule(
     models=["platform_apps.tenants.models"],
     migrations=MigrationSpec(path="platform_apps.tenants.migrations"),
     permissions=PERMISSIONS,
-    error_codes=[
-        ErrorCodeSpec(
-            "PLATFORM_TENANTS_HTTP_NOT_READY",
-            501,
-            "Platform tenants HTTP endpoint is not connected yet",
-            owner_module="platform_tenants",
-            details_schema={},
-            deprecated=False,
-        )
-    ],
     event_schemas=[
+        EventSchemaSpec(
+            event_type=TENANT_CREATED_EVENT,
+            event_version=1,
+            required_payload_fields=["status", "owner_user_id"],
+            field_types={"status": "str", "owner_user_id": "str"},
+        ),
+        EventSchemaSpec(
+            event_type=TENANT_SUSPENDED_EVENT,
+            event_version=1,
+            required_payload_fields=["status", "reason"],
+            field_types={"status": "str", "reason": "str"},
+        ),
+        EventSchemaSpec(
+            event_type=TENANT_REACTIVATED_EVENT,
+            event_version=1,
+            required_payload_fields=["status", "reason"],
+            field_types={"status": "str", "reason": "str"},
+        ),
+        EventSchemaSpec(
+            event_type=TENANT_DELETING_EVENT,
+            event_version=1,
+            required_payload_fields=["status", "reason"],
+            field_types={"status": "str", "reason": "str"},
+        ),
+        EventSchemaSpec(
+            event_type=TENANT_ARCHIVED_EVENT,
+            event_version=1,
+            required_payload_fields=["status", "reason"],
+            field_types={"status": "str", "reason": "str"},
+        ),
+        EventSchemaSpec(
+            event_type=TENANT_DELETED_EVENT,
+            event_version=1,
+            required_payload_fields=["status", "reason"],
+            field_types={"status": "str", "reason": "str"},
+        ),
         EventSchemaSpec(
             event_type=TENANT_INVITATION_ISSUED_EVENT,
             event_version=1,

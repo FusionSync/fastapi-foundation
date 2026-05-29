@@ -7,6 +7,8 @@ from platform_apps.tenants.services import (
     TenantInvitationIssue,
     TenantInvitationService,
     TenantLifecycleService,
+    TenantMembershipService,
+    TenantQueryService,
 )
 
 __all__ = [
@@ -18,6 +20,8 @@ __all__ = [
     "TenantInvitationIssue",
     "TenantInvitationService",
     "TenantLifecycleService",
+    "TenantMembershipService",
     "TenantMember",
+    "TenantQueryService",
     "module",
 ]
