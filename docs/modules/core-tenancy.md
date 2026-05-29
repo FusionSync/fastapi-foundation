@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: tenant model、member model、resolver、lifecycle service、membership 校验、租户上下文和 outbox-backed lifecycle events 已落地。
+- Done: tenant model、member model、resolver、lifecycle service、membership 校验、租户上下文、outbox-backed lifecycle events、route/task/file download/background cleanup lifecycle gate 已落地。
 - Next:
-  - [ ] 将 route、task、file download、background cleanup 统一接 lifecycle gate。
   - [ ] 增加 membership/cache invalidation 与权限投影的联动。
 
 ## 职责
@@ -88,4 +87,4 @@ tenant = get_current_tenant()
 - 文件下载必须校验文件所属租户。
 - 后台管理跨租户接口必须走 platform admin 权限。
 - 审计日志必须记录 tenant_id。
-- 租户生命周期状态必须在 route dependency、repository、task 和 file download gate 中统一执行。
+- 租户生命周期状态必须在 route dependency、repository、task、file download 和 background cleanup gate 中统一执行。

@@ -2,15 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AppError
 from core.quotas import QuotaRule, QuotaService, QuotaSubject
-from core.security import DEFAULT_UPLOAD_SECURITY_POLICY, UploadSecurityPolicy, validate_upload
+from core.security import (
+    DEFAULT_UPLOAD_SECURITY_POLICY,
+    UploadSecurityPolicy,
+    UploadValidationResult,
+    validate_upload,
+)
 from core.storage import StorageProvider, file_object_key
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 from platform_apps.files.models import FileObject
@@ -29,6 +35,42 @@ class FileDownload:
     data: bytes
 
 
+FileScanStatus = Literal["clean", "infected"]
+
+
+@dataclass(frozen=True, slots=True)
+class FileScanResult:
+    status: FileScanStatus
+    provider: str
+    signature: str | None = None
+
+
+class FileVirusScanner(Protocol):
+    async def scan_file(
+        self,
+        *,
+        tenant_id: str,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        checksum: str,
+    ) -> FileScanResult:
+        raise NotImplementedError
+
+
+class AllowAllFileVirusScanner:
+    async def scan_file(
+        self,
+        *,
+        tenant_id: str,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        checksum: str,
+    ) -> FileScanResult:
+        return FileScanResult(status="clean", provider="allow-all")
+
+
 class FileService:
     def __init__(
         self,
@@ -38,12 +80,22 @@ class FileService:
         upload_policy: UploadSecurityPolicy | None = None,
         quota_service: QuotaService | None = None,
         upload_quota_rules: Sequence[QuotaRule] = (),
+        virus_scanner: FileVirusScanner | None = None,
+        delete_retention_seconds: int = 0,
     ) -> None:
+        if delete_retention_seconds < 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "delete_retention_seconds must not be negative",
+                status_code=400,
+            )
         self.session = session
         self.storage = storage
         self.upload_policy = upload_policy or DEFAULT_UPLOAD_SECURITY_POLICY
         self.quota_service = quota_service
         self.upload_quota_rules = tuple(upload_quota_rules)
+        self.virus_scanner = virus_scanner or AllowAllFileVirusScanner()
+        self.delete_retention_seconds = delete_retention_seconds
 
     async def upload_bytes(
         self,
@@ -68,7 +120,7 @@ class FileService:
             resource_id=owner_id,
             request_id=request_id,
         )
-        self._validate_upload(
+        validation = self._validate_upload(
             tenant_id=tenant_id,
             owner_type=owner_type,
             owner_id=owner_id,
@@ -77,6 +129,11 @@ class FileService:
             data=data,
             file_type=file_type,
             expected_checksum=expected_checksum,
+        )
+        await self._scan_upload(
+            tenant_id=tenant_id,
+            validation=validation,
+            data=data,
         )
         reserved_quotas = await self._reserve_upload_quotas(tenant_id=tenant_id, data=data)
         try:
@@ -159,6 +216,7 @@ class FileService:
         user_id: str | None = None,
         authorization: AuthorizationService | None = None,
         request_id: str | None = None,
+        now: datetime | None = None,
     ) -> None:
         file_object = await self._load_available_file(file_id)
         self._assert_file_access(
@@ -176,9 +234,39 @@ class FileService:
             request_id=request_id,
         )
         file_object.status = "deleted"
-        file_object.deleted_at = datetime.now(UTC)
-        await self.storage.delete_file(file_object.object_key)
+        file_object.deleted_at = _coerce_utc(now or datetime.now(UTC))
+        if self.delete_retention_seconds == 0:
+            await self.storage.delete_file(file_object.object_key)
         await self.session.flush()
+
+    async def purge_deleted_files(
+        self,
+        *,
+        tenant_id: str,
+        tenant_status: TenantStatus = "active",
+        now: datetime | None = None,
+    ) -> int:
+        assert_tenant_operation_allowed(
+            tenant_id=tenant_id,
+            status=tenant_status,
+            operation="background_cleanup",
+        )
+        resolved_now = _coerce_utc(now or datetime.now(UTC))
+        retention_cutoff = resolved_now - timedelta(seconds=self.delete_retention_seconds)
+        result = await self.session.execute(
+            select(FileObject).where(
+                FileObject.tenant_id == tenant_id,
+                FileObject.status == "deleted",
+                FileObject.deleted_at.is_not(None),
+                FileObject.deleted_at <= retention_cutoff,
+            )
+        )
+        file_objects = list(result.scalars().all())
+        for file_object in file_objects:
+            await self.storage.delete_file(file_object.object_key)
+            file_object.status = "purged"
+        await self.session.flush()
+        return len(file_objects)
 
     async def _load_available_file(self, file_id: str) -> FileObject:
         file_object = await self.session.get(FileObject, file_id)
@@ -251,7 +339,7 @@ class FileService:
         data: bytes,
         file_type: str,
         expected_checksum: str | None,
-    ) -> None:
+    ) -> UploadValidationResult:
         fields = {
             "tenant_id": tenant_id,
             "owner_type": owner_type,
@@ -267,12 +355,40 @@ class FileService:
                 f"file upload missing required fields: {missing}",
                 status_code=400,
             )
-        validate_upload(
+        return validate_upload(
             file_name=file_name,
             content_type=content_type,
             data=data,
             expected_checksum=expected_checksum,
             policy=self.upload_policy,
+        )
+
+    async def _scan_upload(
+        self,
+        *,
+        tenant_id: str,
+        validation: UploadValidationResult,
+        data: bytes,
+    ) -> None:
+        result = await self.virus_scanner.scan_file(
+            tenant_id=tenant_id,
+            file_name=validation.file_name,
+            content_type=validation.content_type,
+            data=data,
+            checksum=validation.checksum,
+        )
+        if _scan_status(result) == "clean":
+            return
+        raise AppError(
+            "UPLOAD_REJECTED",
+            "Upload rejected by virus scan",
+            status_code=400,
+            details={
+                "reason": "virus_detected",
+                "provider": str(getattr(result, "provider", "unknown")),
+                "signature": getattr(result, "signature", None),
+                "file_name": validation.file_name,
+            },
         )
 
     async def _reserve_upload_quotas(
@@ -315,3 +431,13 @@ class FileService:
         subject = QuotaSubject(tenant_id=tenant_id)
         for rule, amount in reversed(reserved_quotas):
             await self.quota_service.release(rule, subject, amount=amount)
+
+
+def _scan_status(result: FileScanResult | Any) -> str:
+    return str(getattr(result, "status", "")).lower()
+
+
+def _coerce_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

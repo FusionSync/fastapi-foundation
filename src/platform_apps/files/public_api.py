@@ -1,3 +1,15 @@
-from platform_apps.files.services import FileDownload, FileService
+from platform_apps.files.services import (
+    AllowAllFileVirusScanner,
+    FileDownload,
+    FileScanResult,
+    FileService,
+    FileVirusScanner,
+)
 
-__all__ = ["FileDownload", "FileService"]
+__all__ = [
+    "AllowAllFileVirusScanner",
+    "FileDownload",
+    "FileScanResult",
+    "FileService",
+    "FileVirusScanner",
+]

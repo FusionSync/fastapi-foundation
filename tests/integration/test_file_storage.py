@@ -1,5 +1,7 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -48,6 +50,35 @@ def _grant_file_permissions(
         )
 
 
+class RejectingVirusScanner:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def scan_file(
+        self,
+        *,
+        tenant_id: str,
+        file_name: str,
+        content_type: str,
+        data: bytes,
+        checksum: str,
+    ) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "tenant_id": tenant_id,
+                "file_name": file_name,
+                "content_type": content_type,
+                "data": data,
+                "checksum": checksum,
+            }
+        )
+        return SimpleNamespace(
+            status="infected",
+            provider="clamav",
+            signature="EICAR-Test-File",
+        )
+
+
 @pytest.mark.asyncio
 async def test_upload_requires_file_permission_authorization(
     session_factory: async_sessionmaker[AsyncSession],
@@ -71,6 +102,46 @@ async def test_upload_requires_file_permission_authorization(
     assert denied.value.code == "PERMISSION_DENIED"
     assert denied.value.details == {"action": "upload", "resource": "file"}
     assert list(tmp_path.rglob("*")) == []
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_infected_file_before_storage_and_metadata(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    scanner = RejectingVirusScanner()
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload",))
+        with pytest.raises(AppError) as rejected:
+            await FileService(
+                uow.session,
+                storage,
+                virus_scanner=scanner,
+            ).upload_bytes(
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                file_name="proposal.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=b"docx-bytes",
+                file_type="upload",
+                user_id="user-1",
+                authorization=AuthorizationService(uow.session),
+            )
+
+    assert rejected.value.code == "UPLOAD_REJECTED"
+    assert rejected.value.details["reason"] == "virus_detected"
+    assert rejected.value.details["provider"] == "clamav"
+    assert rejected.value.details["signature"] == "EICAR-Test-File"
+    assert scanner.calls[0]["tenant_id"] == "tenant-a"
+    assert scanner.calls[0]["data"] == b"docx-bytes"
+    assert list(tmp_path.rglob("*")) == []
+    async with session_factory() as session:
+        persisted = await session.scalar(select(FileObject))
+        assert persisted is None
 
 
 @pytest.mark.asyncio
@@ -343,6 +414,99 @@ async def test_delete_marks_metadata_and_removes_storage_object(
             )
 
     assert download_deleted.value.code == "NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_retention_cleanup_purges_deleted_objects_after_lifecycle_gate(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    deleted_at = datetime(2026, 5, 29, 8, 0, tzinfo=UTC)
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload", "delete"))
+        file_service = FileService(
+            uow.session,
+            storage,
+            delete_retention_seconds=3600,
+        )
+        file_object = await file_service.upload_bytes(
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            file_name="proposal.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            data=b"docx-bytes",
+            file_type="upload",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
+        )
+        await file_service.delete_file(
+            file_id=file_object.id,
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
+            now=deleted_at,
+        )
+
+    assert await storage.exists(file_object.object_key) is True
+    async with session_factory() as session:
+        persisted = await session.get(FileObject, file_object.id)
+        assert persisted is not None
+        assert persisted.status == "deleted"
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        with pytest.raises(AppError) as suspended_cleanup:
+            await FileService(
+                uow.session,
+                storage,
+                delete_retention_seconds=3600,
+            ).purge_deleted_files(
+                tenant_id="tenant-a",
+                tenant_status="suspended",
+                now=deleted_at + timedelta(hours=2),
+            )
+
+    assert suspended_cleanup.value.code == "TENANT_STATE_FORBIDDEN"
+    assert await storage.exists(file_object.object_key) is True
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        early_count = await FileService(
+            uow.session,
+            storage,
+            delete_retention_seconds=3600,
+        ).purge_deleted_files(
+            tenant_id="tenant-a",
+            tenant_status="deleting",
+            now=deleted_at + timedelta(minutes=30),
+        )
+
+    assert early_count == 0
+    assert await storage.exists(file_object.object_key) is True
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        purged_count = await FileService(
+            uow.session,
+            storage,
+            delete_retention_seconds=3600,
+        ).purge_deleted_files(
+            tenant_id="tenant-a",
+            tenant_status="deleting",
+            now=deleted_at + timedelta(hours=2),
+        )
+
+    assert purged_count == 1
+    assert await storage.exists(file_object.object_key) is False
+    async with session_factory() as session:
+        purged = await session.get(FileObject, file_object.id)
+        assert purged is not None
+        assert purged.status == "purged"
 
 
 @pytest.mark.asyncio

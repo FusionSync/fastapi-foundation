@@ -14,7 +14,15 @@ TenantStatus = Literal[
     "archived",
     "deleted",
 ]
-TenantOperation = Literal["login", "read", "write", "task", "file_download", "admin"]
+TenantOperation = Literal[
+    "login",
+    "read",
+    "write",
+    "task",
+    "file_download",
+    "background_cleanup",
+    "admin",
+]
 SessionRevocationHook = Callable[[str, str], Awaitable[None] | None]
 
 
@@ -69,6 +77,8 @@ def is_tenant_operation_allowed(
         if operation == "file_download":
             return resolved_policy.allow_suspended_file_download
         return False
+    if status == "deleting":
+        return operation == "background_cleanup"
     if status == "archived":
         if operation == "read":
             return resolved_policy.allow_archived_read

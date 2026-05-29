@@ -42,8 +42,10 @@ def test_tenant_lifecycle_behavior_matrix() -> None:
     assert is_tenant_operation_allowed("suspended", "read") is True
     assert is_tenant_operation_allowed("suspended", "write") is False
     assert is_tenant_operation_allowed("suspended", "task") is False
+    assert is_tenant_operation_allowed("suspended", "background_cleanup") is False
     assert is_tenant_operation_allowed("deleting", "login") is False
     assert is_tenant_operation_allowed("deleting", "read") is False
+    assert is_tenant_operation_allowed("deleting", "background_cleanup") is True
     assert is_tenant_operation_allowed("archived", "read") is False
     assert (
         is_tenant_operation_allowed(
