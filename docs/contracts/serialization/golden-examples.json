@@ -1,0 +1,26 @@
+{
+  "code": "OK",
+  "data": {
+    "amount": "123.4500",
+    "business_date": "2026-05-28",
+    "created_at": "2026-05-28T10:30:45+00:00",
+    "externalId": "12345678-1234-5678-1234-567812345678",
+    "nested": [
+      {
+        "amount": "0.10",
+        "created_at": "2026-05-28T11:00:00+00:00"
+      }
+    ],
+    "optional_note": null,
+    "status": "ready",
+    "tags": [
+      "bid",
+      "review"
+    ]
+  },
+  "details": null,
+  "list": null,
+  "message": "success",
+  "pagination": null,
+  "request_id": "req_golden"
+}

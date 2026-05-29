@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: `to_jsonable()`、`ok()`、`ok_list()`、`fail()`、Envelope/ListEnvelope、复杂类型序列化规则，以及 streaming/binary response 与 envelope 的例外边界已落地。
-- Next:
-  - [ ] 补复杂类型 golden examples 和 OpenAPI schema regression。
+- Done: `to_jsonable()`、`ok()`、`ok_list()`、`fail()`、Envelope/ListEnvelope、复杂类型序列化规则、streaming/binary response 与 envelope 的例外边界、复杂类型 golden examples 和 OpenAPI schema regression 已落地。
+- Next: _none_
 
 ## 职责
 
@@ -54,6 +53,15 @@ src/core/serialization/
 - `date`、`Decimal`、`UUID`、`Enum` 和嵌套 list/dict 会递归编码。
 - Pydantic model 先 `model_dump(mode="python", by_alias=True)`，再经过统一编码。
 - OpenAPI 响应模型使用 `Envelope[T]` 和 `ListEnvelope[T]` 泛型绑定具体 payload schema；运行时仍通过 `ok()` / `ok_list()` 输出同一 envelope 字段。
+
+## Golden Contracts
+
+序列化契约有两类固定 artifact：
+
+- `docs/contracts/serialization/golden-examples.json`：覆盖 aware `datetime`、`date`、`Decimal`、`UUID`、`Enum`、Pydantic alias、tuple/list、嵌套对象和 envelope null 字段。
+- `docs/contracts/serialization/example-openapi-schema.json`：固定 golden app 的 typed `Envelope[ExamplePing]`、`ListEnvelope[ExampleRead]`、pagination schema 和 list query 参数。
+
+`tests/contract/test_serialization_regression.py` 会把当前运行时输出和上述 artifact 对比。修改 serialization、BaseSchema、response envelope、OpenAPI 生成或 golden app schema 时，必须先确认契约变更是有意的，再同步更新对应 artifact。
 
 ## BaseSchema 关系
 

@@ -1,0 +1,353 @@
+{
+  "paths": {
+    "/api/v1/examples": {
+      "get": {
+        "operationId": "list_examples_api_v1_examples_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
+            "in": "query",
+            "name": "title",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ExampleRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Examples",
+        "tags": [
+          "examples"
+        ]
+      }
+    },
+    "/api/v1/examples/ping": {
+      "get": {
+        "operationId": "ping_api_v1_examples_ping_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ExamplePing_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ping",
+        "tags": [
+          "examples"
+        ]
+      }
+    }
+  },
+  "schemas": {
+    "Envelope_ExamplePing_": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/ExamplePing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Details"
+        },
+        "list": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "List"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/Pagination"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "request_id"
+      ],
+      "title": "Envelope[ExamplePing]",
+      "type": "object"
+    },
+    "ExamplePing": {
+      "properties": {
+        "app": {
+          "title": "App",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "status"
+      ],
+      "title": "ExamplePing",
+      "type": "object"
+    },
+    "ExampleRead": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Id"
+        },
+        "tenant_id": {
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "created_at",
+        "updated_at",
+        "tenant_id",
+        "title"
+      ],
+      "title": "ExampleRead",
+      "type": "object"
+    },
+    "ListEnvelope_ExampleRead_": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "data": {
+          "title": "Data",
+          "type": "null"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Details"
+        },
+        "list": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/components/schemas/ExampleRead"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "List"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/Pagination"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "request_id"
+      ],
+      "title": "ListEnvelope[ExampleRead]",
+      "type": "object"
+    },
+    "Pagination": {
+      "properties": {
+        "has_next": {
+          "title": "Has Next",
+          "type": "boolean"
+        },
+        "page": {
+          "minimum": 1.0,
+          "title": "Page",
+          "type": "integer"
+        },
+        "page_size": {
+          "minimum": 1.0,
+          "title": "Page Size",
+          "type": "integer"
+        },
+        "total": {
+          "minimum": 0.0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "page",
+        "page_size",
+        "has_next"
+      ],
+      "title": "Pagination",
+      "type": "object"
+    }
+  }
+}
