@@ -34,3 +34,23 @@ class AuditLog(BaseModel):
     hash_prev: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditExportRecord(BaseModel):
+    __tablename__ = "audit_export_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    actor_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    destination_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    destination_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    request_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    filters: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    hash_root: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    hash_tip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -2,10 +2,10 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: audit model、AuditService、result/reason/session/policy fields、request/trace/route/method 默认 context 字段、hash chain、进程内链路锁、可选分布式链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
+- Status: `connected`
+- Done: audit model、AuditService、result/reason/session/policy fields、request/trace/route/method 默认 context 字段、hash chain、进程内链路锁、可选分布式链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计、tenant lifecycle 审计、WORM/SIEM NDJSON export、导出批次记录和 checksum 已落地。
 - Next:
-  - [ ] 接 WORM/SIEM export。
+  - _none_
 
 ## 职责
 
@@ -37,6 +37,23 @@ AuditLog
   payload
   hash_prev
   hash
+  created_at
+
+AuditExportRecord
+  id
+  tenant_id
+  actor_id
+  destination_type
+  destination_uri
+  status
+  request_id
+  filters
+  record_count
+  hash_root
+  hash_tip
+  checksum_sha256
+  error_message
+  exported_at
   created_at
 ```
 
@@ -79,5 +96,9 @@ AuditLog
 - `AccountsService` 可注入 `AuditService`，session 创建/撤销和禁用用户会写 `session.created` / `session.revoked` / `user.disabled` 审计。
 - `TenantLifecycleService` 可注入 `AuditService`，租户创建、暂停、恢复、删除和归档会写对应 `tenant.*` 审计。
 - `platform_apps.audit.permissions.PERMISSIONS` 注册 `audit_log.read` 和 `audit_log.export` 平台权限。
+- `AuditExportService.export_logs()` 在导出前校验目标 tenant/platform hash chain，失败时以 `CONFLICT` 拒绝并且不会写出导出对象。
+- 导出格式为 `audit.ndjson.v1`：首行是 manifest，后续每行是一条审计记录，保留 `hash_prev`、`hash`、result、reason、session、policy 和 request/trace 字段，便于 SIEM 消费。
+- `AuditExportRecord` 记录导出者、request_id、过滤条件、记录数、hash root/tip、目标 URI、状态、导出时间和 payload 的 `checksum_sha256`。
+- `LocalWormAuditExportSink` 使用独占创建写入本地 `.jsonl` 对象，已存在同名导出时返回 `CONFLICT`，作为 WORM/object-storage adapter 的本地实现。
 
-当前 hash chain 是数据库内轻量链路，不替代外部 WORM 或 SIEM。多 worker 部署应使用 `DatabaseLockProvider`、后续 Redis/advisory lock provider 或同等分布式串行化能力。生产环境如果有合规要求，应把审计导出和不可篡改存储作为部署 profile 能力继续接上。
+当前 hash chain 是数据库内轻量链路；多 worker 部署应使用 `DatabaseLockProvider`、后续 Redis/advisory lock provider 或同等分布式串行化能力。生产环境如果需要外部合规归档，可以通过 `AuditExportSink` protocol 接入对象存储 WORM bucket 或 SIEM collector。

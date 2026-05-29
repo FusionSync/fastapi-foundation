@@ -68,6 +68,7 @@ cloud:
 - 生产审计记录不能随业务软删除。
 - 安全关键审计建议启用 hash chain 或外部 WORM/SIEM。
 - 审计导出必须记录导出者、时间、过滤条件和文件校验值。
+- `AuditExportService` 导出的 `audit.ndjson.v1` 文件必须在写出前通过目标 tenant/platform hash chain 校验；`AuditExportRecord` 持久化 `actor_id`、`filters`、`exported_at`、`destination_uri`、`record_count`、`hash_root`、`hash_tip` 和 `checksum_sha256`，恢复演练时以该记录核对 WORM/SIEM 侧对象。
 
 ## Restore Types
 

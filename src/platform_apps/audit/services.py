@@ -3,8 +3,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal, Protocol
 
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,9 +16,10 @@ from core.context import get_current_context
 from core.exceptions import AppError
 from core.locks import LockProvider
 from core.security import redact_sensitive_data
-from platform_apps.audit.models import AuditLog
+from platform_apps.audit.models import AuditExportRecord, AuditLog
 
 AuditResult = Literal["success", "failure", "denied"]
+AuditExportDestination = Literal["worm", "siem"]
 _AUDIT_CHAIN_LOCKS: dict[str, asyncio.Lock] = {}
 _AUDIT_CHAIN_LOCKS_GUARD = asyncio.Lock()
 _SESSION_AUDIT_CHAIN_LOCKS = "audit_chain_locks"
@@ -31,6 +35,37 @@ class AuditChainVerificationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AuditExportSinkResult:
+    destination_uri: str
+
+
+class AuditExportSink(Protocol):
+    async def write(self, *, export_id: str, payload: bytes) -> AuditExportSinkResult: ...
+
+
+class LocalWormAuditExportSink:
+    def __init__(self, root: str | Path, *, suffix: str = ".jsonl") -> None:
+        self.root = Path(root)
+        self.suffix = suffix
+
+    async def write(self, *, export_id: str, payload: bytes) -> AuditExportSinkResult:
+        file_name = _safe_export_file_name(export_id, self.suffix)
+        self.root.mkdir(parents=True, exist_ok=True)
+        destination = self.root / file_name
+        try:
+            with destination.open("xb") as export_file:
+                export_file.write(payload)
+        except FileExistsError as exc:
+            raise AppError(
+                "CONFLICT",
+                "audit export object already exists",
+                status_code=409,
+                details={"destination_uri": str(destination)},
+            ) from exc
+        return AuditExportSinkResult(destination_uri=str(destination))
+
+
+@dataclass(frozen=True, slots=True)
 class _DistributedAuditChainLock:
     provider: LockProvider
     lock_key: str
@@ -41,6 +76,96 @@ class _DistributedAuditChainLock:
 class _HeldAuditChainLock:
     local_lock: asyncio.Lock
     distributed_lock: _DistributedAuditChainLock | None = None
+
+
+class AuditExportService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def export_logs(
+        self,
+        *,
+        tenant_id: str | None,
+        destination_type: AuditExportDestination,
+        sink: AuditExportSink,
+        export_id: str | None = None,
+        actor_id: str | None = None,
+        request_id: str | None = None,
+    ) -> AuditExportRecord:
+        resolved_export_id = export_id or _new_export_id()
+        _validate_export_request(
+            export_id=resolved_export_id,
+            destination_type=destination_type,
+        )
+
+        audit_logs = await self._audit_logs(tenant_id)
+        verification_errors = _verify_hash_chain(audit_logs)
+        if verification_errors:
+            raise AppError(
+                "CONFLICT",
+                "audit hash chain is invalid",
+                status_code=409,
+                details={
+                    "tenant_id": tenant_id,
+                    "errors": list(verification_errors),
+                },
+            )
+
+        ordered_logs = _order_valid_hash_chain(audit_logs)
+        hash_root = ordered_logs[0].hash if ordered_logs else None
+        hash_tip = ordered_logs[-1].hash if ordered_logs else None
+        filters = _audit_export_filters(tenant_id)
+        payload = _audit_export_payload(
+            export_id=resolved_export_id,
+            destination_type=destination_type,
+            tenant_id=tenant_id,
+            filters=filters,
+            record_count=len(ordered_logs),
+            hash_root=hash_root,
+            hash_tip=hash_tip,
+            audit_logs=ordered_logs,
+        )
+        checksum = hashlib.sha256(payload).hexdigest()
+
+        context = get_current_context()
+        export_record = AuditExportRecord(
+            id=resolved_export_id,
+            tenant_id=tenant_id,
+            actor_id=actor_id or (context.user_id if context else None),
+            destination_type=destination_type,
+            status="pending",
+            request_id=request_id or (context.request_id if context else None),
+            filters=filters,
+            record_count=len(ordered_logs),
+            hash_root=hash_root,
+            hash_tip=hash_tip,
+            checksum_sha256=checksum,
+        )
+        self.session.add(export_record)
+        await self.session.flush()
+
+        try:
+            sink_result = await sink.write(export_id=resolved_export_id, payload=payload)
+        except AppError as exc:
+            export_record.status = "failed"
+            export_record.error_message = exc.message
+            await self.session.flush()
+            raise
+
+        export_record.status = "succeeded"
+        export_record.destination_uri = sink_result.destination_uri
+        export_record.exported_at = datetime.now(UTC)
+        await self.session.flush()
+        return export_record
+
+    async def _audit_logs(self, tenant_id: str | None) -> list[AuditLog]:
+        statement = select(AuditLog)
+        if tenant_id is None:
+            statement = statement.where(AuditLog.tenant_id.is_(None))
+        else:
+            statement = statement.where(AuditLog.tenant_id == tenant_id)
+        result = await self.session.execute(statement.order_by(AuditLog.id))
+        return list(result.scalars().all())
 
 
 class AuditService:
@@ -267,6 +392,116 @@ def _consume_lock_release_result(task: asyncio.Task[bool]) -> None:
         task.result()
     except Exception:
         return
+
+
+def _new_export_id() -> str:
+    from uuid import uuid4
+
+    return str(uuid4())
+
+
+def _validate_export_request(
+    *,
+    export_id: str,
+    destination_type: str,
+) -> None:
+    if not export_id.strip():
+        raise AppError("VALIDATION_ERROR", "audit export_id is required", status_code=400)
+    if destination_type not in {"worm", "siem"}:
+        raise AppError(
+            "VALIDATION_ERROR",
+            "audit export destination_type is invalid",
+            status_code=400,
+        )
+
+
+def _safe_export_file_name(export_id: str, suffix: str) -> str:
+    _validate_export_request(export_id=export_id, destination_type="worm")
+    if not suffix.startswith("."):
+        raise AppError("VALIDATION_ERROR", "audit export suffix is invalid", status_code=400)
+    if export_id in {".", ".."} or any(separator in export_id for separator in ("/", "\\", ":")):
+        raise AppError("VALIDATION_ERROR", "audit export_id is invalid", status_code=400)
+    return f"{export_id}{suffix}"
+
+
+def _audit_export_filters(tenant_id: str | None) -> dict[str, object]:
+    return {"tenant_id": tenant_id}
+
+
+def _audit_export_payload(
+    *,
+    export_id: str,
+    destination_type: AuditExportDestination,
+    tenant_id: str | None,
+    filters: dict[str, object],
+    record_count: int,
+    hash_root: str | None,
+    hash_tip: str | None,
+    audit_logs: Sequence[AuditLog],
+) -> bytes:
+    lines: list[dict[str, object]] = [
+        {
+            "type": "audit_export_manifest",
+            "format": "audit.ndjson.v1",
+            "export_id": export_id,
+            "destination_type": destination_type,
+            "tenant_id": tenant_id,
+            "filters": filters,
+            "record_count": record_count,
+            "hash_root": hash_root,
+            "hash_tip": hash_tip,
+        }
+    ]
+    lines.extend(_audit_log_export_dict(audit_log) for audit_log in audit_logs)
+    payload = "".join(
+        f"{json.dumps(line, ensure_ascii=True, sort_keys=True, separators=(',', ':'))}\n"
+        for line in lines
+    )
+    return payload.encode("utf-8")
+
+
+def _audit_log_export_dict(audit_log: AuditLog) -> dict[str, object]:
+    return {
+        "type": "audit_log",
+        "id": audit_log.id,
+        "tenant_id": audit_log.tenant_id,
+        "actor_id": audit_log.actor_id,
+        "actor_type": audit_log.actor_type,
+        "auth_provider": audit_log.auth_provider,
+        "session_id": audit_log.session_id,
+        "action": audit_log.action,
+        "resource_type": audit_log.resource_type,
+        "resource_id": audit_log.resource_id,
+        "result": audit_log.result,
+        "reason": audit_log.reason,
+        "policy_version": audit_log.policy_version,
+        "request_id": audit_log.request_id,
+        "trace_id": audit_log.trace_id,
+        "route": audit_log.route,
+        "method": audit_log.method,
+        "ip_address": audit_log.ip_address,
+        "user_agent": audit_log.user_agent,
+        "payload": audit_log.payload,
+        "hash_prev": audit_log.hash_prev,
+        "hash": audit_log.hash,
+        "created_at": audit_log.created_at.isoformat() if audit_log.created_at else None,
+    }
+
+
+def _order_valid_hash_chain(audit_logs: Sequence[AuditLog]) -> list[AuditLog]:
+    if not audit_logs:
+        return []
+
+    by_prev: dict[str | None, list[AuditLog]] = {}
+    for audit_log in audit_logs:
+        by_prev.setdefault(audit_log.hash_prev, []).append(audit_log)
+
+    ordered = [by_prev[None][0]]
+    while True:
+        children = by_prev.get(ordered[-1].hash, [])
+        if not children:
+            return ordered
+        ordered.append(children[0])
 
 
 def _verify_hash_chain(audit_logs: list[AuditLog]) -> list[str]:

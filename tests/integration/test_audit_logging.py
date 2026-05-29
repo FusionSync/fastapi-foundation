@@ -1,5 +1,8 @@
 import asyncio
+import hashlib
+import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
@@ -10,7 +13,14 @@ from core.context import RequestContext, reset_current_context, set_current_cont
 from core.db import unit_of_work
 from core.exceptions import AppError
 from core.locks import MemoryLockProvider
-from platform_apps.audit import AuditLog, AuditService, audit_hash
+from platform_apps.audit import (
+    AuditExportRecord,
+    AuditExportService,
+    AuditLog,
+    AuditService,
+    LocalWormAuditExportSink,
+    audit_hash,
+)
 
 
 @pytest.fixture
@@ -293,6 +303,152 @@ async def test_audit_hash_chain_verifier_detects_tampering(
 
 
 @pytest.mark.asyncio
+async def test_audit_export_writes_worm_jsonl_manifest_and_records_export(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        first = await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            actor_id="user-1",
+            action="tenant.first",
+            resource_type="tenant",
+            resource_id="tenant-a-first",
+            result="success",
+            payload={"password": "secret", "visible": "yes"},
+        )
+        second = await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            actor_id="user-2",
+            action="tenant.second",
+            resource_type="tenant",
+            resource_id="tenant-a-second",
+            result="failure",
+            reason="denied by policy",
+            policy_version=9,
+            request_id="req-2",
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        export_record = await AuditExportService(uow.session).export_logs(
+            tenant_id="tenant-a",
+            destination_type="worm",
+            sink=LocalWormAuditExportSink(tmp_path),
+            export_id="export-tenant-a",
+            actor_id="auditor-1",
+            request_id="req-export-1",
+        )
+
+    export_path = tmp_path / "export-tenant-a.jsonl"
+    assert export_record.id == "export-tenant-a"
+    assert export_record.status == "succeeded"
+    assert export_record.destination_type == "worm"
+    assert export_record.destination_uri == str(export_path)
+    assert export_record.actor_id == "auditor-1"
+    assert export_record.filters == {"tenant_id": "tenant-a"}
+    assert export_record.record_count == 2
+    assert export_record.hash_root == first.hash
+    assert export_record.hash_tip == second.hash
+    assert export_record.checksum_sha256 == hashlib.sha256(export_path.read_bytes()).hexdigest()
+    assert export_record.request_id == "req-export-1"
+    assert export_record.exported_at is not None
+
+    payload_lines = [json.loads(line) for line in export_path.read_text().splitlines()]
+    assert payload_lines[0] == {
+        "type": "audit_export_manifest",
+        "format": "audit.ndjson.v1",
+        "export_id": "export-tenant-a",
+        "destination_type": "worm",
+        "tenant_id": "tenant-a",
+        "filters": {"tenant_id": "tenant-a"},
+        "record_count": 2,
+        "hash_root": first.hash,
+        "hash_tip": second.hash,
+    }
+    assert [line["resource_id"] for line in payload_lines[1:]] == [
+        "tenant-a-first",
+        "tenant-a-second",
+    ]
+    assert payload_lines[1]["type"] == "audit_log"
+    assert payload_lines[1]["hash"] == first.hash
+    assert payload_lines[1]["hash_prev"] is None
+    assert payload_lines[1]["payload"] == {"password": "***REDACTED***", "visible": "yes"}
+    assert payload_lines[2]["type"] == "audit_log"
+    assert payload_lines[2]["hash"] == second.hash
+    assert payload_lines[2]["hash_prev"] == first.hash
+
+    exports = await _audit_exports(session_factory)
+    assert len(exports) == 1
+    assert exports[0].id == "export-tenant-a"
+    assert exports[0].status == "succeeded"
+    assert exports[0].destination_uri == str(export_path)
+
+
+@pytest.mark.asyncio
+async def test_audit_export_rejects_tampered_chain_before_writing(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant.first",
+            resource_type="tenant",
+            resource_id="tenant-a-first",
+            result="success",
+            payload={"field": "original"},
+        )
+        await AuditService(uow.session).record(
+            tenant_id="tenant-a",
+            action="tenant.second",
+            resource_type="tenant",
+            resource_id="tenant-a-second",
+            result="success",
+        )
+
+    async with session_factory() as session:
+        audit_log = await session.scalar(
+            select(AuditLog).where(AuditLog.resource_id == "tenant-a-first")
+        )
+        assert audit_log is not None
+        audit_log.payload = {"field": "tampered"}
+        await session.commit()
+
+    with pytest.raises(AppError) as exc_info:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            await AuditExportService(uow.session).export_logs(
+                tenant_id="tenant-a",
+                destination_type="worm",
+                sink=LocalWormAuditExportSink(tmp_path),
+                export_id="tampered-export",
+            )
+
+    assert exc_info.value.code == "CONFLICT"
+    assert "hash chain is invalid" in str(exc_info.value)
+    assert (tmp_path / "tampered-export.jsonl").exists() is False
+    assert await _audit_export_count(session_factory) == 0
+
+
+@pytest.mark.asyncio
+async def test_worm_export_sink_rejects_overwriting_existing_export(tmp_path: Path) -> None:
+    sink = LocalWormAuditExportSink(tmp_path)
+
+    result = await sink.write(export_id="same-export", payload=b"first\n")
+
+    assert result.destination_uri == str(tmp_path / "same-export.jsonl")
+    assert (tmp_path / "same-export.jsonl").read_bytes() == b"first\n"
+    with pytest.raises(AppError) as exc_info:
+        await sink.write(export_id="same-export", payload=b"second\n")
+
+    assert exc_info.value.code == "CONFLICT"
+    assert (tmp_path / "same-export.jsonl").read_bytes() == b"first\n"
+
+
+@pytest.mark.asyncio
 async def test_audit_record_rejects_invalid_required_fields(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -320,4 +476,21 @@ async def _audit_logs(session_factory: async_sessionmaker[AsyncSession]) -> list
 async def _audit_count(session_factory: async_sessionmaker[AsyncSession]) -> int:
     async with session_factory() as session:
         result = await session.scalar(select(func.count()).select_from(AuditLog))
+        return int(result or 0)
+
+
+async def _audit_exports(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> list[AuditExportRecord]:
+    async with session_factory() as session:
+        result = await session.execute(select(AuditExportRecord).order_by(AuditExportRecord.id))
+        audit_exports = list(result.scalars().all())
+        for audit_export in audit_exports:
+            session.expunge(audit_export)
+        return audit_exports
+
+
+async def _audit_export_count(session_factory: async_sessionmaker[AsyncSession]) -> int:
+    async with session_factory() as session:
+        result = await session.scalar(select(func.count()).select_from(AuditExportRecord))
         return int(result or 0)
