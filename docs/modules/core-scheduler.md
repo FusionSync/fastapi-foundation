@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `connected`
-- Done: schedule registry、provider、trigger log repository、锁保护的触发路径、scheduler 背景上下文和 trace_id handoff、`core scheduler --run-once` 和 `core scheduler --run` cron due 本地运行入口已落地。
+- Done: schedule registry、provider、trigger log repository、锁保护的触发路径、scheduler 背景上下文和 trace_id handoff、`core scheduler --run-once` 和 `core scheduler --run` cron due 本地运行入口、按 profile 选择 Tasks provider 的提交链路已落地。
 - Next:
   - [ ] 接持久化 cron 状态、错过触发策略和 APScheduler/Celery Beat provider。
-  - [ ] 将调度任务与 audit gate、分布式 lock provider 和部署 profile 运行参数串通。
+  - [ ] 将调度任务与 audit gate、分布式 lock provider 和 scheduler 自身部署 profile 运行参数串通。
 
 ## 职责
 
@@ -97,7 +97,7 @@ manual
 - `ScheduleTriggerRepository.record_result()` 使用 insert-first + 唯一约束记录触发历史；重复 trigger key 返回 `replayed`，不创建第二条历史。
 - scheduler provider 不直接调用业务函数，tenant lifecycle gate 仍由 task provider 执行。
 - scheduler trigger 执行期间会从 `ScheduleTriggerRequest` 注入冻结背景上下文，透传 `request_id`、`trace_id` 和 `tenant_id`，避免继承外层 HTTP/CLI ContextVar。
-- `core scheduler --run-once` 可按 `--installed-app` 加载 `ScheduleRegistry`/`TaskRegistry`，用 local `SyncTaskProvider` 触发指定 schedule，写入 `TaskRun` 和 `ScheduleTriggerLog`，并输出稳定 JSON。
+- `core scheduler --run-once` 可按 `--installed-app` 加载 `ScheduleRegistry`/`TaskRegistry`，通过当前 profile 选中的 Tasks provider 触发指定 schedule，写入 `TaskRun` 和 `ScheduleTriggerLog`，并输出稳定 JSON。
 - `core scheduler --run` 会扫描 app 注册的 cron schedule definition，按当前分钟 planned slot 触发 due schedule；`--max-iterations` 用于 local/CI 有限轮验证，不传则常驻轮询；同一进程内同一 `schedule_id + tenant_id + planned_at` slot 只尝试一次，传 `--instance-id` 时写入 scheduler heartbeat。
 
 后续 APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。private/cloud 多实例部署时，`LockedScheduleProvider` 必须注入 Redis、数据库 advisory lock 或等价的分布式 `LockProvider`；内存 lock 只适合 local/profile 和测试。

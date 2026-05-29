@@ -47,7 +47,9 @@ def check_process_health(
         checks["http_routes_configured"] = bool(resolved_settings.api.prefix)
     if role == "worker":
         checks["task_provider_configured"] = True
-        details["task_provider"] = "sync"
+        details["task_provider"] = resolved_settings.task_queue.provider
+        details["max_attempts"] = resolved_settings.task_queue.max_attempts
+        details["retry_backoff_seconds"] = resolved_settings.task_queue.retry_backoff_seconds
     if role == "scheduler":
         checks["leader_or_lock_ready"] = resolved_settings.app.env == "local"
         details["missed_trigger_policy"] = "skip"

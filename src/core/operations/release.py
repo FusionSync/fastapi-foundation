@@ -254,5 +254,11 @@ def _settings_from_profile_env(env: dict[str, str]) -> Settings:
         database={"url": env["DATABASE__URL"]},
         security=security,
         observability={"service_role": env["OBSERVABILITY__SERVICE_ROLE"]},
+        task_queue={
+            "provider": env["TASK_QUEUE__PROVIDER"],
+            "max_attempts": int(env["TASK_QUEUE__MAX_ATTEMPTS"]),
+            "retry_backoff_seconds": int(env["TASK_QUEUE__RETRY_BACKOFF_SECONDS"]),
+            "idle_sleep_seconds": float(env["TASK_QUEUE__IDLE_SLEEP_SECONDS"]),
+        },
         installed_apps=json.loads(env["INSTALLED_APPS"]),
     )

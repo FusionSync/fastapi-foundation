@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DeploymentMode = Literal["local", "private", "cloud"]
 ErrorHttpStatusMode = Literal["standard", "always_200"]
+TaskQueueProviderMode = Literal["sync", "database"]
 
 
 class AppSettings(BaseModel):
@@ -40,6 +41,13 @@ class ObservabilitySettings(BaseModel):
     metrics_enabled: bool = True
 
 
+class TaskQueueSettings(BaseModel):
+    provider: TaskQueueProviderMode = "sync"
+    max_attempts: int = 3
+    retry_backoff_seconds: int = 30
+    idle_sleep_seconds: float = 1.0
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
@@ -52,6 +60,7 @@ class Settings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+    task_queue: TaskQueueSettings = Field(default_factory=TaskQueueSettings)
     installed_apps: list[str] = Field(default_factory=list)
 
 

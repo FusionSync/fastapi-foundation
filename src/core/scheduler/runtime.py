@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.apps import AppRegistry, ScheduleSpec, resolve_runtime_capabilities
-from core.config import get_settings
+from core.config import Settings, get_settings
 from core.db import unit_of_work
 from core.locks import MemoryLockProvider
 from core.operations import ProcessHeartbeatRepository
@@ -18,7 +18,7 @@ from core.scheduler.provider import (
 )
 from core.scheduler.registry import RegisteredSchedule, ScheduleRegistry
 from core.scheduler.repository import ScheduleTriggerRepository
-from core.tasks import SyncTaskProvider, TaskRegistry, TaskRunRepository
+from core.tasks import DatabaseQueueTaskProvider, SyncTaskProvider, TaskRegistry, TaskRunRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,10 +61,11 @@ async def run_scheduler_loop(
     idle_sleep_seconds: float = 1.0,
     lock_ttl_seconds: int = 60,
 ) -> SchedulerRunResult:
+    settings = get_settings()
     app_registry = AppRegistry(
         module_paths,
         runtime_capabilities=resolve_runtime_capabilities(
-            get_settings(),
+            settings,
             database_url=database_url,
             service_role="scheduler",
         ),
@@ -93,9 +94,10 @@ async def run_scheduler_loop(
                 provider = LockedScheduleProvider(
                     provider=ManualScheduleProvider(
                         schedule_registry=schedule_registry,
-                        task_provider=SyncTaskProvider(
-                            task_registry,
-                            task_repository=TaskRunRepository(uow.session),
+                        task_provider=_task_provider(
+                            settings=settings,
+                            task_registry=task_registry,
+                            repository=TaskRunRepository(uow.session),
                         ),
                         trigger_repository=ScheduleTriggerRepository(uow.session),
                     ),
@@ -165,6 +167,26 @@ async def run_scheduler_loop(
         failed=failed,
         instance_id=instance_id,
         schedule_results=schedule_results,
+    )
+
+
+def _task_provider(
+    *,
+    settings: Settings,
+    task_registry: TaskRegistry,
+    repository: TaskRunRepository,
+) -> SyncTaskProvider | DatabaseQueueTaskProvider:
+    if settings.task_queue.provider == "database":
+        return DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=repository,
+            max_attempts=settings.task_queue.max_attempts,
+            retry_backoff_seconds=settings.task_queue.retry_backoff_seconds,
+        )
+    return SyncTaskProvider(
+        task_registry,
+        task_repository=repository,
+        max_attempts=settings.task_queue.max_attempts,
     )
 
 

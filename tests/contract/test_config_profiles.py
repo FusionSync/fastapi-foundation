@@ -16,6 +16,10 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
     assert payload["env"]["APP__ENV"] == "private"
     assert payload["env"]["DATABASE__URL"].startswith("postgresql+asyncpg://")
     assert payload["env"]["SECURITY__JWT_SECRET_REF"] == "APP_JWT_SECRET"
+    assert payload["env"]["TASK_QUEUE__PROVIDER"] == "database"
+    assert payload["env"]["TASK_QUEUE__MAX_ATTEMPTS"] == "3"
+    assert payload["env"]["TASK_QUEUE__RETRY_BACKOFF_SECONDS"] == "30"
+    assert payload["env"]["TASK_QUEUE__IDLE_SLEEP_SECONDS"] == "1.0"
     assert payload["env"]["OUTBOX_DISPATCHER__BATCH_SIZE"] == "20"
     assert payload["env"]["OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS"] == "1.0"
     assert "SECURITY__JWT_SECRET" not in payload["env"]
@@ -30,6 +34,19 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
         "core serve --run --host 0.0.0.0 --port 8000"
     )
     assert "--instance-id ${INSTANCE_ID}" in payload["processes"]["worker"]["command"]
+    assert "--provider ${TASK_QUEUE__PROVIDER}" in payload["processes"]["worker"]["command"]
+    assert (
+        "--max-attempts ${TASK_QUEUE__MAX_ATTEMPTS}"
+        in payload["processes"]["worker"]["command"]
+    )
+    assert (
+        "--retry-backoff-seconds ${TASK_QUEUE__RETRY_BACKOFF_SECONDS}"
+        in payload["processes"]["worker"]["command"]
+    )
+    assert (
+        "--idle-sleep-seconds ${TASK_QUEUE__IDLE_SLEEP_SECONDS}"
+        in payload["processes"]["worker"]["command"]
+    )
     assert "--instance-id ${INSTANCE_ID}" in payload["processes"]["scheduler"]["command"]
     assert "--instance-id ${INSTANCE_ID}" in payload["processes"]["outbox-dispatcher"]["command"]
     assert (
@@ -137,6 +154,14 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "--actual",
             "OBSERVABILITY__SERVICE_ROLE=server",
             "--actual",
+            "TASK_QUEUE__PROVIDER=database",
+            "--actual",
+            "TASK_QUEUE__MAX_ATTEMPTS=3",
+            "--actual",
+            "TASK_QUEUE__RETRY_BACKOFF_SECONDS=30",
+            "--actual",
+            "TASK_QUEUE__IDLE_SLEEP_SECONDS=1.0",
+            "--actual",
             "OUTBOX_DISPATCHER__BATCH_SIZE=20",
             "--actual",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS=1.0",
@@ -161,6 +186,10 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "SECURITY__TRUSTED_HOSTS",
             "SECURITY__CORS_ORIGINS",
             "OBSERVABILITY__SERVICE_ROLE",
+            "TASK_QUEUE__PROVIDER",
+            "TASK_QUEUE__MAX_ATTEMPTS",
+            "TASK_QUEUE__RETRY_BACKOFF_SECONDS",
+            "TASK_QUEUE__IDLE_SLEEP_SECONDS",
             "OUTBOX_DISPATCHER__BATCH_SIZE",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS",
             "INSTALLED_APPS",
@@ -193,6 +222,14 @@ def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
             'SECURITY__CORS_ORIGINS=["https://console.internal.example"]',
             "--actual",
             "OBSERVABILITY__SERVICE_ROLE=worker",
+            "--actual",
+            "TASK_QUEUE__PROVIDER=database",
+            "--actual",
+            "TASK_QUEUE__MAX_ATTEMPTS=3",
+            "--actual",
+            "TASK_QUEUE__RETRY_BACKOFF_SECONDS=30",
+            "--actual",
+            "TASK_QUEUE__IDLE_SLEEP_SECONDS=1.0",
             "--actual",
             "OUTBOX_DISPATCHER__BATCH_SIZE=20",
             "--actual",
@@ -242,7 +279,7 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
             "labels": {"profile": "private"},
             "annotations": {
                 "summary": "Runtime configuration drift detected for private profile",
-                "missing_count": "7",
+                "missing_count": "11",
                 "mismatched_count": "2",
                 "runbook": "core config drift-check --profile private --json",
             },
@@ -345,7 +382,13 @@ def test_cloud_profile_renders_helm_values_from_process_matrix(capsys) -> None:
     assert "workloads:" in values
     assert "server:" in values
     assert 'replicas: "autoscale"' in values
-    assert 'command: "core worker --run --instance-id ${INSTANCE_ID}"' in values
+    assert (
+        'command: "core worker --run --provider ${TASK_QUEUE__PROVIDER} '
+        "--max-attempts ${TASK_QUEUE__MAX_ATTEMPTS} "
+        "--retry-backoff-seconds ${TASK_QUEUE__RETRY_BACKOFF_SECONDS} "
+        '--idle-sleep-seconds ${TASK_QUEUE__IDLE_SLEEP_SECONDS} '
+        '--instance-id ${INSTANCE_ID}"'
+    ) in values
     assert 'API__ERROR_HTTP_STATUS_MODE: "standard"' in values
     assert 'SECURITY__JWT_SECRET_REF: "APP_JWT_SECRET"' in values
     assert "securityHardening:" in values

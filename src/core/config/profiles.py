@@ -128,6 +128,10 @@ def _local_template() -> ProfileTemplate:
             "SECURITY__JWT_SECRET": "change-me",
             "SECURITY__TRUSTED_HOSTS": '["localhost","127.0.0.1","testserver"]',
             "OBSERVABILITY__SERVICE_ROLE": "server",
+            "TASK_QUEUE__PROVIDER": "sync",
+            "TASK_QUEUE__MAX_ATTEMPTS": "3",
+            "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
+            "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -138,7 +142,13 @@ def _local_template() -> ProfileTemplate:
                 replicas=1,
             ),
             "worker": ProcessTemplate(
-                command="core worker --run --instance-id ${INSTANCE_ID}",
+                command=(
+                    "core worker --run --provider ${TASK_QUEUE__PROVIDER} "
+                    "--max-attempts ${TASK_QUEUE__MAX_ATTEMPTS} "
+                    "--retry-backoff-seconds ${TASK_QUEUE__RETRY_BACKOFF_SECONDS} "
+                    "--idle-sleep-seconds ${TASK_QUEUE__IDLE_SLEEP_SECONDS} "
+                    "--instance-id ${INSTANCE_ID}"
+                ),
                 replicas=1,
             ),
             "scheduler": ProcessTemplate(
@@ -187,6 +197,10 @@ def _private_template() -> ProfileTemplate:
             "SECURITY__TRUSTED_HOSTS": '["api.internal.example"]',
             "SECURITY__CORS_ORIGINS": '["https://console.internal.example"]',
             "OBSERVABILITY__SERVICE_ROLE": "server",
+            "TASK_QUEUE__PROVIDER": "database",
+            "TASK_QUEUE__MAX_ATTEMPTS": "3",
+            "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
+            "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -198,7 +212,13 @@ def _private_template() -> ProfileTemplate:
                 notes=["Run behind private ingress or reverse proxy."],
             ),
             "worker": ProcessTemplate(
-                command="core worker --run --instance-id ${INSTANCE_ID}",
+                command=(
+                    "core worker --run --provider ${TASK_QUEUE__PROVIDER} "
+                    "--max-attempts ${TASK_QUEUE__MAX_ATTEMPTS} "
+                    "--retry-backoff-seconds ${TASK_QUEUE__RETRY_BACKOFF_SECONDS} "
+                    "--idle-sleep-seconds ${TASK_QUEUE__IDLE_SLEEP_SECONDS} "
+                    "--instance-id ${INSTANCE_ID}"
+                ),
                 replicas=2,
             ),
             "scheduler": ProcessTemplate(
@@ -249,6 +269,10 @@ def _cloud_template() -> ProfileTemplate:
             "SECURITY__TRUSTED_HOSTS": '["api.example.com"]',
             "SECURITY__CORS_ORIGINS": '["https://console.example.com"]',
             "OBSERVABILITY__SERVICE_ROLE": "server",
+            "TASK_QUEUE__PROVIDER": "database",
+            "TASK_QUEUE__MAX_ATTEMPTS": "3",
+            "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
+            "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -259,7 +283,13 @@ def _cloud_template() -> ProfileTemplate:
                 replicas="autoscale",
             ),
             "worker": ProcessTemplate(
-                command="core worker --run --instance-id ${INSTANCE_ID}",
+                command=(
+                    "core worker --run --provider ${TASK_QUEUE__PROVIDER} "
+                    "--max-attempts ${TASK_QUEUE__MAX_ATTEMPTS} "
+                    "--retry-backoff-seconds ${TASK_QUEUE__RETRY_BACKOFF_SECONDS} "
+                    "--idle-sleep-seconds ${TASK_QUEUE__IDLE_SLEEP_SECONDS} "
+                    "--instance-id ${INSTANCE_ID}"
+                ),
                 replicas="autoscale",
             ),
             "scheduler": ProcessTemplate(

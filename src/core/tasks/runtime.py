@@ -9,7 +9,7 @@ from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.config import get_settings
 from core.db import unit_of_work
 from core.operations import ProcessHeartbeatRepository
-from core.tasks.provider import SyncTaskProvider
+from core.tasks.provider import DatabaseQueueTaskProvider, SyncTaskProvider
 from core.tasks.registry import TaskRegistry
 from core.tasks.repository import TaskRunRepository
 
@@ -47,6 +47,9 @@ async def run_task_worker_loop(
     module_paths: list[str],
     queue: str,
     tenant_status: str,
+    provider: str = "sync",
+    max_attempts: int = 3,
+    retry_backoff_seconds: int = 30,
     instance_id: str | None = None,
     max_iterations: int | None = None,
     idle_sleep_seconds: float = 1.0,
@@ -74,16 +77,28 @@ async def run_task_worker_loop(
                 if uow.session is None:
                     raise RuntimeError("database session was not initialized")
                 repository = TaskRunRepository(uow.session)
-                task_run = await repository.claim_next_pending(queue=queue)
-                result = None
-                if task_run is not None:
-                    result = await SyncTaskProvider(
+                if provider == "database":
+                    result = await DatabaseQueueTaskProvider(
                         task_registry,
                         task_repository=repository,
-                    ).run_task_run(
-                        task_run,
+                        max_attempts=max_attempts,
+                        retry_backoff_seconds=retry_backoff_seconds,
+                    ).run_next(
+                        queue=queue,
                         tenant_status=tenant_status,  # type: ignore[arg-type]
                     )
+                else:
+                    task_run = await repository.claim_next_pending(queue=queue)
+                    result = None
+                    if task_run is not None:
+                        result = await SyncTaskProvider(
+                            task_registry,
+                            task_repository=repository,
+                            max_attempts=max_attempts,
+                        ).run_task_run(
+                            task_run,
+                            tenant_status=tenant_status,  # type: ignore[arg-type]
+                        )
                 iterations += 1
                 if result is not None:
                     claimed += 1

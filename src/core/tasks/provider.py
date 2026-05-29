@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Literal
 
 from core.context import task_background_context, use_background_context
@@ -26,7 +27,7 @@ class TaskResult:
 
     @property
     def ok(self) -> bool:
-        return self.status == "succeeded"
+        return self.status in {"pending", "running", "succeeded"} and self.error_message is None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -189,11 +190,150 @@ class SyncTaskProvider:
         )
 
 
+class DatabaseQueueTaskProvider:
+    def __init__(
+        self,
+        task_registry: TaskRegistry,
+        *,
+        task_repository: TaskRunRepository,
+        max_attempts: int = 3,
+        retry_backoff_seconds: int = 30,
+    ) -> None:
+        self.task_registry = task_registry
+        self.task_repository = task_repository
+        self.max_attempts = max_attempts
+        self.retry_backoff_seconds = retry_backoff_seconds
+
+    async def submit(
+        self,
+        envelope: TaskEnvelope,
+        *,
+        tenant_status: TenantStatus = "active",
+    ) -> TaskResult:
+        assert_tenant_operation_allowed(
+            tenant_id=envelope.tenant_id,
+            status=tenant_status,
+            operation="task",
+        )
+        registered = self.task_registry.get(envelope.task_type)
+        enqueue_result = await self.task_repository.enqueue_once(
+            envelope,
+            queue=registered.spec.queue,
+            max_attempts=self.max_attempts,
+        )
+        return _task_result_from_run(
+            enqueue_result.task_run,
+            queue=registered.spec.queue,
+            idempotency=enqueue_result.outcome,
+            provider="database-queue",
+        )
+
+    async def run_next(
+        self,
+        *,
+        queue: str,
+        tenant_status: TenantStatus = "active",
+        now: datetime | None = None,
+    ) -> TaskResult | None:
+        task_run = await self.task_repository.claim_next_pending(queue=queue, now=now)
+        if task_run is None:
+            return None
+        return await self.run_task_run(
+            task_run,
+            tenant_status=tenant_status,
+            now=now,
+        )
+
+    async def run_task_run(
+        self,
+        task_run: TaskRun,
+        *,
+        tenant_status: TenantStatus = "active",
+        now: datetime | None = None,
+    ) -> TaskResult:
+        assert_tenant_operation_allowed(
+            tenant_id=task_run.tenant_id,
+            status=tenant_status,
+            operation="task",
+        )
+        registered = self.task_registry.get(task_run.task_type)
+        if task_run.status == "pending":
+            await self.task_repository.start_pending(task_run, now=now)
+        elif task_run.status in {"succeeded", "dead_letter"}:
+            return _task_result_from_run(
+                task_run,
+                queue=registered.spec.queue,
+                idempotency="replayed",
+                provider="database-queue",
+            )
+        elif task_run.status != "running":
+            raise ValueError(f"Database queue cannot run task status {task_run.status!r}")
+        envelope = self.task_repository.to_envelope(task_run)
+        return await self._execute(
+            envelope,
+            handler=registered.handler,
+            queue=registered.spec.queue,
+            task_run=task_run,
+            now=now,
+        )
+
+    async def _execute(
+        self,
+        envelope: TaskEnvelope,
+        *,
+        handler: TaskHandler,
+        queue: str,
+        task_run: TaskRun,
+        now: datetime | None,
+    ) -> TaskResult:
+        try:
+            with use_background_context(
+                task_background_context(
+                    task_id=envelope.task_id,
+                    task_type=envelope.task_type,
+                    tenant_id=envelope.tenant_id,
+                    request_id=envelope.request_id,
+                    trace_id=envelope.trace_id,
+                )
+            ):
+                result = handler(envelope)
+                if inspect.isawaitable(result):
+                    result = await result
+        except Exception as exc:
+            error_message = f"{type(exc).__name__}: {exc}"
+            await self.task_repository.mark_retry_pending(
+                task_run,
+                error_message=error_message,
+                retry_backoff_seconds=self.retry_backoff_seconds,
+                now=now,
+            )
+            return TaskResult(
+                task_id=envelope.task_id,
+                task_type=envelope.task_type,
+                status=_task_status(task_run.status),
+                error_message=error_message,
+                metadata={"provider": "database-queue", "queue": queue},
+            )
+        await self.task_repository.mark_succeeded(
+            task_run,
+            result_payload=result,
+            now=now,
+        )
+        return TaskResult(
+            task_id=envelope.task_id,
+            task_type=envelope.task_type,
+            status="succeeded",
+            result_payload=result,
+            metadata={"provider": "database-queue", "queue": queue},
+        )
+
+
 def _task_result_from_run(
     task_run: TaskRun,
     *,
     queue: str,
     idempotency: str,
+    provider: str = "sync",
 ) -> TaskResult:
     return TaskResult(
         task_id=task_run.id,
@@ -201,7 +341,7 @@ def _task_result_from_run(
         status=_task_status(task_run.status),
         result_payload=task_run.result_payload,
         error_message=task_run.error_message,
-        metadata={"provider": "sync", "queue": queue, "idempotency": idempotency},
+        metadata={"provider": provider, "queue": queue, "idempotency": idempotency},
     )
 
 

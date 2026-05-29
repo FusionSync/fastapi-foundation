@@ -17,7 +17,14 @@ from core.context import (
 )
 from core.db import unit_of_work
 from core.exceptions import AppError
-from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskRun, TaskRunRepository
+from core.tasks import (
+    DatabaseQueueTaskProvider,
+    SyncTaskProvider,
+    TaskEnvelope,
+    TaskRegistry,
+    TaskRun,
+    TaskRunRepository,
+)
 
 
 @pytest.fixture
@@ -355,6 +362,179 @@ async def test_sync_task_provider_rejects_idempotency_key_payload_conflict(
 
     assert exc_info.value.code == "TASK_IDEMPOTENCY_KEY_CONFLICT"
     assert await _task_run_count(session_factory) == 1
+
+
+@pytest.mark.asyncio
+async def test_database_queue_task_provider_enqueues_without_executing_until_worker_claims(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    calls: list[str] = []
+
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        calls.append(envelope.task_id)
+        return {"value": str(envelope.payload["value"])}
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        result = await DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).submit(
+            TaskEnvelope(
+                task_id="task-queued-1",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "queued"},
+                idempotency_key="example.refresh:tenant-a:queued",
+                request_id="req-queued",
+            )
+        )
+
+    queued = await _task_run(session_factory, "task-queued-1")
+    assert result.ok is True
+    assert result.status == "pending"
+    assert result.metadata == {
+        "provider": "database-queue",
+        "queue": "default",
+        "idempotency": "started",
+    }
+    assert queued.status == "pending"
+    assert queued.attempt_count == 0
+    assert queued.started_at is None
+    assert calls == []
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        worker_result = await DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+        ).run_next(queue="default")
+
+    finished = await _task_run(session_factory, "task-queued-1")
+    assert worker_result is not None
+    assert worker_result.status == "succeeded"
+    assert finished.status == "succeeded"
+    assert finished.attempt_count == 1
+    assert finished.result_payload == {"value": "queued"}
+    assert calls == ["task-queued-1"]
+
+
+@pytest.mark.asyncio
+async def test_database_queue_task_provider_retries_failed_task_after_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+    calls: list[str] = []
+
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        calls.append(envelope.task_id)
+        if len(calls) == 1:
+            raise RuntimeError("temporary outage")
+        return {"value": "recovered"}
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        provider = DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+            retry_backoff_seconds=30,
+        )
+        await provider.submit(
+            TaskEnvelope(
+                task_id="task-backoff-1",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "retry"},
+                idempotency_key="example.refresh:tenant-a:backoff",
+                request_id="req-backoff",
+            )
+        )
+        failed_result = await provider.run_next(queue="default", now=now)
+
+    failed_run = await _task_run(session_factory, "task-backoff-1")
+    assert failed_result is not None
+    assert failed_result.ok is False
+    assert failed_result.status == "pending"
+    assert failed_run.status == "pending"
+    assert failed_run.attempt_count == 1
+    assert failed_run.error_message == "RuntimeError: temporary outage"
+    assert failed_run.next_retry_at == (now + timedelta(seconds=30)).replace(tzinfo=None)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        early_result = await DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+            retry_backoff_seconds=30,
+        ).run_next(queue="default", now=now + timedelta(seconds=29))
+
+    assert early_result is None
+    assert calls == ["task-backoff-1"]
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        retry_result = await DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+            retry_backoff_seconds=30,
+        ).run_next(queue="default", now=now + timedelta(seconds=31))
+
+    retried_run = await _task_run(session_factory, "task-backoff-1")
+    assert retry_result is not None
+    assert retry_result.status == "succeeded"
+    assert retried_run.status == "succeeded"
+    assert retried_run.attempt_count == 2
+    assert retried_run.next_retry_at is None
+    assert retried_run.result_payload == {"value": "recovered"}
+    assert calls == ["task-backoff-1", "task-backoff-1"]
+
+
+@pytest.mark.asyncio
+async def test_database_queue_task_provider_dead_letters_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        raise RuntimeError(f"still down {envelope.task_id}")
+
+    task_registry = _task_registry(monkeypatch, refresh=refresh)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        provider = DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=TaskRunRepository(uow.session),
+            max_attempts=2,
+            retry_backoff_seconds=0,
+        )
+        await provider.submit(
+            TaskEnvelope(
+                task_id="task-dead-letter-1",
+                task_type="example.refresh",
+                tenant_id="tenant-a",
+                payload={"value": "dead-letter"},
+                idempotency_key="example.refresh:tenant-a:dead-letter",
+                request_id="req-dead-letter",
+            )
+        )
+        first_result = await provider.run_next(queue="default")
+        second_result = await provider.run_next(queue="default")
+
+    task_run = await _task_run(session_factory, "task-dead-letter-1")
+    assert first_result is not None
+    assert first_result.status == "pending"
+    assert second_result is not None
+    assert second_result.status == "dead_letter"
+    assert task_run.status == "dead_letter"
+    assert task_run.attempt_count == 2
+    assert task_run.next_retry_at is None
+    assert task_run.error_message == "RuntimeError: still down task-dead-letter-1"
 
 
 @pytest.mark.asyncio

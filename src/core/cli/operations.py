@@ -19,7 +19,7 @@ from core.cli.common import (
     installed_apps,
     print_payload,
 )
-from core.config import get_settings
+from core.config import Settings, get_settings
 from core.db import unit_of_work
 from core.locks import MemoryLockProvider
 from core.operations import (
@@ -39,7 +39,13 @@ from core.scheduler import (
     ScheduleTriggerRequest,
     run_scheduler_loop,
 )
-from core.tasks import SyncTaskProvider, TaskRegistry, TaskRunRepository, run_task_worker_loop
+from core.tasks import (
+    DatabaseQueueTaskProvider,
+    SyncTaskProvider,
+    TaskRegistry,
+    TaskRunRepository,
+    run_task_worker_loop,
+)
 
 _PROFILES = ["local", "private", "cloud"]
 _ARTIFACT_TARGETS = ["docker-compose", "systemd", "helm-values"]
@@ -95,6 +101,9 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--database-url")
             role_parser.add_argument("--installed-app", action="append", default=[])
             role_parser.add_argument("--queue", default="default")
+            role_parser.add_argument("--provider", choices=["sync", "database"])
+            role_parser.add_argument("--max-attempts", type=int)
+            role_parser.add_argument("--retry-backoff-seconds", type=int)
             role_parser.add_argument("--tenant-status", default="active")
             role_parser.add_argument("--instance-id")
             role_parser.add_argument("--max-iterations", type=int)
@@ -258,6 +267,11 @@ def _handle_worker_run_once(args: argparse.Namespace) -> int:
                 database_url=_database_url(args.database_url),
                 app_modules=installed_apps(args.installed_app),
                 queue=args.queue,
+                provider=_task_queue_provider(args.provider),
+                max_attempts=_task_queue_max_attempts(args.max_attempts),
+                retry_backoff_seconds=_task_queue_retry_backoff_seconds(
+                    args.retry_backoff_seconds
+                ),
                 tenant_status=args.tenant_status,
             )
         )
@@ -284,6 +298,11 @@ def _handle_worker_run(args: argparse.Namespace) -> int:
                 module_paths=installed_apps(args.installed_app),
                 queue=args.queue,
                 tenant_status=args.tenant_status,
+                provider=_task_queue_provider(args.provider),
+                max_attempts=_task_queue_max_attempts(args.max_attempts),
+                retry_backoff_seconds=_task_queue_retry_backoff_seconds(
+                    args.retry_backoff_seconds
+                ),
                 instance_id=args.instance_id,
                 max_iterations=args.max_iterations,
                 idle_sleep_seconds=args.idle_sleep_seconds,
@@ -464,6 +483,9 @@ async def _run_worker_once(
     database_url: str,
     app_modules: list[str],
     queue: str,
+    provider: str,
+    max_attempts: int,
+    retry_backoff_seconds: int,
     tenant_status: str,
 ) -> dict[str, object]:
     app_registry = AppRegistry(
@@ -486,18 +508,32 @@ async def _run_worker_once(
                     command="worker",
                     exit_code=1,
                     role="worker",
-                )
-            repository = TaskRunRepository(uow.session)
-            task_run = await repository.claim_next_pending(queue=queue)
-            if task_run is None:
-                return {"ok": True, "claimed": 0, "queue": queue, "task_result": None}
-            result = await SyncTaskProvider(
-                task_registry,
-                task_repository=repository,
-            ).run_task_run(
-                task_run,
-                tenant_status=tenant_status,  # type: ignore[arg-type]
             )
+            repository = TaskRunRepository(uow.session)
+            if provider == "database":
+                result = await DatabaseQueueTaskProvider(
+                    task_registry,
+                    task_repository=repository,
+                    max_attempts=max_attempts,
+                    retry_backoff_seconds=retry_backoff_seconds,
+                ).run_next(
+                    queue=queue,
+                    tenant_status=tenant_status,  # type: ignore[arg-type]
+                )
+            else:
+                task_run = await repository.claim_next_pending(queue=queue)
+                result = None
+                if task_run is not None:
+                    result = await SyncTaskProvider(
+                        task_registry,
+                        task_repository=repository,
+                        max_attempts=max_attempts,
+                    ).run_task_run(
+                        task_run,
+                        tenant_status=tenant_status,  # type: ignore[arg-type]
+                    )
+            if result is None:
+                return {"ok": True, "claimed": 0, "queue": queue, "task_result": None}
             return {
                 "ok": result.ok,
                 "claimed": 1,
@@ -520,10 +556,11 @@ async def _run_scheduler_once(
     tenant_status: str,
     lock_ttl_seconds: int,
 ) -> dict[str, object]:
+    settings = get_settings()
     app_registry = AppRegistry(
         app_modules,
         runtime_capabilities=resolve_runtime_capabilities(
-            get_settings(),
+            settings,
             database_url=database_url,
             service_role="scheduler",
         ),
@@ -548,9 +585,10 @@ async def _run_scheduler_once(
             provider = LockedScheduleProvider(
                 provider=ManualScheduleProvider(
                     schedule_registry=schedule_registry,
-                    task_provider=SyncTaskProvider(
-                        task_registry,
-                        task_repository=TaskRunRepository(uow.session),
+                    task_provider=_scheduler_task_provider(
+                        settings=settings,
+                        task_registry=task_registry,
+                        repository=TaskRunRepository(uow.session),
                     ),
                     trigger_repository=ScheduleTriggerRepository(uow.session),
                 ),
@@ -574,6 +612,38 @@ async def _run_scheduler_once(
 
 def _database_url(value: str | None) -> str:
     return value or get_settings().database.url
+
+
+def _task_queue_provider(value: str | None) -> str:
+    return value or get_settings().task_queue.provider
+
+
+def _task_queue_max_attempts(value: int | None) -> int:
+    return value or get_settings().task_queue.max_attempts
+
+
+def _task_queue_retry_backoff_seconds(value: int | None) -> int:
+    return value if value is not None else get_settings().task_queue.retry_backoff_seconds
+
+
+def _scheduler_task_provider(
+    *,
+    settings: Settings,
+    task_registry: TaskRegistry,
+    repository: TaskRunRepository,
+) -> SyncTaskProvider | DatabaseQueueTaskProvider:
+    if settings.task_queue.provider == "database":
+        return DatabaseQueueTaskProvider(
+            task_registry,
+            task_repository=repository,
+            max_attempts=settings.task_queue.max_attempts,
+            retry_backoff_seconds=settings.task_queue.retry_backoff_seconds,
+        )
+    return SyncTaskProvider(
+        task_registry,
+        task_repository=repository,
+        max_attempts=settings.task_queue.max_attempts,
+    )
 
 
 def _runtime_settings(

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +88,49 @@ class TaskRunRepository:
             return TaskStartResult(outcome=outcome, task_run=existing)
         return TaskStartResult(outcome="started", task_run=task_run)
 
+    async def enqueue_once(
+        self,
+        envelope: TaskEnvelope,
+        *,
+        queue: str,
+        max_attempts: int = 3,
+    ) -> TaskStartResult:
+        task_run = TaskRun(
+            id=envelope.task_id,
+            tenant_id=envelope.tenant_id,
+            task_type=envelope.task_type,
+            idempotency_key=envelope.idempotency_key,
+            status="pending",
+            progress=0,
+            input_payload=envelope.payload,
+            queue=queue,
+            attempt_count=0,
+            max_attempts=max_attempts,
+            request_id=envelope.request_id,
+            trace_id=envelope.trace_id,
+        )
+        try:
+            async with self.session.begin_nested():
+                self.session.add(task_run)
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self._get_by_idempotency_key(
+                tenant_id=envelope.tenant_id,
+                idempotency_key=envelope.idempotency_key,
+            )
+            if existing is None:
+                raise AppError(
+                    "CONFLICT",
+                    "Task idempotency enqueue raced but no task run was found",
+                    status_code=409,
+                ) from None
+            self._assert_same_idempotent_request(existing, envelope)
+            outcome: TaskStartOutcome = (
+                "in_progress" if existing.status in {"pending", "running"} else "replayed"
+            )
+            return TaskStartResult(outcome=outcome, task_run=existing)
+        return TaskStartResult(outcome="started", task_run=task_run)
+
     async def get(self, task_id: str) -> TaskRun | None:
         return await self.session.get(TaskRun, task_id)
 
@@ -97,9 +140,16 @@ class TaskRunRepository:
         queue: str | None = None,
         now: datetime | None = None,
     ) -> TaskRun | None:
+        resolved_now = now or datetime.now(UTC)
         statement = (
             select(TaskRun)
             .where(TaskRun.status == "pending")
+            .where(
+                or_(
+                    TaskRun.next_retry_at.is_(None),
+                    TaskRun.next_retry_at <= resolved_now,
+                )
+            )
             .order_by(TaskRun.created_at.asc(), TaskRun.id.asc())
             .limit(1)
         )
@@ -124,12 +174,14 @@ class TaskRunRepository:
                 "Only pending task runs can be claimed by a worker",
                 status_code=409,
             )
+        resolved_now = now or datetime.now(UTC)
         task_run.status = "running"
         task_run.progress = 0
         task_run.attempt_count += 1
         task_run.result_payload = None
         task_run.error_message = None
-        task_run.started_at = now or datetime.now(UTC)
+        task_run.next_retry_at = None
+        task_run.started_at = resolved_now
         task_run.finished_at = None
         await self.session.flush()
 
@@ -204,6 +256,7 @@ class TaskRunRepository:
         task_run.attempt_count += 1
         task_run.result_payload = None
         task_run.error_message = None
+        task_run.next_retry_at = None
         task_run.started_at = now or datetime.now(UTC)
         task_run.finished_at = None
         await self.session.flush()
@@ -219,6 +272,7 @@ class TaskRunRepository:
         task_run.progress = 100
         task_run.result_payload = result_payload
         task_run.error_message = None
+        task_run.next_retry_at = None
         task_run.finished_at = now or datetime.now(UTC)
         await self.session.flush()
 
@@ -233,7 +287,31 @@ class TaskRunRepository:
             "dead_letter" if task_run.attempt_count >= task_run.max_attempts else "failed"
         )
         task_run.error_message = error_message
+        task_run.next_retry_at = None
         task_run.finished_at = now or datetime.now(UTC)
+        await self.session.flush()
+
+    async def mark_retry_pending(
+        self,
+        task_run: TaskRun,
+        *,
+        error_message: str,
+        retry_backoff_seconds: int,
+        now: datetime | None = None,
+    ) -> None:
+        resolved_now = now or datetime.now(UTC)
+        task_run.progress = 0
+        task_run.result_payload = None
+        task_run.error_message = error_message
+        task_run.finished_at = resolved_now
+        if task_run.attempt_count >= task_run.max_attempts:
+            task_run.status = "dead_letter"
+            task_run.next_retry_at = None
+        else:
+            task_run.status = "pending"
+            task_run.next_retry_at = resolved_now + timedelta(
+                seconds=max(0, retry_backoff_seconds)
+            )
         await self.session.flush()
 
     def to_envelope(self, task_run: TaskRun) -> TaskEnvelope:
