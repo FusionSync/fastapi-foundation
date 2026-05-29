@@ -66,6 +66,8 @@ class RoleGrantService:
                 "actor_id": actor_id,
                 "request_id": request_id,
                 "grant_id": grant.id,
+                "subject_type": subject_type,
+                "subject_id": subject_id,
             },
         )
         if self.audit is not None:
@@ -115,6 +117,8 @@ class RoleGrantService:
                 "actor_id": actor_id,
                 "request_id": request_id,
                 "grant_id": grant.id,
+                "subject_type": grant.subject_type,
+                "subject_id": grant.subject_id,
                 "change_type": "revoked",
             },
         )

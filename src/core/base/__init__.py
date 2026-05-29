@@ -1,4 +1,3 @@
-from core.base.repositories import BaseRepository, CrossTenantRepository, TenantScopedRepository
 from core.base.routers import (
     RequestSecurityResolver,
     RouteAuthorizer,
@@ -16,6 +15,12 @@ from core.base.schemas import (
     UpdateSchema,
 )
 from core.base.services import BaseService
+
+_REPOSITORY_EXPORTS = {
+    "BaseRepository",
+    "CrossTenantRepository",
+    "TenantScopedRepository",
+}
 
 __all__ = [
     "BaseSchema",
@@ -35,3 +40,20 @@ __all__ = [
     "get_router_security_policy",
     "parse_route_permission",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in _REPOSITORY_EXPORTS:
+        from core.base.repositories import (
+            BaseRepository,
+            CrossTenantRepository,
+            TenantScopedRepository,
+        )
+
+        exports = {
+            "BaseRepository": BaseRepository,
+            "CrossTenantRepository": CrossTenantRepository,
+            "TenantScopedRepository": TenantScopedRepository,
+        }
+        return exports[name]
+    raise AttributeError(f"module 'core.base' has no attribute {name!r}")

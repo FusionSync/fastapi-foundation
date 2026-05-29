@@ -8,6 +8,7 @@ from core.cache import (
     permission_subject_cache_key,
     register_cache_invalidation_handlers,
     tenant_lifecycle_cache_key,
+    tenant_membership_cache_key,
     tenant_settings_cache_key,
 )
 from core.events import EventEnvelope, EventRegistry
@@ -90,6 +91,50 @@ async def test_tenant_lifecycle_event_invalidates_tenant_and_permission_cache_ke
     assert await cache.get_json(tenant_settings_cache_key("tenant-a")) is None
     assert await cache.get(tenant_lifecycle_cache_key("tenant-a")) is None
     assert await cache.get(permission_cache_key("tenant-a")) is None
+
+
+@pytest.mark.asyncio
+async def test_tenant_member_event_invalidates_membership_and_permission_subject_keys() -> None:
+    cache = MemoryCacheProvider()
+    await cache.set(
+        tenant_membership_cache_key("tenant-a", "user-1"),
+        "active",
+        permanent=True,
+    )
+    await cache.set(
+        permission_subject_cache_key("tenant-a", "user", "user-1"),
+        "subject-policy",
+        permanent=True,
+    )
+    await cache.set(permission_cache_key("tenant-a"), "tenant-policy", permanent=True)
+
+    result = await CacheInvalidationHandler(cache).handle(
+        EventEnvelope(
+            event_id="event-3",
+            event_type="tenant.member_activated",
+            event_version=1,
+            tenant_id="tenant-a",
+            aggregate_type="tenant_member",
+            aggregate_id="member-1",
+            payload={
+                "tenant_id": "tenant-a",
+                "actor_id": "owner-1",
+                "request_id": "req-3",
+                "member_id": "member-1",
+                "user_id": "user-1",
+                "status": "active",
+            },
+        )
+    )
+
+    assert result.deleted_keys == (
+        permission_cache_key("tenant-a"),
+        tenant_membership_cache_key("tenant-a", "user-1"),
+        permission_subject_cache_key("tenant-a", "user", "user-1"),
+    )
+    assert await cache.get(permission_cache_key("tenant-a")) is None
+    assert await cache.get(tenant_membership_cache_key("tenant-a", "user-1")) is None
+    assert await cache.get(permission_subject_cache_key("tenant-a", "user", "user-1")) is None
 
 
 @pytest.mark.asyncio

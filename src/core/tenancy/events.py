@@ -11,6 +11,7 @@ TENANT_REACTIVATED_EVENT = "tenant.reactivated"
 TENANT_DELETING_EVENT = "tenant.deleting"
 TENANT_ARCHIVED_EVENT = "tenant.archived"
 TENANT_DELETED_EVENT = "tenant.deleted"
+TENANT_MEMBER_ACTIVATED_EVENT = "tenant.member_activated"
 
 TENANT_LIFECYCLE_EVENTS = (
     TENANT_CREATED_EVENT,
@@ -20,6 +21,7 @@ TENANT_LIFECYCLE_EVENTS = (
     TENANT_ARCHIVED_EVENT,
     TENANT_DELETED_EVENT,
 )
+TENANT_MEMBERSHIP_EVENTS = (TENANT_MEMBER_ACTIVATED_EVENT,)
 
 
 async def publish_tenant_lifecycle_event(
@@ -42,5 +44,34 @@ async def publish_tenant_lifecycle_event(
             "request_id": request_id,
             "status": tenant.status,
             **dict(extra),
+        },
+    )
+
+
+async def publish_tenant_membership_event(
+    publisher: EventPublisher,
+    event_type: str,
+    *,
+    tenant_id: str,
+    user_id: str,
+    member_id: str,
+    status: str,
+    actor_id: str,
+    request_id: str,
+    extra: Mapping[str, str] | None = None,
+) -> None:
+    await publisher.publish(
+        event_type=event_type,
+        aggregate_type="tenant_member",
+        aggregate_id=member_id,
+        tenant_id=tenant_id,
+        payload={
+            "tenant_id": tenant_id,
+            "actor_id": actor_id,
+            "request_id": request_id,
+            "member_id": member_id,
+            "user_id": user_id,
+            "status": status,
+            **dict(extra or {}),
         },
     )

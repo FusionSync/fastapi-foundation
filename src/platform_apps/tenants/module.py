@@ -1,4 +1,5 @@
 from core.apps import AppModule, EventSchemaSpec, MigrationSpec
+from core.tenancy import TENANT_MEMBER_ACTIVATED_EVENT
 from platform_apps.tenants.permissions import PERMISSIONS
 from platform_apps.tenants.router import router
 from platform_apps.tenants.services import (
@@ -38,6 +39,16 @@ module = AppModule(
             event_version=1,
             required_payload_fields=["invitation_id"],
             field_types={"invitation_id": "str"},
+        ),
+        EventSchemaSpec(
+            event_type=TENANT_MEMBER_ACTIVATED_EVENT,
+            event_version=1,
+            required_payload_fields=["member_id", "user_id", "status"],
+            field_types={
+                "member_id": "str",
+                "user_id": "str",
+                "status": "str",
+            },
         ),
     ],
     public_api=["platform_apps.tenants.public_api"],

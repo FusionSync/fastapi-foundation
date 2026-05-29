@@ -6,6 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.base.models import BaseModel
+from core.cache import (
+    CacheInvalidationHandler,
+    MemoryCacheProvider,
+    permission_subject_cache_key,
+    register_cache_invalidation_handlers,
+    tenant_membership_cache_key,
+)
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
 from core.exceptions import AppError
@@ -18,7 +25,7 @@ from core.permissions import (
     RoleGrant,
     RoleTemplate,
 )
-from core.tenancy import Tenant, TenantMember
+from core.tenancy import TENANT_MEMBER_ACTIVATED_EVENT, Tenant, TenantMember
 from platform_apps import tenants as tenants_app
 
 TENANT_INVITATION_ACCEPTED_EVENT = "tenant.invitation_accepted"
@@ -111,9 +118,103 @@ async def test_invitation_acceptance_creates_member_role_grant_and_projection(
     assert [(policy.subject, policy.resource, policy.action) for policy in policies] == [
         ("user:user-2", "example", "read")
     ]
-    assert stats.published == 3
+    assert stats.published == 4
     assert [event.event_type for event in events] == [
         TENANT_INVITATION_ISSUED_EVENT,
+        TENANT_MEMBER_ACTIVATED_EVENT,
+        ROLE_GRANT_CHANGED_EVENT,
+        TENANT_INVITATION_ACCEPTED_EVENT,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_invitation_acceptance_invalidates_membership_and_permission_cache(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    cache = MemoryCacheProvider()
+    await cache.set(
+        tenant_membership_cache_key("tenant-a", "user-2"),
+        "stale-membership",
+        permanent=True,
+    )
+    await cache.set(
+        permission_subject_cache_key("tenant-a", "user", "user-2"),
+        "stale-user-policy",
+        permanent=True,
+    )
+    token: str
+    event_registry = _invitation_event_registry()
+    register_cache_invalidation_handlers(
+        event_registry,
+        CacheInvalidationHandler(cache),
+    )
+    dispatch_session: AsyncSession | None = None
+
+    async def handle_role_grant_changed(envelope: EventEnvelope) -> None:
+        assert dispatch_session is not None
+        await PolicyProjector(dispatch_session).handle_role_grant_changed(envelope)
+
+    event_registry.register(
+        ROLE_GRANT_CHANGED_EVENT,
+        1,
+        handle_role_grant_changed,
+        handler_key="test.permission-projector",
+    )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(_tenant())
+        uow.session.add(_viewer_template())
+        issued = await tenants_app.TenantInvitationService(
+            uow.session,
+            _event_publisher(uow.session, event_registry),
+        ).issue_invitation(
+            tenant_id="tenant-a",
+            email="New.User@Example.com",
+            role_template_id="template-viewer",
+            actor_id="owner-1",
+            request_id="req_invite",
+            expires_at=datetime.now(UTC) + timedelta(days=7),
+            authorization_decision=_invitation_decision(action="invite"),
+            role_grant_authorization_decision=_role_grant_decision(),
+        )
+        token = issued.token
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await tenants_app.TenantInvitationService(
+            uow.session,
+            _event_publisher(uow.session, event_registry),
+        ).accept_invitation(
+            token=token,
+            user_id="user-2",
+            email="new.user@example.com",
+            actor_id="user-2",
+            request_id="req_accept",
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        dispatch_session = uow.session
+        stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=event_registry),
+            event_registry,
+            dispatcher_id="tenant-membership-cache-test",
+            batch_size=10,
+        ).dispatch_once()
+        dispatch_session = None
+
+    policies = await _all(session_factory, ProjectedPolicy)
+    events = await _all(session_factory, OutboxEvent)
+    assert stats.published == 4
+    assert await cache.get(tenant_membership_cache_key("tenant-a", "user-2")) is None
+    assert await cache.get(permission_subject_cache_key("tenant-a", "user", "user-2")) is None
+    assert [(policy.subject, policy.resource, policy.action) for policy in policies] == [
+        ("user:user-2", "example", "read")
+    ]
+    assert [event.event_type for event in events] == [
+        TENANT_INVITATION_ISSUED_EVENT,
+        TENANT_MEMBER_ACTIVATED_EVENT,
         ROLE_GRANT_CHANGED_EVENT,
         TENANT_INVITATION_ACCEPTED_EVENT,
     ]
@@ -243,6 +344,7 @@ def _invitation_event_registry() -> EventRegistry:
     registry = EventRegistry()
     registry.register(TENANT_INVITATION_ISSUED_EVENT, 1, lambda event: None)
     registry.register(TENANT_INVITATION_ACCEPTED_EVENT, 1, lambda event: None)
+    registry.register(TENANT_MEMBER_ACTIVATED_EVENT, 1, lambda event: None)
     registry.register(ROLE_GRANT_CHANGED_EVENT, 1, lambda event: None)
     return registry
 

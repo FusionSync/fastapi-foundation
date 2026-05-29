@@ -17,7 +17,14 @@ from core.permissions import (
     assert_authorization_decision,
 )
 from core.permissions.models import RoleTemplate
-from core.tenancy import Tenant, TenantInvitation, TenantLifecycleService, TenantMember
+from core.tenancy import (
+    TENANT_MEMBER_ACTIVATED_EVENT,
+    Tenant,
+    TenantInvitation,
+    TenantLifecycleService,
+    TenantMember,
+    publish_tenant_membership_event,
+)
 
 TENANT_INVITATION_ISSUED_EVENT = "tenant.invitation_issued"
 TENANT_INVITATION_ACCEPTED_EVENT = "tenant.invitation_accepted"
@@ -166,7 +173,12 @@ class TenantInvitationService:
                 status_code=400,
             )
 
-        await self._activate_member(tenant_id=invitation.tenant_id, user_id=user_id)
+        await self._activate_member(
+            tenant_id=invitation.tenant_id,
+            user_id=user_id,
+            actor_id=actor_id,
+            request_id=request_id,
+        )
         if invitation.role_template_id is not None:
             await self._grant_initial_role(
                 invitation=invitation,
@@ -291,19 +303,43 @@ class TenantInvitationService:
         )
         return result.scalars().first()
 
-    async def _activate_member(self, *, tenant_id: str, user_id: str) -> TenantMember:
+    async def _activate_member(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        actor_id: str,
+        request_id: str,
+    ) -> TenantMember:
         result = await self.session.execute(
             select(TenantMember)
             .where(TenantMember.tenant_id == tenant_id)
             .where(TenantMember.user_id == user_id)
         )
         member = result.scalars().first()
+        previous_status: str | None
         if member is None:
+            previous_status = None
             member = TenantMember(tenant_id=tenant_id, user_id=user_id, status="active")
             self.session.add(member)
         else:
+            previous_status = member.status
             member.status = "active"
         await self.session.flush()
+        if previous_status != "active":
+            await publish_tenant_membership_event(
+                self.events,
+                TENANT_MEMBER_ACTIVATED_EVENT,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                member_id=member.id,
+                status=member.status,
+                actor_id=actor_id,
+                request_id=request_id,
+                extra={
+                    "change_type": "created" if previous_status is None else "activated",
+                },
+            )
         return member
 
     async def _grant_initial_role(

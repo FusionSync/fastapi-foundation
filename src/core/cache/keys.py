@@ -23,6 +23,15 @@ def tenant_lifecycle_cache_key(tenant_id: str) -> str:
     return cache_key("tenant", f"tenant_id={tenant_id}", "lifecycle")
 
 
+def tenant_membership_cache_key(tenant_id: str, user_id: str) -> str:
+    return cache_key(
+        "tenant",
+        f"tenant_id={tenant_id}",
+        "membership",
+        f"user_id={user_id}",
+    )
+
+
 def permission_cache_key(tenant_id: str) -> str:
     return cache_key("permission", f"tenant_id={tenant_id}")
 

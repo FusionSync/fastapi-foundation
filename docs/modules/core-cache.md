@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: cache provider 抽象、内存实现、Redis provider、key 约定、权限/租户生命周期/outbox 事件驱动缓存失效规则已落地。
+- Done: cache provider 抽象、内存实现、Redis provider、key 约定、权限/租户生命周期/租户成员/outbox 事件驱动缓存失效规则已落地。
 - Next: _none_
 
 ## 职责
@@ -70,8 +70,8 @@ permission:{tenant_id}
 - `set`、`set_json` 和首次 `incr` 默认必须提供 `ttl_seconds`；只有显式 `permanent=True` 才允许无 TTL。
 - 过期 key 在读取、删除、续期和加计数时惰性清理。
 - `cache_key(namespace, *parts)` 统一生成 `:` 分隔 key，并拒绝空片段和包含 `:` 的片段，避免 key 语义歧义。
-- `tenant_settings_cache_key()`、`tenant_lifecycle_cache_key()`、`permission_cache_key()`、`permission_subject_cache_key()` 和 `permission_role_grant_cache_key()` 提供权限/租户缓存的稳定 key 模板。
-- `CacheInvalidationRule` 描述 event_type/version 到 cache keys 的映射；默认规则覆盖 `permissions.role_grant_changed` 和 `tenant.created/suspended/reactivated/deleting/archived/deleted`。
+- `tenant_settings_cache_key()`、`tenant_lifecycle_cache_key()`、`tenant_membership_cache_key()`、`permission_cache_key()`、`permission_subject_cache_key()` 和 `permission_role_grant_cache_key()` 提供权限/租户缓存的稳定 key 模板。
+- `CacheInvalidationRule` 描述 event_type/version 到 cache keys 的映射；默认规则覆盖 `permissions.role_grant_changed`、`tenant.member_activated` 和 `tenant.created/suspended/reactivated/deleting/archived/deleted`。
 - `CacheInvalidationHandler` 可作为 outbox event handler 注册，收到权限事实或租户生命周期事件后删除匹配 key，并返回 deleted/missing key 结果用于测试和诊断。
 - `register_cache_invalidation_handlers()` 会把默认规则注册进 `EventRegistry`，让 outbox dispatcher 通过同一事件分发链路触发缓存失效。
 - 内存 provider 只用于 local profile、测试和单机版；private/cloud profile 后续必须接 Redis 或等价 provider。

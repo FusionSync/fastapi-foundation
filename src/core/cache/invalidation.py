@@ -9,6 +9,7 @@ from core.cache.keys import (
     permission_role_grant_cache_key,
     permission_subject_cache_key,
     tenant_lifecycle_cache_key,
+    tenant_membership_cache_key,
     tenant_settings_cache_key,
 )
 from core.cache.provider import CacheProvider
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
 CacheKeyResolver = Callable[["EventEnvelope"], Sequence[str]]
 ROLE_GRANT_CHANGED_EVENT = "permissions.role_grant_changed"
+TENANT_MEMBER_ACTIVATED_EVENT = "tenant.member_activated"
 TENANT_LIFECYCLE_EVENTS = (
     "tenant.created",
     "tenant.suspended",
@@ -101,6 +103,12 @@ def default_cache_invalidation_rules() -> tuple[CacheInvalidationRule, ...]:
             keys_for_event=_permission_role_grant_keys,
             reason="permission_facts_changed",
         ),
+        CacheInvalidationRule(
+            event_type=TENANT_MEMBER_ACTIVATED_EVENT,
+            event_version=1,
+            keys_for_event=_tenant_membership_keys,
+            reason="tenant_membership_changed",
+        ),
         *tenant_rules,
     )
 
@@ -138,6 +146,15 @@ def _tenant_lifecycle_keys(envelope: EventEnvelope) -> tuple[str, ...]:
         tenant_lifecycle_cache_key(envelope.tenant_id),
         permission_cache_key(envelope.tenant_id),
     )
+
+
+def _tenant_membership_keys(envelope: EventEnvelope) -> tuple[str, ...]:
+    keys = [permission_cache_key(envelope.tenant_id)]
+    user_id = _payload_str(envelope, "user_id")
+    if user_id is not None:
+        keys.append(tenant_membership_cache_key(envelope.tenant_id, user_id))
+        keys.append(permission_subject_cache_key(envelope.tenant_id, "user", user_id))
+    return tuple(keys)
 
 
 def _payload_str(envelope: EventEnvelope, key: str) -> str | None:

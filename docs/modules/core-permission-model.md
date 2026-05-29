@@ -165,6 +165,7 @@ AuthorizationService
 RoleGrantService
   授予时写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   撤销时删除 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
+  role grant event payload 必须包含 grant_id、subject_type 和 subject_id，供 projector 和缓存失效定位同一授权主体
   撤销时同步删除该 grant 已有 ProjectedPolicy，避免 outbox projector 消费前旧投影继续授权
   撤销时可注入 PermissionCache，在同步删除旧投影后立即失效授权缓存
   授予和撤销都必须传入允许的 AuthorizationDecision，且 actor_id 必须与 decision.user_id 一致

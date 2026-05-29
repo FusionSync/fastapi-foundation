@@ -11,6 +11,7 @@ from core.cache.keys import (
     permission_role_grant_cache_key,
     permission_subject_cache_key,
     tenant_lifecycle_cache_key,
+    tenant_membership_cache_key,
     tenant_settings_cache_key,
 )
 from core.cache.memory import MemoryCacheProvider
@@ -32,5 +33,6 @@ __all__ = [
     "permission_subject_cache_key",
     "register_cache_invalidation_handlers",
     "tenant_lifecycle_cache_key",
+    "tenant_membership_cache_key",
     "tenant_settings_cache_key",
 ]
