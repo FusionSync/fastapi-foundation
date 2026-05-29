@@ -38,6 +38,7 @@ from core.scheduler import (
     ScheduleTriggerRepository,
     ScheduleTriggerRequest,
     run_scheduler_loop,
+    wrap_external_scheduler_provider,
 )
 from core.tasks import (
     DatabaseQueueTaskProvider,
@@ -121,6 +122,10 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--now")
             role_parser.add_argument("--payload-json", default="{}")
             role_parser.add_argument("--tenant-status", default="active")
+            role_parser.add_argument(
+                "--provider",
+                choices=["local", "apscheduler", "celery_beat"],
+            )
             role_parser.add_argument("--instance-id")
             role_parser.add_argument("--max-iterations", type=int)
             role_parser.add_argument("--idle-sleep-seconds", type=float)
@@ -348,6 +353,7 @@ def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
                 payload=_parse_payload_json(args.payload_json),
                 tenant_status=args.tenant_status,
                 lock_ttl_seconds=_scheduler_lock_ttl_seconds(args.lock_ttl_seconds),
+                provider=_scheduler_provider(args.provider),
             )
         )
     except Exception as exc:
@@ -386,6 +392,7 @@ def _handle_scheduler_run(args: argparse.Namespace) -> int:
                 tenant_id=args.tenant_id,
                 tenant_status=args.tenant_status,
                 request_id_prefix=args.request_id_prefix,
+                provider=_scheduler_provider(args.provider),
                 payload=_parse_payload_json(args.payload_json),
                 now=_parse_datetime(args.now),
                 instance_id=args.instance_id,
@@ -555,6 +562,7 @@ async def _run_scheduler_once(
     payload: dict[str, object],
     tenant_status: str,
     lock_ttl_seconds: int,
+    provider: str | None = None,
 ) -> dict[str, object]:
     settings = get_settings()
     app_registry = AppRegistry(
@@ -582,7 +590,7 @@ async def _run_scheduler_once(
                     exit_code=1,
                     role="scheduler",
                 )
-            provider = LockedScheduleProvider(
+            trigger_provider = LockedScheduleProvider(
                 provider=ManualScheduleProvider(
                     schedule_registry=schedule_registry,
                     task_provider=_scheduler_task_provider(
@@ -595,7 +603,12 @@ async def _run_scheduler_once(
                 lock_provider=MemoryLockProvider(),
                 lock_ttl_seconds=lock_ttl_seconds,
             )
-            result = await provider.trigger(
+            trigger_provider = wrap_external_scheduler_provider(
+                provider=_scheduler_provider(provider),
+                schedule_registry=schedule_registry,
+                trigger_provider=trigger_provider,
+            )
+            result = await trigger_provider.trigger(
                 ScheduleTriggerRequest(
                     schedule_id=schedule_id,
                     tenant_id=tenant_id,
@@ -632,6 +645,10 @@ def _scheduler_idle_sleep_seconds(value: float | None) -> float:
 
 def _scheduler_lock_ttl_seconds(value: int | None) -> int:
     return value if value is not None else get_settings().scheduler.lock_ttl_seconds
+
+
+def _scheduler_provider(value: str | None) -> str:
+    return value or get_settings().scheduler.provider
 
 
 def _scheduler_task_provider(

@@ -1,5 +1,12 @@
+from core.scheduler.external import (
+    APSchedulerScheduleProvider,
+    CeleryBeatScheduleProvider,
+    ExternalScheduleJob,
+    wrap_external_scheduler_provider,
+)
 from core.scheduler.models import ScheduleState, ScheduleTriggerLog
 from core.scheduler.provider import (
+    AuditedScheduleProvider,
     LockedScheduleProvider,
     ManualScheduleProvider,
     ScheduleTriggerProvider,
@@ -18,6 +25,10 @@ from core.scheduler.repository import (
 from core.scheduler.runtime import SchedulerRunResult, run_scheduler_loop
 
 __all__ = [
+    "APSchedulerScheduleProvider",
+    "AuditedScheduleProvider",
+    "CeleryBeatScheduleProvider",
+    "ExternalScheduleJob",
     "ManualScheduleProvider",
     "RegisteredSchedule",
     "SchedulerRunResult",
@@ -34,5 +45,6 @@ __all__ = [
     "ScheduleTriggerResult",
     "LockedScheduleProvider",
     "TaskSubmitter",
+    "wrap_external_scheduler_provider",
     "run_scheduler_loop",
 ]

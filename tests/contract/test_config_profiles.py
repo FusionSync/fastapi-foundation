@@ -20,6 +20,7 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
     assert payload["env"]["TASK_QUEUE__MAX_ATTEMPTS"] == "3"
     assert payload["env"]["TASK_QUEUE__RETRY_BACKOFF_SECONDS"] == "30"
     assert payload["env"]["TASK_QUEUE__IDLE_SLEEP_SECONDS"] == "1.0"
+    assert payload["env"]["SCHEDULER__PROVIDER"] == "local"
     assert payload["env"]["SCHEDULER__IDLE_SLEEP_SECONDS"] == "1.0"
     assert payload["env"]["SCHEDULER__LOCK_TTL_SECONDS"] == "60"
     assert payload["env"]["TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD"] == "false"
@@ -53,6 +54,7 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
         in payload["processes"]["worker"]["command"]
     )
     assert "--instance-id ${INSTANCE_ID}" in payload["processes"]["scheduler"]["command"]
+    assert "--provider ${SCHEDULER__PROVIDER}" in payload["processes"]["scheduler"]["command"]
     assert (
         "--idle-sleep-seconds ${SCHEDULER__IDLE_SLEEP_SECONDS}"
         in payload["processes"]["scheduler"]["command"]
@@ -175,6 +177,8 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "--actual",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS=1.0",
             "--actual",
+            "SCHEDULER__PROVIDER=local",
+            "--actual",
             "SCHEDULER__IDLE_SLEEP_SECONDS=1.0",
             "--actual",
             "SCHEDULER__LOCK_TTL_SECONDS=60",
@@ -213,6 +217,7 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "TASK_QUEUE__MAX_ATTEMPTS",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS",
+            "SCHEDULER__PROVIDER",
             "SCHEDULER__IDLE_SLEEP_SECONDS",
             "SCHEDULER__LOCK_TTL_SECONDS",
             "TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD",
@@ -258,6 +263,8 @@ def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS=30",
             "--actual",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS=1.0",
+            "--actual",
+            "SCHEDULER__PROVIDER=local",
             "--actual",
             "SCHEDULER__IDLE_SLEEP_SECONDS=1.0",
             "--actual",
@@ -317,7 +324,7 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
             "labels": {"profile": "private"},
             "annotations": {
                 "summary": "Runtime configuration drift detected for private profile",
-                "missing_count": "16",
+                "missing_count": "17",
                 "mismatched_count": "2",
                 "runbook": "core config drift-check --profile private --json",
             },

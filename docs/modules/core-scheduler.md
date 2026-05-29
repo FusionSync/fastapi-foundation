@@ -3,10 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: schedule registry、provider、trigger log repository、持久 `ScheduleState`、cron misfire policy、锁保护的触发路径、scheduler 背景上下文和 trace_id handoff、`core scheduler --run-once` 和 `core scheduler --run` cron due 本地运行入口、按 profile 选择 Tasks provider 的提交链路、scheduler profile 运行参数已落地。
-- Next:
-  - [ ] 接 APScheduler/Celery Beat provider。
-  - [ ] 将调度任务与 audit gate 和分布式 lock provider 串通。
+- Done: schedule registry、provider、trigger log repository、持久 `ScheduleState`、cron misfire policy、锁保护的触发路径、scheduler 背景上下文和 trace_id handoff、`core scheduler --run-once` 和 `core scheduler --run` cron due 本地运行入口、按 profile 选择 Tasks provider 的提交链路、scheduler profile 运行参数、APScheduler/Celery Beat provider adapter、scheduler audit gate 和分布式 lock provider 串通已落地。
+- Next: _none_
 
 ## 职责
 
@@ -50,8 +48,7 @@ core.tasks provider = sync
 src/core/scheduler/
   provider.py
   registry.py
-  apscheduler.py
-  celery_beat.py
+  external.py
 ```
 
 ## 调度类型
@@ -93,6 +90,9 @@ manual
 - 每个 schedule 的 task_type 必须能在 `TaskRegistry` 中找到。
 - `ManualScheduleProvider` 提供本地/运维触发入口，读取 `ScheduleRegistry`，构造带 `schedule_id + tenant_id + planned_at` 幂等键的 `TaskEnvelope`，再提交给 Tasks provider。
 - `LockedScheduleProvider` 可包装任意 scheduler provider，在触发前获取 `scheduler:trigger:{schedule_id}:{tenant_id}:{planned_at}` 锁，触发完成或失败后释放锁，避免同一实例集内重复触发同一 planned slot。
+- `AuditedScheduleProvider` 可包装任意 scheduler provider，将 `scheduler.triggered` 写入 audit gate；成功记录 task、planned slot、lock key/fencing token，失败记录异常 reason。
+- `APSchedulerScheduleProvider` 读取同一份 `ScheduleRegistry` 导出 APScheduler job specs，并在外部 job 触发时复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult`。
+- `CeleryBeatScheduleProvider` 读取同一份 `ScheduleRegistry` 导出 Celery Beat entry，entry 指向统一 `core.scheduler.trigger` 桥接任务，不直接调用业务 handler。
 - `ScheduleTriggerLog` 保存 `schedule_id`、`tenant_id`、`planned_at`、`triggered_at`、`task_id`、`task_type`、`status`、`request_id` 和错误信息。
 - `ScheduleTriggerRepository.record_result()` 使用 insert-first + 唯一约束记录触发历史；重复 trigger key 返回 `replayed`，不创建第二条历史。
 - `ScheduleState` 持久保存 `schedule_id + tenant_id` 的 `last_planned_at`、`last_triggered_at` 和 `last_checked_at`，避免 scheduler 重启后重复处理同一 cron slot。
@@ -100,7 +100,7 @@ manual
 - scheduler provider 不直接调用业务函数，tenant lifecycle gate 仍由 task provider 执行。
 - scheduler trigger 执行期间会从 `ScheduleTriggerRequest` 注入冻结背景上下文，透传 `request_id`、`trace_id` 和 `tenant_id`，避免继承外层 HTTP/CLI ContextVar。
 - `core scheduler --run-once` 可按 `--installed-app` 加载 `ScheduleRegistry`/`TaskRegistry`，通过当前 profile 选中的 Tasks provider 触发指定 schedule，写入 `TaskRun` 和 `ScheduleTriggerLog`，并输出稳定 JSON。
-- `core scheduler --run` 会扫描 app 注册的 cron schedule definition，按持久 `ScheduleState` 规划 due slot；`--max-iterations` 用于 local/CI 有限轮验证，不传则常驻轮询；同一 `schedule_id + tenant_id + planned_at` slot 跨重启只尝试一次，传 `--instance-id` 时写入 scheduler heartbeat。
-- profile 模板通过 `SCHEDULER__IDLE_SLEEP_SECONDS` 和 `SCHEDULER__LOCK_TTL_SECONDS` 参数化 scheduler loop。
+- `core scheduler --run` 会扫描 app 注册的 cron schedule definition，按持久 `ScheduleState` 规划 due slot；`--provider local|apscheduler|celery_beat` 控制 scheduler provider adapter；`--max-iterations` 用于 local/CI 有限轮验证，不传则常驻轮询；同一 `schedule_id + tenant_id + planned_at` slot 跨重启只尝试一次，传 `--instance-id` 时写入 scheduler heartbeat。
+- profile 模板通过 `SCHEDULER__PROVIDER`、`SCHEDULER__IDLE_SLEEP_SECONDS` 和 `SCHEDULER__LOCK_TTL_SECONDS` 参数化 scheduler loop。
 
-后续 APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。private/cloud 多实例部署时，`LockedScheduleProvider` 必须注入 Redis、数据库 advisory lock 或等价的分布式 `LockProvider`；内存 lock 只适合 local/profile 和测试。
+APScheduler 或 Celery Beat provider 必须读取同一份 `ScheduleRegistry`，复用 `ScheduleTriggerRequest`/`ScheduleTriggerResult` 语义，并把触发结果提交到 Tasks provider，而不是直接调用业务函数。private/cloud 多实例部署时，`LockedScheduleProvider` 必须注入 Redis、数据库 advisory lock 或等价的分布式 `LockProvider`；内存 lock 只适合 local/profile 和测试。

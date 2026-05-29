@@ -54,6 +54,7 @@ SECURITY__CORS_ORIGINS='["https://console.example.com"]'
 STORAGE__PROVIDER=local
 STORAGE__LOCAL_ROOT=./data/files
 TASK_QUEUE__PROVIDER=sync
+SCHEDULER__PROVIDER=local
 SCHEDULER__IDLE_SLEEP_SECONDS=1.0
 TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD=false
 TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ=false
@@ -96,7 +97,7 @@ cloud
 
 模板中的生产密钥通过 `SECURITY__JWT_SECRET_REF` 引用外部 secret，不输出 `SECURITY__JWT_SECRET` 明文。private/cloud 模板默认使用 PostgreSQL URL 占位符、database task queue provider 和标准 HTTP status mode。
 数据库配置支持 `DATABASE__READ_URL` 预留只读连接，`DATABASE__POOL_SIZE` / `DATABASE__MAX_OVERFLOW` 控制 SQLAlchemy pool 参数，`DATABASE__TENANT_FALLBACK_MODE=session_variable` 可启用 PostgreSQL session variable 租户兜底。
-worker 通过 `TASK_QUEUE__PROVIDER`、`TASK_QUEUE__MAX_ATTEMPTS`、`TASK_QUEUE__RETRY_BACKOFF_SECONDS`、`TASK_QUEUE__IDLE_SLEEP_SECONDS` 参数化；scheduler 通过 `SCHEDULER__IDLE_SLEEP_SECONDS` 和 `SCHEDULER__LOCK_TTL_SECONDS` 参数化。tenant lifecycle 策略通过 `TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD`、`TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ` 和 `TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD` 参数化，默认均为 `false`。
+worker 通过 `TASK_QUEUE__PROVIDER`、`TASK_QUEUE__MAX_ATTEMPTS`、`TASK_QUEUE__RETRY_BACKOFF_SECONDS`、`TASK_QUEUE__IDLE_SLEEP_SECONDS` 参数化；scheduler 通过 `SCHEDULER__PROVIDER`、`SCHEDULER__IDLE_SLEEP_SECONDS` 和 `SCHEDULER__LOCK_TTL_SECONDS` 参数化，其中 provider 支持 `local`、`apscheduler` 和 `celery_beat`。tenant lifecycle 策略通过 `TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD`、`TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ` 和 `TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD` 参数化，默认均为 `false`。
 private/cloud 模板的 hardening 清单默认要求生产 ingress 或反向代理启用 CSP、Secure/HttpOnly/SameSite cookie、HSTS 和安全响应头；cloud profile 的 HSTS evidence 额外包含 `preload`。
 `check-config` 会接受生产 profile 的外部 secret reference，但启动期 `create_app()` 仍必须通过 secret provider 解析到真实密钥后才能通过 `validate_startup_settings()`。
 

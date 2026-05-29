@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DeploymentMode = Literal["local", "private", "cloud"]
 ErrorHttpStatusMode = Literal["standard", "always_200"]
 TaskQueueProviderMode = Literal["sync", "database"]
+SchedulerProviderMode = Literal["local", "apscheduler", "celery_beat"]
 DatabaseTenantFallbackMode = Literal["disabled", "session_variable"]
 
 
@@ -55,6 +56,7 @@ class TaskQueueSettings(BaseModel):
 
 
 class SchedulerSettings(BaseModel):
+    provider: SchedulerProviderMode = "local"
     idle_sleep_seconds: float = 1.0
     lock_ttl_seconds: int = 60
 

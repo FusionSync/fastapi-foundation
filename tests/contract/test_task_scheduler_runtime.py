@@ -17,8 +17,11 @@ from core.context import (
 )
 from core.db import unit_of_work
 from core.exceptions import AppError
-from core.locks import MemoryLockProvider
+from core.locks import DatabaseLockProvider, MemoryLockProvider
 from core.scheduler import (
+    APSchedulerScheduleProvider,
+    AuditedScheduleProvider,
+    CeleryBeatScheduleProvider,
     LockedScheduleProvider,
     ManualScheduleProvider,
     ScheduleRegistry,
@@ -27,8 +30,10 @@ from core.scheduler import (
     ScheduleTriggerLog,
     ScheduleTriggerRepository,
     ScheduleTriggerRequest,
+    ScheduleTriggerResult,
 )
 from core.tasks import SyncTaskProvider, TaskEnvelope, TaskRegistry, TaskResult, TaskRunRepository
+from platform_apps.audit import AuditLog, AuditService
 
 
 @pytest.fixture
@@ -583,6 +588,214 @@ async def test_locked_schedule_provider_releases_trigger_lock_after_submit(
     assert await locks.locked(lock_key) is False
 
 
+@pytest.mark.asyncio
+async def test_apscheduler_provider_exports_jobs_and_delegates_trigger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        return {"task_id": envelope.task_id, "value": envelope.payload["value"]}
+
+    _install_handler_module(monkeypatch, refresh=refresh)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1", "minute": "0"},
+                misfire_policy="run_once",
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    provider = APSchedulerScheduleProvider(
+        schedule_registry=schedule_registry,
+        trigger_provider=ManualScheduleProvider(
+            schedule_registry=schedule_registry,
+            task_provider=SyncTaskProvider(task_registry),
+        ),
+    )
+
+    jobs = provider.job_specs(
+        tenant_id="tenant-a",
+        request_id_prefix="scheduler-run",
+        payload={"value": "ok"},
+    )
+    result = await provider.trigger(
+        ScheduleTriggerRequest(
+            schedule_id="example.refresh.daily",
+            tenant_id="tenant-a",
+            request_id="req-apscheduler",
+            planned_at=datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
+            payload={"value": "ok"},
+        )
+    )
+
+    assert [job.to_dict() for job in jobs] == [
+        {
+            "provider": "apscheduler",
+            "schedule_id": "example.refresh.daily",
+            "task_type": "example.refresh",
+            "tenant_id": "tenant-a",
+            "trigger": "cron",
+            "trigger_config": {"hour": "1", "minute": "0"},
+            "misfire_policy": "run_once",
+            "request_id_prefix": "scheduler-run",
+            "payload": {"value": "ok"},
+        }
+    ]
+    assert result.ok is True
+    assert result.metadata["scheduler_provider"] == "apscheduler"
+    assert result.task_result.result_payload == {
+        "task_id": result.task_id,
+        "value": "ok",
+    }
+
+
+def test_celery_beat_provider_exports_entries_without_business_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_handler_module(monkeypatch, refresh=lambda envelope: None)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1", "minute": "0"},
+                misfire_policy="skip",
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    provider = CeleryBeatScheduleProvider(
+        schedule_registry=schedule_registry,
+        trigger_provider=_NoopScheduleTriggerProvider(),
+    )
+
+    entries = provider.beat_schedule(
+        tenant_id="tenant-a",
+        request_id_prefix="scheduler-run",
+        payload={"value": "ok"},
+    )
+
+    assert entries == {
+        "example.refresh.daily": {
+            "task": "core.scheduler.trigger",
+            "schedule": {
+                "trigger": "cron",
+                "trigger_config": {"hour": "1", "minute": "0"},
+            },
+            "kwargs": {
+                "schedule_id": "example.refresh.daily",
+                "tenant_id": "tenant-a",
+                "request_id_prefix": "scheduler-run",
+                "payload": {"value": "ok"},
+                "misfire_policy": "skip",
+            },
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_audited_schedule_provider_records_trigger_with_database_lock(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async def refresh(envelope: TaskEnvelope) -> dict[str, str]:
+        return {"task_id": envelope.task_id}
+
+    _install_handler_module(monkeypatch, refresh=refresh)
+    _install_app(
+        monkeypatch,
+        label="task_app",
+        task_handlers=[
+            TaskHandlerSpec(
+                task_type="example.refresh",
+                handler_path="fake_task_handlers.refresh",
+            )
+        ],
+        schedules=[
+            ScheduleSpec(
+                schedule_id="example.refresh.daily",
+                task_type="example.refresh",
+                trigger="cron",
+                trigger_config={"hour": "1"},
+            )
+        ],
+    )
+    app_registry = AppRegistry(["fake_task_app"]).load()
+    task_registry = TaskRegistry.from_app_registry(app_registry)
+    schedule_registry = ScheduleRegistry.from_app_registry(
+        app_registry,
+        task_registry=task_registry,
+    )
+    locks = DatabaseLockProvider(session_factory)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        result = await AuditedScheduleProvider(
+            provider=LockedScheduleProvider(
+                provider=ManualScheduleProvider(
+                    schedule_registry=schedule_registry,
+                    task_provider=SyncTaskProvider(task_registry),
+                    trigger_repository=ScheduleTriggerRepository(uow.session),
+                ),
+                lock_provider=locks,
+                lock_ttl_seconds=60,
+            ),
+            audit=AuditService(uow.session),
+        ).trigger(
+            ScheduleTriggerRequest(
+                schedule_id="example.refresh.daily",
+                tenant_id="tenant-a",
+                request_id="req-audited-scheduler",
+                planned_at=datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
+            )
+        )
+
+    audit_logs = await _audit_logs(session_factory)
+    assert result.ok is True
+    assert result.metadata["audit"] == "recorded"
+    assert result.metadata["lock_key"] == (
+        "scheduler:trigger:example.refresh.daily:tenant-a:2026-05-28T01:00:00+00:00"
+    )
+    assert await locks.locked(str(result.metadata["lock_key"])) is False
+    assert [(log.action, log.resource_type, log.resource_id, log.result) for log in audit_logs] == [
+        ("scheduler.triggered", "schedule", "example.refresh.daily", "success")
+    ]
+    assert audit_logs[0].tenant_id == "tenant-a"
+    assert audit_logs[0].request_id == "req-audited-scheduler"
+    assert audit_logs[0].payload["task_id"] == result.task_id
+    assert audit_logs[0].payload["lock_key"] == result.metadata["lock_key"]
+
+
 def test_task_registry_rejects_duplicate_task_types(monkeypatch: pytest.MonkeyPatch) -> None:
     def refresh(envelope: TaskEnvelope) -> dict[str, str]:
         return {"task_id": envelope.task_id}
@@ -722,3 +935,29 @@ async def _schedule_state(
         if state is not None:
             session.expunge(state)
         return state
+
+
+async def _audit_logs(session_factory: async_sessionmaker[AsyncSession]) -> list[AuditLog]:
+    async with session_factory() as session:
+        result = await session.execute(select(AuditLog))
+        logs = list(result.scalars().all())
+        for log in logs:
+            session.expunge(log)
+        return logs
+
+
+class _NoopScheduleTriggerProvider:
+    async def trigger(
+        self,
+        request: ScheduleTriggerRequest,
+        *,
+        tenant_status: str = "active",
+    ) -> ScheduleTriggerResult:
+        return ScheduleTriggerResult(
+            schedule_id=request.schedule_id,
+            task_id="noop",
+            task_type="noop",
+            planned_at=request.planned_at or datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
+            triggered_at=datetime(2026, 5, 28, 1, 0, tzinfo=UTC),
+            task_result=TaskResult(task_id="noop", task_type="noop", status="succeeded"),
+        )

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.apps import AppRegistry, resolve_runtime_capabilities
+from core.audit import AuditRecorder
 from core.config import Settings, get_settings
 from core.db import unit_of_work
-from core.locks import MemoryLockProvider
+from core.locks import LockProvider, MemoryLockProvider
 from core.operations import ProcessHeartbeatRepository
+from core.scheduler.external import wrap_external_scheduler_provider
 from core.scheduler.provider import (
+    AuditedScheduleProvider,
     LockedScheduleProvider,
     ManualScheduleProvider,
     ScheduleTriggerRequest,
@@ -60,6 +64,9 @@ async def run_scheduler_loop(
     max_iterations: int | None = None,
     idle_sleep_seconds: float = 1.0,
     lock_ttl_seconds: int = 60,
+    provider: str = "local",
+    lock_provider: LockProvider | None = None,
+    audit_factory: Callable[[AsyncSession], AuditRecorder] | None = None,
 ) -> SchedulerRunResult:
     settings = get_settings()
     app_registry = AppRegistry(
@@ -77,7 +84,7 @@ async def run_scheduler_loop(
     )
     engine = create_async_engine(database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    lock_provider = MemoryLockProvider()
+    resolved_lock_provider = lock_provider or MemoryLockProvider()
     iterations = 0
     checked = 0
     triggered = 0
@@ -90,7 +97,7 @@ async def run_scheduler_loop(
                 if uow.session is None:
                     raise RuntimeError("database session was not initialized")
                 state_repository = ScheduleStateRepository(uow.session)
-                provider = LockedScheduleProvider(
+                trigger_provider = LockedScheduleProvider(
                     provider=ManualScheduleProvider(
                         schedule_registry=schedule_registry,
                         task_provider=_task_provider(
@@ -100,9 +107,19 @@ async def run_scheduler_loop(
                         ),
                         trigger_repository=ScheduleTriggerRepository(uow.session),
                     ),
-                    lock_provider=lock_provider,
+                    lock_provider=resolved_lock_provider,
                     lock_ttl_seconds=lock_ttl_seconds,
                 )
+                trigger_provider = wrap_external_scheduler_provider(
+                    provider=provider,
+                    schedule_registry=schedule_registry,
+                    trigger_provider=trigger_provider,
+                )
+                if audit_factory is not None:
+                    trigger_provider = AuditedScheduleProvider(
+                        provider=trigger_provider,
+                        audit=audit_factory(uow.session),
+                    )
                 checked += len(schedule_registry.registered_schedules)
                 for registered in schedule_registry.registered_schedules:
                     if registered.spec.trigger != "cron":
@@ -123,7 +140,7 @@ async def run_scheduler_loop(
                         )
                     for slot_planned_at in plan.planned_slots:
                         try:
-                            result = await provider.trigger(
+                            result = await trigger_provider.trigger(
                                 ScheduleTriggerRequest(
                                     schedule_id=registered.spec.schedule_id,
                                     tenant_id=tenant_id,

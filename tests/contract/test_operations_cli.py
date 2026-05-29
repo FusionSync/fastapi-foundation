@@ -401,6 +401,45 @@ def test_scheduler_role_skips_duplicate_cron_slot_within_loop(
     assert asyncio.run(_row_count(database_url, ScheduleTriggerLog)) == 1
 
 
+def test_scheduler_role_accepts_apscheduler_provider(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _install_scheduler_app(monkeypatch)
+    database_url = _sqlite_url(tmp_path)
+    asyncio.run(_create_schema(database_url))
+
+    exit_code = main(
+        [
+            "scheduler",
+            "--run",
+            "--provider",
+            "apscheduler",
+            "--database-url",
+            database_url,
+            "--installed-app",
+            "fake_operations_scheduler_app",
+            "--tenant-id",
+            "tenant-a",
+            "--now",
+            "2026-05-28T01:00:00+00:00",
+            "--payload-json",
+            '{"value":"ok"}',
+            "--max-iterations",
+            "1",
+            "--idle-sleep-seconds",
+            "0",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["schedule_results"][0]["metadata"]["scheduler_provider"] == "apscheduler"
+
+
 def test_worker_role_can_run_one_pending_task(
     tmp_path: Path,
     monkeypatch,

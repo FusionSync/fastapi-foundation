@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from core.audit import AuditRecorder
 from core.context import scheduler_background_context, use_background_context
 from core.locks import LockProvider
 from core.scheduler.registry import ScheduleRegistry
@@ -187,6 +188,56 @@ class LockedScheduleProvider:
             await self.lock_provider.release(lock_key, owner_token=handle.owner_token)
 
 
+class AuditedScheduleProvider:
+    def __init__(
+        self,
+        *,
+        provider: ScheduleTriggerProvider,
+        audit: AuditRecorder,
+    ) -> None:
+        self.provider = provider
+        self.audit = audit
+
+    async def trigger(
+        self,
+        request: ScheduleTriggerRequest,
+        *,
+        tenant_status: TenantStatus = "active",
+    ) -> ScheduleTriggerResult:
+        try:
+            result = await self.provider.trigger(request, tenant_status=tenant_status)
+        except Exception as exc:
+            await self.audit.record(
+                action="scheduler.triggered",
+                resource_type="schedule",
+                resource_id=request.schedule_id,
+                result="failure",
+                tenant_id=request.tenant_id,
+                request_id=request.request_id,
+                reason=f"{type(exc).__name__}: {exc}",
+                payload={
+                    "schedule_id": request.schedule_id,
+                    "planned_at": _planned_at_payload(request.planned_at),
+                    "tenant_status": tenant_status,
+                },
+            )
+            raise
+
+        audit_result = "success" if result.ok else "failure"
+        await self.audit.record(
+            action="scheduler.triggered",
+            resource_type="schedule",
+            resource_id=request.schedule_id,
+            result=audit_result,
+            tenant_id=request.tenant_id,
+            request_id=request.request_id,
+            reason=result.task_result.error_message,
+            payload=_audit_success_payload(result, tenant_status=tenant_status),
+        )
+        result.metadata["audit"] = "recorded"
+        return result
+
+
 def _ensure_aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
@@ -204,3 +255,30 @@ def _task_id(idempotency_key: str) -> str:
 
 def _lock_key(*, schedule_id: str, tenant_id: str, planned_at: datetime) -> str:
     return f"scheduler:trigger:{schedule_id}:{tenant_id}:{planned_at.isoformat()}"
+
+
+def _planned_at_payload(planned_at: datetime | None) -> str | None:
+    return _ensure_aware(planned_at).isoformat() if planned_at is not None else None
+
+
+def _audit_success_payload(
+    result: ScheduleTriggerResult,
+    *,
+    tenant_status: TenantStatus,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schedule_id": result.schedule_id,
+        "task_id": result.task_id,
+        "task_type": result.task_type,
+        "task_status": result.task_result.status,
+        "planned_at": result.planned_at.isoformat(),
+        "triggered_at": result.triggered_at.isoformat(),
+        "tenant_status": tenant_status,
+    }
+    if "lock_key" in result.metadata:
+        payload["lock_key"] = result.metadata["lock_key"]
+    if "fencing_token" in result.metadata:
+        payload["fencing_token"] = result.metadata["fencing_token"]
+    if "scheduler_provider" in result.metadata:
+        payload["scheduler_provider"] = result.metadata["scheduler_provider"]
+    return payload
