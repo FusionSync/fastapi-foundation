@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
-from core.auth import invalid_auth_token
+from core.auth import TokenClaims, invalid_auth_token
+from core.events import EventPublisher
 from core.exceptions import AppError
 from core.permissions import (
     PLATFORM_TENANT_ID,
@@ -17,6 +18,14 @@ from core.security import PasswordHasher
 from core.tenancy import Tenant, TenantMember, assert_tenant_operation_allowed
 from platform_apps.accounts.models import ExternalIdentity, User, UserCredential, UserSession
 
+ACCOUNT_LOGIN_FAILED_EVENT = "account.login_failed"
+ACCOUNT_SESSION_CREATED_EVENT = "account.session_created"
+ACCOUNT_SESSION_REFRESHED_EVENT = "account.session_refreshed"
+ACCOUNT_SESSION_REVOKED_EVENT = "account.session_revoked"
+ACCOUNT_USER_DISABLED_EVENT = "account.user_disabled"
+_ANONYMOUS_ACTOR_ID = "__anonymous__"
+_SYSTEM_REQUEST_ID = "__none__"
+
 
 class AccountsService:
     def __init__(
@@ -24,10 +33,12 @@ class AccountsService:
         session: AsyncSession,
         *,
         audit: AuditRecorder | None = None,
+        events: EventPublisher | None = None,
         password_hasher: PasswordHasher | None = None,
     ) -> None:
         self.session = session
         self.audit = audit
+        self.events = events
         self.password_hasher = password_hasher or PasswordHasher()
 
     async def create_user(
@@ -107,6 +118,33 @@ class AccountsService:
             invalid_auth_token("invalid_credentials")
         return user
 
+    async def authenticate_local_login(
+        self,
+        *,
+        email: str,
+        password: str,
+        tenant_id: str | None,
+        request_id: str | None = None,
+    ) -> UserSession:
+        normalized_email = email.strip().lower()
+        try:
+            user = await self.verify_local_password(email=normalized_email, password=password)
+            return await self.create_session(
+                user_id=user.id,
+                tenant_id=tenant_id,
+                auth_provider="local",
+                request_id=request_id,
+            )
+        except AppError as exc:
+            if exc.code == "AUTH_INVALID_TOKEN":
+                await self._record_failed_login(
+                    email=normalized_email,
+                    tenant_id=tenant_id,
+                    request_id=request_id,
+                    reason=_auth_failure_reason(exc),
+                )
+            raise
+
     async def create_session(
         self,
         *,
@@ -146,7 +184,81 @@ class AccountsService:
                 request_id=request_id,
                 payload={"token_version": session.token_version},
             )
+        await self._publish_security_event(
+            event_type=ACCOUNT_SESSION_CREATED_EVENT,
+            aggregate_type="user_session",
+            aggregate_id=session.id,
+            tenant_id=tenant_id,
+            actor_id=user.id,
+            request_id=request_id,
+            payload={
+                "session_id": session.id,
+                "user_id": user.id,
+                "auth_provider": auth_provider,
+                "token_version": session.token_version,
+            },
+        )
         return session
+
+    async def refresh_session_token(
+        self,
+        claims: TokenClaims,
+        *,
+        request_id: str | None = None,
+    ) -> TokenClaims:
+        user_session = await self.session.get(UserSession, claims.session_id)
+        if user_session is None:
+            invalid_auth_token("session_not_found")
+        user = await self._get_user(user_session.user_id)
+        if user_session.user_id != claims.user_id:
+            invalid_auth_token("user_mismatch")
+        if user_session.auth_provider != claims.auth_provider:
+            invalid_auth_token("provider_mismatch")
+        if user_session.status != "active":
+            invalid_auth_token("session_not_active")
+        if user.status != "active":
+            invalid_auth_token("user_not_active")
+        if user.token_version != claims.token_version:
+            invalid_auth_token("token_version_mismatch")
+        if user_session.token_version != claims.token_version:
+            invalid_auth_token("session_token_version_mismatch")
+        if user_session.tenant_id != claims.tenant_id:
+            invalid_auth_token("tenant_mismatch")
+        refreshed = TokenClaims(
+            user_id=user.id,
+            session_id=user_session.id,
+            auth_provider=user_session.auth_provider,
+            token_version=user.token_version,
+            tenant_id=user_session.tenant_id,
+        )
+        if self.audit is not None:
+            await self.audit.record(
+                action="session.refreshed",
+                resource_type="user_session",
+                resource_id=user_session.id,
+                result="success",
+                tenant_id=user_session.tenant_id,
+                actor_id=user.id,
+                auth_provider=user_session.auth_provider,
+                session_id=user_session.id,
+                request_id=request_id,
+                payload={"token_version": refreshed.token_version},
+            )
+        await self._publish_security_event(
+            event_type=ACCOUNT_SESSION_REFRESHED_EVENT,
+            aggregate_type="user_session",
+            aggregate_id=user_session.id,
+            tenant_id=user_session.tenant_id,
+            actor_id=user.id,
+            request_id=request_id,
+            payload={
+                "session_id": user_session.id,
+                "user_id": user.id,
+                "auth_provider": user_session.auth_provider,
+                "token_version": refreshed.token_version,
+            },
+        )
+        return refreshed
 
     async def _assert_tenant_login_allowed(self, *, user_id: str, tenant_id: str) -> None:
         tenant = await self.session.get(Tenant, tenant_id)
@@ -211,6 +323,20 @@ class AccountsService:
                     "token_version": user.token_version,
                 },
             )
+        await self._publish_security_event(
+            event_type=ACCOUNT_USER_DISABLED_EVENT,
+            aggregate_type="user",
+            aggregate_id=user.id,
+            tenant_id=None,
+            actor_id=actor_id,
+            request_id=request_id,
+            payload={
+                "user_id": user.id,
+                "reason": reason,
+                "revoked_sessions": revoked_sessions,
+                "token_version": user.token_version,
+            },
+        )
         await self.session.flush()
         return user
 
@@ -242,6 +368,20 @@ class AccountsService:
                 request_id=request_id,
                 payload={"scope": "user", "revoked_sessions": revoked_sessions},
             )
+        await self._publish_security_event(
+            event_type=ACCOUNT_SESSION_REVOKED_EVENT,
+            aggregate_type="user_session",
+            aggregate_id=user_id,
+            tenant_id=None,
+            actor_id=actor_id,
+            request_id=request_id,
+            payload={
+                "scope": "user",
+                "user_id": user_id,
+                "reason": reason,
+                "revoked_sessions": revoked_sessions,
+            },
+        )
         return revoked_sessions
 
     async def revoke_tenant_sessions(
@@ -272,6 +412,19 @@ class AccountsService:
                 request_id=request_id,
                 payload={"scope": "tenant", "revoked_sessions": revoked_sessions},
             )
+        await self._publish_security_event(
+            event_type=ACCOUNT_SESSION_REVOKED_EVENT,
+            aggregate_type="tenant_session",
+            aggregate_id=tenant_id,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+            request_id=request_id,
+            payload={
+                "scope": "tenant",
+                "reason": reason,
+                "revoked_sessions": revoked_sessions,
+            },
+        )
         return revoked_sessions
 
     async def revoke_tenant_sessions_for_lifecycle(self, tenant_id: str, reason: str) -> int:
@@ -316,6 +469,64 @@ class AccountsService:
             session.revoke_reason = reason
             session.revoked_at = revoked_at
 
+    async def _record_failed_login(
+        self,
+        *,
+        email: str,
+        tenant_id: str | None,
+        request_id: str | None,
+        reason: str,
+    ) -> None:
+        if self.audit is not None:
+            await self.audit.record(
+                action="account.login_failed",
+                resource_type="account_login",
+                resource_id=email,
+                result="denied",
+                tenant_id=tenant_id,
+                actor_id=None,
+                auth_provider="local",
+                reason=reason,
+                request_id=request_id,
+                payload={"email": email, "reason": reason},
+            )
+        await self._publish_security_event(
+            event_type=ACCOUNT_LOGIN_FAILED_EVENT,
+            aggregate_type="account_login",
+            aggregate_id=email,
+            tenant_id=tenant_id,
+            actor_id=_ANONYMOUS_ACTOR_ID,
+            request_id=request_id,
+            payload={"email": email, "auth_provider": "local", "reason": reason},
+        )
+
+    async def _publish_security_event(
+        self,
+        *,
+        event_type: str,
+        aggregate_type: str,
+        aggregate_id: str,
+        tenant_id: str | None,
+        actor_id: str | None,
+        request_id: str | None,
+        payload: dict[str, object],
+    ) -> None:
+        if self.events is None:
+            return
+        event_tenant_id = tenant_id or PLATFORM_TENANT_ID
+        await self.events.publish(
+            event_type=event_type,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            tenant_id=event_tenant_id,
+            payload={
+                "tenant_id": event_tenant_id,
+                "actor_id": actor_id or _ANONYMOUS_ACTOR_ID,
+                "request_id": request_id or _SYSTEM_REQUEST_ID,
+                **payload,
+            },
+        )
+
     def _validate_user_input(
         self,
         *,
@@ -329,6 +540,12 @@ class AccountsService:
             raise AppError("VALIDATION_ERROR", "display_name is required", status_code=400)
         if not auth_provider.strip():
             raise AppError("VALIDATION_ERROR", "auth_provider is required", status_code=400)
+
+
+def _auth_failure_reason(error: AppError) -> str:
+    details = error.details or {}
+    reason = details.get("reason")
+    return reason if isinstance(reason, str) and reason else "invalid_credentials"
 
 
 def _assert_accounts_mutation_authorized(

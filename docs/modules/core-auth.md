@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: `CurrentUser`、local JWT provider、session validator、request security pipeline、route authorization decision 传递和 app 声明式 `auth_session_store` 已接入。
+- Done: `CurrentUser`、local JWT provider、session validator、token refresh claims 校验、request security pipeline、route authorization decision 传递和 app 声明式 `auth_session_store` 已接入。
 - Next:
   - [ ] 接 Logto/Keycloak 等外部 provider adapter。
-  - [ ] 补 token refresh、session revocation API 和安全审计联动。
+  - [ ] 补 auth HTTP API route protection 与外部 provider 回调契约。
 
 ## 职责
 
@@ -85,6 +85,7 @@ token_version
 - 认证失败统一抛 `AUTH_INVALID_TOKEN`，并带 `WWW-Authenticate: Bearer`。
 - `LocalJwtProvider` 提供本地 HS256 JWT 签发和校验，校验签名、issuer、audience 和过期时间，并把 `session_id`、`token_version`、`tenant_id` 转换为统一 `TokenClaims`。
 - `platform_apps.accounts.AccountsAuthSessionStore` 是当前 SQLAlchemy 适配器，读取 `UserSession` 和 `User`。
+- `platform_apps.accounts.AccountsService.refresh_session_token()` 复用 `TokenClaims` 和 `UserSession/User` fact 校验，route 层可用返回 claims 调用 `LocalJwtProvider.issue_token()` 重新签发本地 JWT。
 - `DatabaseRequestSecurityPipeline` 串联 HTTP Bearer token、`AuthSessionValidator`、`DatabaseTenantContextResolver` 和 route permission authorization。权限校验通过后返回 `AuthorizationDecision`，由 router dependency 写入当前 request，供业务 mutation 继续传给 service 层。安装声明了 `AppModule.auth_session_store` 的账号 app 时，`create_app()` 会自动装配该 pipeline；也可通过 `create_app(..., request_security_pipeline=...)` 显式覆盖。
 
 当前先由 `platform_apps.accounts` 落地会话事实：
@@ -95,6 +96,7 @@ token_version
 - 租户生命周期服务可通过 accounts 的 session revocation hook 撤销指定 tenant sessions。
 - `AccountsService.create_local_user()` 使用 `core.security.PasswordHasher` 创建本地密码凭据。
 - `AccountsService.verify_local_password()` 校验本地密码，失败时抛 `AUTH_INVALID_TOKEN`。
+- `AccountsService.authenticate_local_login()` 会把失败登录写入审计和 `account.login_failed` outbox；`create_session()`、`refresh_session_token()` 和撤销/禁用路径可发布账号安全事件 outbox。
 
 请求认证流程应先由 token provider 完成 token 层校验，再把 claims 交给 `AuthSessionValidator`：
 

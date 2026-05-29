@@ -9,7 +9,7 @@ from core.base.models import BaseModel
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.exceptions import AppError
-from core.outbox import OutboxEventPublisher, OutboxRepository
+from core.outbox import OutboxEvent, OutboxEventPublisher, OutboxRepository
 from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.security import PasswordHasher
 from core.tenancy import Tenant, TenantLifecycleService, TenantMember
@@ -242,6 +242,104 @@ async def test_local_password_flow_and_auth_session_validator_share_session_fact
 
 
 @pytest.mark.asyncio
+async def test_local_login_failure_writes_audit_and_security_event(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = _account_security_event_registry()
+    hasher = PasswordHasher(iterations=1000, salt="fixed-salt")
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(
+            uow.session,
+            audit=AuditService(uow.session),
+            events=_event_publisher(uow.session, registry),
+            password_hasher=hasher,
+        )
+        await accounts.create_local_user(
+            email="Owner@Example.com",
+            display_name="Owner",
+            password="CorrectHorse1",
+        )
+        with pytest.raises(AppError) as exc_info:
+            await accounts.authenticate_local_login(
+                email="owner@example.com",
+                password="wrong-password",
+                tenant_id=None,
+                request_id="req-login-failed",
+            )
+
+    audit_logs = await _audit_logs(session_factory)
+    outbox_events = await _outbox_events(session_factory)
+    assert exc_info.value.code == "AUTH_INVALID_TOKEN"
+    assert [(log.action, log.result, log.reason, log.request_id) for log in audit_logs] == [
+        ("account.login_failed", "denied", "invalid_credentials", "req-login-failed")
+    ]
+    security_events = [
+        (event.event_type, event.tenant_id, event.payload["reason"])
+        for event in outbox_events
+    ]
+    assert security_events == [
+        ("account.login_failed", PLATFORM_TENANT_ID, "invalid_credentials")
+    ]
+    assert outbox_events[0].payload["email"] == "owner@example.com"
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_validates_session_and_emits_security_event(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registry = _account_security_event_registry()
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        accounts = AccountsService(
+            uow.session,
+            audit=AuditService(uow.session),
+            events=_event_publisher(uow.session, registry),
+        )
+        user = await accounts.create_user(
+            email="owner@example.com",
+            display_name="Owner",
+            auth_provider="local",
+            external_id="owner@example.com",
+        )
+        _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
+        user_session = await accounts.create_session(
+            user_id=user.id,
+            tenant_id="tenant-a",
+            auth_provider="local",
+            request_id="req-login",
+        )
+        refreshed = await accounts.refresh_session_token(
+            TokenClaims(
+                user_id=user.id,
+                session_id=user_session.id,
+                auth_provider="local",
+                token_version=1,
+                tenant_id="tenant-a",
+            ),
+            request_id="req-refresh",
+        )
+
+    audit_logs = await _audit_logs(session_factory)
+    outbox_events = await _outbox_events(session_factory)
+    assert refreshed == TokenClaims(
+        user_id=user.id,
+        session_id=user_session.id,
+        auth_provider="local",
+        token_version=1,
+        tenant_id="tenant-a",
+    )
+    assert [log.action for log in audit_logs] == ["session.created", "session.refreshed"]
+    assert [event.event_type for event in outbox_events] == [
+        "account.session_created",
+        "account.session_refreshed",
+    ]
+    assert outbox_events[-1].payload["session_id"] == user_session.id
+
+
+@pytest.mark.asyncio
 async def test_auth_session_validator_rejects_revoked_session_and_disabled_user(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -438,6 +536,15 @@ async def _audit_logs(session_factory: async_sessionmaker[AsyncSession]) -> list
         return audit_logs
 
 
+async def _outbox_events(session_factory: async_sessionmaker[AsyncSession]) -> list[OutboxEvent]:
+    async with session_factory() as session:
+        result = await session.execute(select(OutboxEvent).order_by(OutboxEvent.created_at))
+        events = list(result.scalars().all())
+        for event in events:
+            session.expunge(event)
+        return events
+
+
 def _add_tenant_member(
     session: AsyncSession,
     *,
@@ -469,6 +576,19 @@ def _add_tenant(
 
 def _event_publisher(session: AsyncSession, registry: EventRegistry) -> OutboxEventPublisher:
     return OutboxEventPublisher(OutboxRepository(session, registry=registry))
+
+
+def _account_security_event_registry() -> EventRegistry:
+    registry = EventRegistry()
+    for event_type in (
+        "account.session_created",
+        "account.session_refreshed",
+        "account.login_failed",
+        "account.session_revoked",
+        "account.user_disabled",
+    ):
+        registry.register(event_type, 1, lambda event: None)
+    return registry
 
 
 def _user_manage_decision(
