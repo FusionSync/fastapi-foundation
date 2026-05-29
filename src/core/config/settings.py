@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DeploymentMode = Literal["local", "private", "cloud"]
 ErrorHttpStatusMode = Literal["standard", "always_200"]
 TaskQueueProviderMode = Literal["sync", "database"]
+DatabaseTenantFallbackMode = Literal["disabled", "session_variable"]
 
 
 class AppSettings(BaseModel):
@@ -33,6 +34,11 @@ class SecuritySettings(BaseModel):
 
 class DatabaseSettings(BaseModel):
     url: str = "sqlite+aiosqlite:///./data/local.db"
+    read_url: str | None = None
+    pool_size: int | None = Field(default=None, ge=1)
+    max_overflow: int | None = Field(default=None, ge=0)
+    tenant_fallback_mode: DatabaseTenantFallbackMode = "disabled"
+    tenant_fallback_setting_name: str = "app.tenant_id"
 
 
 class ObservabilitySettings(BaseModel):

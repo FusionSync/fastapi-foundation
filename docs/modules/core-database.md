@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: SQLAlchemy async runtime、session factory、UnitOfWork、base model、raw SQL guard、tenant constraint helper、真实 Alembic executor 和 revision 状态验证已落地。
-- Next:
-  - [ ] 增加连接池诊断、读写拆分预留和数据库级租户兜底策略。
+- Done: SQLAlchemy async runtime、session factory、UnitOfWork、base model、raw SQL guard、tenant constraint helper、连接池诊断、读写拆分预留、数据库级租户兜底策略、真实 Alembic executor 和 revision 状态验证已落地。
+- Next: _none_
 
 ## 职责
 
@@ -25,8 +24,7 @@ Database 模块负责 ORM 配置、连接管理、基础模型、迁移约定和
 
 ```text
 src/core/db/
-  config.py
-  init.py
+  runtime.py
   base.py
   transactions.py
   pagination.py
@@ -53,6 +51,25 @@ async with unit_of_work() as uow:
 - `UnitOfWork` 使用 ContextVar 跟踪当前事务；嵌套 `unit_of_work()` 不新开 session、不自行 commit/close，只加入外层事务。
 - 内层 unit-of-work 发生异常时会把外层标记为 `rollback_only`；即使异常被业务代码捕获，外层退出时仍会 rollback，避免半提交。
 - `UnitOfWork.state` 暴露 `active`、`committed`、`rolled_back` 或 `joined`，便于测试和运行期诊断事务生命周期。
+- `DatabaseRuntime.unit_of_work(tenant_id=...)` 会在新 session 打开时应用数据库级租户兜底；嵌套事务如果传入不同 tenant_id 会返回 `TENANT_CONTEXT_CONFLICT`。
+
+## Runtime 诊断
+
+`create_database_runtime(settings)` 现在返回带读写拆分预留的 `DatabaseRuntime`：
+
+- `session_factory` 始终指向写库。
+- `read_session_factory` 仅在 `DATABASE__READ_URL` 配置后创建；未配置时 `session_factory_for("read")` 回退到写库。
+- `diagnostics().to_dict()` 输出脱敏后的 write/read URL、pool class/status/计数和 tenant fallback 配置，用于 `/readyz`、CLI 或运维诊断聚合。
+- `DATABASE__POOL_SIZE` 和 `DATABASE__MAX_OVERFLOW` 只在显式配置时传给 SQLAlchemy engine，避免破坏 SQLite/local 默认行为。
+
+## 租户兜底
+
+应用层仍必须使用 tenant repository、`execute_tenant_scoped()` 和权限 gate；数据库级兜底只作为 private/cloud 的最后防线：
+
+- `DatabaseTenantFallback(mode="disabled")` 只把 tenant_id 写入 `AsyncSession.info`，便于诊断和测试。
+- `mode="session_variable"` 在 PostgreSQL session 中执行 `set_config(setting_name, tenant_id, true)`，默认 setting name 为 `app.tenant_id`，供 RLS policy 或 trigger 读取。
+- 非 PostgreSQL dialect 不执行 session variable SQL，但仍记录 `session.info["tenant_id"]`，保证 local/SQLite 测试可验证同一契约。
+- 缺失 tenant_id 会返回 `VALIDATION_ERROR`，避免静默打开无租户兜底的写事务。
 
 ## 基础模型约定
 
