@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.events import EventEnvelope
 from core.exceptions import AppError
 from core.permissions.cache import PermissionCache
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
@@ -17,6 +18,9 @@ from core.permissions.policies import (
 from core.permissions.registry import PermissionRegistry
 
 ROLE_GRANT_CHANGED_EVENT = "permissions.role_grant_changed"
+
+if TYPE_CHECKING:
+    from core.events import EventEnvelope
 
 
 class PolicyProjector:
