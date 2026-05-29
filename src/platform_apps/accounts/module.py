@@ -1,6 +1,12 @@
 from core.apps import AppModule, EventSchemaSpec, MigrationSpec
 from platform_apps.accounts.permissions import PERMISSIONS
-from platform_apps.accounts.router import router
+from platform_apps.accounts.router import (
+    auth_public_router,
+    auth_router,
+    me_router,
+    platform_session_router,
+    platform_user_router,
+)
 from platform_apps.accounts.services import (
     ACCOUNT_LOGIN_FAILED_EVENT,
     ACCOUNT_SESSION_CREATED_EVENT,
@@ -12,7 +18,13 @@ from platform_apps.accounts.services import (
 module = AppModule(
     label="platform_accounts",
     version="0.1.0",
-    routers=[router],
+    routers=[
+        auth_public_router,
+        auth_router,
+        me_router,
+        platform_user_router,
+        platform_session_router,
+    ],
     models=["platform_apps.accounts.models"],
     migrations=MigrationSpec(path="platform_apps.accounts.migrations"),
     permissions=PERMISSIONS,

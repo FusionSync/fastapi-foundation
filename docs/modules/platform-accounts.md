@@ -2,10 +2,10 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: local user/password credential、session fact、auth session store、permissions、session.created 强一致审计、账号安全事件 outbox、token refresh、失败登录审计、account create 幂等 mutation guard checkpoint 和基础 account integration tests 已落地。
+- Status: `connected`
+- Done: local user/password credential、session fact、auth session store、permissions、session.created 强一致审计、账号安全事件 outbox、local login/logout/token refresh HTTP API、当前用户资料、password reset、外部身份绑定、session 管理 API、失败登录审计、account create 幂等 mutation guard checkpoint 和基础 account integration tests 已落地。
 - Next:
-  - [ ] 补用户资料、password reset、外部身份绑定和 session 管理 API。
+  - _none_
 
 ## 职责
 
@@ -57,8 +57,17 @@ UserSession
 ```text
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
+POST /api/v1/auth/refresh
 GET  /api/v1/me
 PATCH /api/v1/me
+PATCH /api/v1/me/password
+GET  /api/v1/me/external-identities
+POST /api/v1/me/external-identities
+GET  /api/v1/me/sessions
+DELETE /api/v1/me/sessions/{session_id}
+POST /api/v1/platform/accounts/users
+PATCH /api/v1/platform/accounts/users/{user_id}/disable
+POST /api/v1/platform/accounts/users/{user_id}/sessions/revoke
 ```
 
 ## 迭代
@@ -79,6 +88,8 @@ PATCH /api/v1/me
 - `AccountsService.verify_local_password()` 使用 `core.security.PasswordHasher` 校验本地密码。
 - `AccountsService.authenticate_local_login()` 串联本地密码校验和 session 创建；失败时写 `account.login_failed` 审计并发布 `account.login_failed` outbox event。
 - `AccountsService.refresh_session_token()` 校验 `TokenClaims` 与 `UserSession/User` fact 一致后返回可重新签发本地 JWT 的 claims，并写 `session.refreshed` 审计和 `account.session_refreshed` outbox event。
+- `platform_apps.accounts.router` 提供 local login/logout/refresh、`/me` 当前用户资料、密码重置、外部身份绑定和 session 管理 API；route 层签发本地 JWT，service 层仍只维护会话事实和安全事件。
+- `AccountsService.update_profile()`、`reset_local_password()`、`bind_external_identity()`、`list_user_sessions()` 和 `revoke_own_session()` 支撑用户自助资料和 session 管理。
 - `AccountsService.disable_user()` 需要 platform scope 的 `user.manage` / `user.disable` `AuthorizationDecision`；通过后会把 user 标记为 disabled、递增 token_version，并撤销该用户所有 active sessions。
 - `AccountsService.disable_user()` 可注入 `AuditService` 写 `user.disabled` 强一致审计，记录撤销 session 数和新的 token_version。
 - `AccountsService.disable_user()`、`revoke_user_sessions()` 和 `revoke_tenant_sessions()` 可发布 `account.user_disabled` / `account.session_revoked` security outbox event。

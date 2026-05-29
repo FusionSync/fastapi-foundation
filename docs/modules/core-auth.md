@@ -3,10 +3,10 @@
 ## Progress
 
 - Status: `partial`
-- Done: `CurrentUser`、local JWT provider、session validator、token refresh claims 校验、request security pipeline、auth-only route 认证、platform scope route 授权、route authorization decision 传递和 app 声明式 `auth_session_store` 已接入。
+- Done: `CurrentUser`、local JWT provider、session validator、token refresh claims 校验、local auth HTTP login/logout/refresh、request security pipeline、auth-only route 认证、platform scope route 授权、route authorization decision 传递和 app 声明式 `auth_session_store` 已接入。
 - Next:
   - [ ] 接 Logto/Keycloak 等外部 provider adapter。
-  - [ ] 补 auth HTTP API route protection 与外部 provider 回调契约。
+  - [ ] 补外部 provider 回调契约。
 
 ## 职责
 
@@ -86,6 +86,7 @@ token_version
 - `LocalJwtProvider` 提供本地 HS256 JWT 签发和校验，校验签名、issuer、audience 和过期时间，并把 `session_id`、`token_version`、`tenant_id` 转换为统一 `TokenClaims`。
 - `platform_apps.accounts.AccountsAuthSessionStore` 是当前 SQLAlchemy 适配器，读取 `UserSession` 和 `User`。
 - `platform_apps.accounts.AccountsService.refresh_session_token()` 复用 `TokenClaims` 和 `UserSession/User` fact 校验，route 层可用返回 claims 调用 `LocalJwtProvider.issue_token()` 重新签发本地 JWT。
+- `platform_apps.accounts` 已提供 local login/logout/refresh HTTP API，route 层负责 JWT 签发，core auth 继续只提供 token provider、claims 和 session validation 契约。
 - `DatabaseRequestSecurityPipeline` 串联 HTTP Bearer token、`AuthSessionValidator`、`DatabaseTenantContextResolver` 和 route permission authorization。`tenant_required=False` 且没有 tenant 权限的 route 只绑定认证用户，不强制租户上下文；`permission_scope="platform"` 的 route 通过 `AuthorizationService.require_platform()` 使用 platform domain 授权事实。权限校验通过后返回 `AuthorizationDecision`，由 router dependency 写入当前 request，供业务 mutation 继续传给 service 层。安装声明了 `AppModule.auth_session_store` 的账号 app 时，`create_app()` 会自动装配该 pipeline；也可通过 `create_app(..., request_security_pipeline=...)` 显式覆盖。
 
 当前先由 `platform_apps.accounts` 落地会话事实：

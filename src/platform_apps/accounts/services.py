@@ -260,6 +260,118 @@ class AccountsService:
         )
         return refreshed
 
+    async def update_profile(
+        self,
+        user_id: str,
+        *,
+        display_name: str,
+    ) -> User:
+        user = await self._get_user(user_id)
+        if not display_name.strip():
+            raise AppError("VALIDATION_ERROR", "display_name is required", status_code=400)
+        user.display_name = display_name.strip()
+        await self.session.flush()
+        return user
+
+    async def reset_local_password(
+        self,
+        user_id: str,
+        *,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        user = await self._get_user(user_id)
+        if user.auth_provider != "local":
+            raise AppError(
+                "VALIDATION_ERROR",
+                "Only local users can reset local password",
+                status_code=400,
+            )
+        credential = await self.session.get(UserCredential, user.id)
+        if credential is None:
+            invalid_auth_token("missing_credentials")
+        if not self.password_hasher.verify_password(
+            current_password,
+            credential.password_hash,
+        ):
+            invalid_auth_token("invalid_credentials")
+        credential.password_hash = self.password_hasher.hash_password(new_password)
+        credential.password_updated_at = datetime.now(UTC)
+        await self.session.flush()
+
+    async def bind_external_identity(
+        self,
+        user_id: str,
+        *,
+        provider: str,
+        subject: str,
+    ) -> ExternalIdentity:
+        user = await self._get_user(user_id)
+        resolved_provider = provider.strip()
+        resolved_subject = subject.strip()
+        if not resolved_provider or not resolved_subject:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "external identity provider and subject are required",
+                status_code=400,
+            )
+        existing = await self.session.execute(
+            select(ExternalIdentity)
+            .where(ExternalIdentity.provider == resolved_provider)
+            .where(ExternalIdentity.subject == resolved_subject)
+        )
+        identity = existing.scalars().first()
+        if identity is not None:
+            if identity.user_id == user.id:
+                return identity
+            raise AppError(
+                "CONFLICT",
+                "External identity is already bound to another user",
+                status_code=409,
+            )
+        identity = ExternalIdentity(
+            user_id=user.id,
+            provider=resolved_provider,
+            subject=resolved_subject,
+        )
+        self.session.add(identity)
+        await self.session.flush()
+        return identity
+
+    async def list_external_identities(self, user_id: str) -> list[ExternalIdentity]:
+        await self._get_user(user_id)
+        result = await self.session.execute(
+            select(ExternalIdentity)
+            .where(ExternalIdentity.user_id == user_id)
+            .order_by(ExternalIdentity.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def list_user_sessions(self, user_id: str) -> list[UserSession]:
+        await self._get_user(user_id)
+        result = await self.session.execute(
+            select(UserSession)
+            .where(UserSession.user_id == user_id)
+            .order_by(UserSession.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def revoke_own_session(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        reason: str,
+    ) -> int:
+        user_session = await self.session.get(UserSession, session_id)
+        if user_session is None or user_session.user_id != user_id:
+            raise AppError("NOT_FOUND", "User session not found", status_code=404)
+        if user_session.status != "active":
+            return 0
+        self._revoke_sessions([user_session], reason)
+        await self.session.flush()
+        return 1
+
     async def _assert_tenant_login_allowed(self, *, user_id: str, tenant_id: str) -> None:
         tenant = await self.session.get(Tenant, tenant_id)
         if tenant is None:
