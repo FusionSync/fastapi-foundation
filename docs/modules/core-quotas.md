@@ -2,10 +2,9 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: quota provider、rule、usage 抽象、数据库持久 usage store 和文件上传 quota gate 已落地。
-- Next:
-  - [ ] 将配额检查接入任务和业务 mutation 的统一 gate。
+- Status: `connected`
+- Done: quota provider、rule、usage 抽象、数据库持久 usage store、文件上传 quota gate、业务 mutation/task submit 统一 quota gate 已落地。
+- Next: _none_
 
 ## 职责
 
@@ -28,6 +27,7 @@ src/core/quotas/
   provider.py
   rules.py
   usage.py
+  gate.py
   deps.py
 ```
 
@@ -57,7 +57,7 @@ file_count
 
 ## 当前实现
 
-已落地 `QuotaRule`、`QuotaSubject`、`QuotaRegistry`、`QuotaService`、`MemoryQuotaUsageStore` 和 `DatabaseQuotaUsageStore`：
+已落地 `QuotaRule`、`QuotaSubject`、`QuotaRegistry`、`QuotaService`、`MemoryQuotaUsageStore`、`DatabaseQuotaUsageStore` 和统一 mutation gate：
 
 - `QuotaRegistry.from_tenant_config()` 可从租户配置生成 metric 规则。
 - `QuotaRule` 声明 `metric`、`limit` 和 `scope`，scope 支持 `tenant`、`user`、`resource`。
@@ -68,6 +68,10 @@ file_count
 - `QuotaService.release()` 支持释放并发类配额，例如 `concurrent_tasks`。
 - `DatabaseQuotaUsageStore` 使用 `quota_usage` 表持久化 usage key 和 used 值；`reserve()` 通过数据库条件更新实现 check-and-increment，超限时不增加用量。
 - `FileService.upload_bytes()` 可注入 `QuotaService` 和上传 quota rule，在写 storage 前 reserve；任一 quota 失败或后续写入失败时会释放已 reserve 的上传 quota。
+- `QuotaReservation` 描述一次强校验 reservation，包含 rule、subject 和 amount。
+- `QuotaMutationGate.run_mutation()` 用于业务写操作；任一 reservation 失败时不会调用 handler，handler 异常时会反向释放已 reserve 的用量。
+- `QuotaMutationGate.submit_task()` 用于任务提交链路；提交前先 reserve，提交异常时释放，提交成功后保留用量，由任务完成、取消或业务回收路径释放。
+- `QuotaTaskSubmitter` 包装符合 `submit(envelope, tenant_status=...)` 契约的 task provider，可在 API、scheduler 或 outbox 提交任务前统一注入配额检查。
 - 配额不足时会写可选 `MetricsRegistry` 的 `quota_exceeded_total{metric,scope}`，并可通过 `AuditRecorder` 写 `quota.exceeded` 审计。
 - 指标契约已预留 `quota_exceeded_total`。
 

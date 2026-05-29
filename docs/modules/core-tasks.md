@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、SQLAlchemy database queue provider、TaskRun 持久状态、repository、stale recovery、ack/retry/backoff/dead-letter、task CLI、scheduler 提交链路、worker 本地/数据库队列执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint、队列部署 profile 参数和 worker heartbeat 已落地。
+- Done: task registry、sync provider、SQLAlchemy database queue provider、TaskRun 持久状态、repository、stale recovery、ack/retry/backoff/dead-letter、task CLI、scheduler 提交链路、worker 本地/数据库队列执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint、quota submit wrapper、队列部署 profile 参数和 worker heartbeat 已落地。
 - Next: _none_
 
 ## 职责
@@ -112,6 +112,7 @@ finished_at
 - `TaskRunRepository.recover_stale_running()` 可把超过阈值的 `running` 任务恢复为 `failed/dead_letter`，避免 worker 崩溃后幂等键永久被占用。
 - `core tasks running recover --older-than-seconds <n> --yes` 执行恢复，输出被恢复的任务列表。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过配置选中的 Tasks provider；local 默认 `sync`，private/cloud profile 默认 `database`，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
+- 需要配额控制的任务提交链路可用 `QuotaTaskSubmitter` 包装 `SyncTaskProvider` 或 `DatabaseQueueTaskProvider`；包装器在调用 provider 前 reserve，quota 不足时不提交任务，provider 抛错时释放 reservation。
 - `core scheduler --run` 的 cron due loop 复用同一提交链路，scheduler 本身只构造 `TaskEnvelope` 并交给 task provider，触发后生成 `TaskRun` 并写入 `ScheduleTriggerLog`。
 - `core worker --run-once` 加载 app task handler，按 queue 领取一个 `pending` `TaskRun`，执行后持久化为 `succeeded/failed/dead_letter`；当前用于 local/CI 有限轮验证，不替代生产级队列 worker。
 - `core worker --run` 可按 `--max-iterations` 做有限轮验证，未设置时作为本地常驻 loop，空转时按 `--idle-sleep-seconds` 休眠。
