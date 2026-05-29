@@ -20,6 +20,7 @@ class OutboxDispatchRunResult:
     dispatcher_id: str
     iterations: int
     instance_id: str | None = None
+    shutdown_requested: bool = False
     claimed: int = 0
     published: int = 0
     failed: int = 0
@@ -38,6 +39,8 @@ class OutboxDispatchRunResult:
             payload["iterations"] = self.iterations
         if self.instance_id is not None:
             payload["instance_id"] = self.instance_id
+        if self.shutdown_requested:
+            payload["shutdown_requested"] = True
         return payload
 
 
@@ -69,6 +72,7 @@ async def run_outbox_dispatch_loop(
     instance_id: str | None = None,
     max_iterations: int | None = None,
     idle_sleep_seconds: float = 1.0,
+    shutdown_event: asyncio.Event | None = None,
 ) -> OutboxDispatchRunResult:
     registry = EventRegistry.from_app_registry(
         AppRegistry(
@@ -88,7 +92,9 @@ async def run_outbox_dispatch_loop(
     failed = 0
     dead_lettered = 0
     try:
-        while max_iterations is None or iterations < max_iterations:
+        while (max_iterations is None or iterations < max_iterations) and not _shutdown_requested(
+            shutdown_event
+        ):
             async with unit_of_work(session_factory) as uow:
                 if uow.session is None:
                     raise RuntimeError("database session was not initialized")
@@ -117,17 +123,36 @@ async def run_outbox_dispatch_loop(
                         },
                     )
             if max_iterations is None and stats.claimed == 0:
-                await asyncio.sleep(idle_sleep_seconds)
+                await _sleep_or_shutdown(idle_sleep_seconds, shutdown_event)
     finally:
         await engine.dispose()
 
+    shutdown_requested = _shutdown_requested(shutdown_event)
     return OutboxDispatchRunResult(
         ok=failed == 0 and dead_lettered == 0,
         dispatcher_id=dispatcher_id,
         iterations=iterations,
         instance_id=instance_id,
+        shutdown_requested=shutdown_requested,
         claimed=claimed,
         published=published,
         failed=failed,
         dead_lettered=dead_lettered,
     )
+
+
+def _shutdown_requested(shutdown_event: asyncio.Event | None) -> bool:
+    return shutdown_event is not None and shutdown_event.is_set()
+
+
+async def _sleep_or_shutdown(
+    idle_sleep_seconds: float,
+    shutdown_event: asyncio.Event | None,
+) -> None:
+    if shutdown_event is None:
+        await asyncio.sleep(idle_sleep_seconds)
+        return
+    try:
+        await asyncio.wait_for(shutdown_event.wait(), timeout=idle_sleep_seconds)
+    except TimeoutError:
+        return

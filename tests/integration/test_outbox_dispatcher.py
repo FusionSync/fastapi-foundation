@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -20,7 +21,12 @@ from core.exceptions import AppError
 from core.idempotency import IdempotencyStore, hash_request_payload
 from core.locks import MemoryLockProvider
 from core.observability import MetricsRegistry
-from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
+from core.outbox import (
+    OutboxDispatcher,
+    OutboxEvent,
+    OutboxRepository,
+    run_outbox_dispatch_loop,
+)
 
 
 @pytest.fixture
@@ -120,6 +126,29 @@ async def test_dispatcher_releases_cross_process_lock_after_dispatch(
 
     assert stats.published == 1
     assert await locks.locked("outbox:dispatch") is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_loop_exits_when_shutdown_event_is_already_set(
+    tmp_path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'outbox-shutdown.db'}"
+    await _create_schema(database_url)
+    shutdown_event = asyncio.Event()
+    shutdown_event.set()
+
+    result = await run_outbox_dispatch_loop(
+        database_url=database_url,
+        module_paths=[],
+        dispatcher_id="dispatcher-1",
+        batch_size=20,
+        idle_sleep_seconds=0,
+        shutdown_event=shutdown_event,
+    )
+
+    assert result.ok is True
+    assert result.iterations == 0
+    assert result.shutdown_requested is True
 
 
 @pytest.mark.asyncio
@@ -619,6 +648,15 @@ async def _first_event(session_factory: async_sessionmaker[AsyncSession]) -> Out
         event = result.scalars().one()
         session.expunge(event)
         return event
+
+
+async def _create_schema(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(BaseModel.metadata.create_all)
+    finally:
+        await engine.dispose()
 
 
 def _payload(**overrides: Any) -> dict[str, Any]:

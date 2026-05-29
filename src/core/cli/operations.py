@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import signal
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -28,7 +30,7 @@ from core.operations import (
     run_release_checkpoint,
 )
 from core.operations.backup import parse_backup_time
-from core.outbox import run_outbox_dispatch_loop
+from core.outbox import OutboxDispatchRunResult, run_outbox_dispatch_loop
 from core.scheduler import (
     LockedScheduleProvider,
     ManualScheduleProvider,
@@ -390,17 +392,7 @@ def _handle_scheduler_run(args: argparse.Namespace) -> int:
 
 def _handle_outbox_dispatcher_run(args: argparse.Namespace) -> int:
     try:
-        result = asyncio.run(
-            run_outbox_dispatch_loop(
-                database_url=_database_url(args.database_url),
-                module_paths=installed_apps(args.installed_app),
-                dispatcher_id=args.dispatcher_id,
-                batch_size=args.batch_size,
-                instance_id=args.instance_id,
-                max_iterations=args.max_iterations,
-                idle_sleep_seconds=args.idle_sleep_seconds,
-            )
-        )
+        result = asyncio.run(_run_outbox_dispatcher_loop(args))
     except Exception as exc:
         print_payload(
             exception_error_payload(exc, command=args.role, role="outbox-dispatcher"),
@@ -414,6 +406,57 @@ def _handle_outbox_dispatcher_run(args: argparse.Namespace) -> int:
     }
     print_payload(payload, as_json=args.as_json)
     return 0 if result.ok else 1
+
+
+async def _run_outbox_dispatcher_loop(
+    args: argparse.Namespace,
+) -> OutboxDispatchRunResult:
+    shutdown_event = asyncio.Event()
+    cleanup_signal_handlers = _install_shutdown_signal_handlers(shutdown_event)
+    try:
+        return await run_outbox_dispatch_loop(
+            database_url=_database_url(args.database_url),
+            module_paths=installed_apps(args.installed_app),
+            dispatcher_id=args.dispatcher_id,
+            batch_size=args.batch_size,
+            instance_id=args.instance_id,
+            max_iterations=args.max_iterations,
+            idle_sleep_seconds=args.idle_sleep_seconds,
+            shutdown_event=shutdown_event,
+        )
+    finally:
+        cleanup_signal_handlers()
+
+
+def _install_shutdown_signal_handlers(
+    shutdown_event: asyncio.Event,
+) -> Callable[[], None]:
+    cleanup_callbacks: list[Callable[[], None]] = []
+
+    def request_shutdown(_signum: int, _frame: object) -> None:
+        shutdown_event.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            previous_handler = signal.getsignal(sig)
+            signal.signal(sig, request_shutdown)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        cleanup_callbacks.append(
+            lambda sig=sig, previous_handler=previous_handler: signal.signal(
+                sig,
+                previous_handler,
+            )
+        )
+
+    def cleanup() -> None:
+        for callback in reversed(cleanup_callbacks):
+            try:
+                callback()
+            except (OSError, RuntimeError, ValueError):
+                continue
+
+    return cleanup
 
 
 async def _run_worker_once(

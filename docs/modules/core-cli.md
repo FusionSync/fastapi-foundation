@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、config template/drift-check/artifacts、release checkpoint、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、idempotency expire/diagnose、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
+- Done: `check-app`、`list-apps`、config template/drift-check/artifacts、release checkpoint、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run/profile 参数、scheduler run-once/run、worker run-once/run、tasks、idempotency expire/diagnose、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
 - Next:
   - [ ] 将 checkpoint suite 扩展到真实队列/Redis/外部依赖 profile 的探活。
 
@@ -63,7 +63,7 @@ migrate run
 `config artifacts --profile <profile> --target <docker-compose|systemd|helm-values>` 从 profile 模板生成部署产物内容；重复传入 `--actual KEY=VALUE` 时会附带执行配置 drift-check，并用非零 exit code 阻断漂移产物；配合 `--role` 可校验单个进程角色环境。
 `release checkpoint --profile <profile> --artifact-target <target>` 是发布脚本入口，会串联 profile template、部署产物、config check、backup readiness、按角色 config drift、migrate dry-run 和 smoke，并输出五个进程角色的参数矩阵。
 `outbox dispatch-once` 必须通过 `--installed-app` 或 settings 加载 AppModule 后构建 `EventRegistry`，领取 pending/failed outbox event，投递到已注册 handler，并输出 claimed/published/failed/dead_lettered JSON。
-`outbox-dispatcher --run` 是运行角色入口；不传 `--max-iterations` 时持续循环，传入后用于本地 smoke/CI 做有限轮验证；传 `--instance-id` 时写入进程 heartbeat。
+`outbox-dispatcher --run` 是运行角色入口；不传 `--max-iterations` 时持续循环，传入后用于本地 smoke/CI 做有限轮验证；传 `--instance-id` 时写入进程 heartbeat。CLI 会响应 SIGTERM/SIGINT，在当前轮处理完成后退出；profile 模板通过 `OUTBOX_DISPATCHER__BATCH_SIZE` 和 `OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS` 参数化批量领取和空闲休眠。
 `scheduler --run-once` 通过 `--installed-app` 加载 schedule/task handler，触发指定 `--schedule-id`，写入 `TaskRun` 和 `ScheduleTriggerLog`，用于 local profile、运维手动触发和 CI smoke。
 `scheduler --run` 扫描 AppModule cron schedule definition，按 tenant 和当前分钟 planned slot 触发 due schedule；`--max-iterations` 用于 local/CI 有限轮验证，不传则常驻轮询；同一进程内同一 planned slot 只尝试一次，传 `--instance-id` 时写入进程 heartbeat。
 `worker --run-once` 通过 `--installed-app` 加载 task handler，按 `--queue` 领取一个 pending `TaskRun` 并执行，输出 claimed 和 task_result；它是 local/CI 有限轮验证入口，不是后台常驻 worker loop。

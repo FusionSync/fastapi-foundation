@@ -1,5 +1,6 @@
 import asyncio
 import json
+import signal
 import sys
 import types
 from datetime import UTC, datetime
@@ -9,9 +10,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.apps import AppModule, EventHandlerSpec, ScheduleSpec, TaskHandlerSpec
 from core.base.models import BaseModel
+from core.cli import operations
 from core.cli.main import main
 from core.operations import ProcessHeartbeat
-from core.outbox import OutboxEvent
+from core.outbox import OutboxDispatchRunResult, OutboxEvent
 from core.scheduler import ScheduleTriggerLog
 from core.tasks import TaskRun
 
@@ -139,6 +141,62 @@ def test_outbox_dispatcher_role_can_run_one_iteration(tmp_path: Path, monkeypatc
     }
     assert delivered == [event_id]
     assert asyncio.run(_event_status(database_url, event_id)) == "published"
+
+
+def test_outbox_dispatcher_run_passes_shutdown_event(monkeypatch, capsys) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_dispatch_loop(**kwargs):
+        captured.update(kwargs)
+        shutdown_event = kwargs["shutdown_event"]
+        assert isinstance(shutdown_event, asyncio.Event)
+        shutdown_event.set()
+        return OutboxDispatchRunResult(
+            ok=True,
+            dispatcher_id=str(kwargs["dispatcher_id"]),
+            iterations=0,
+            shutdown_requested=True,
+        )
+
+    monkeypatch.setattr(
+        "core.cli.operations.run_outbox_dispatch_loop",
+        fake_dispatch_loop,
+    )
+
+    exit_code = main(
+        [
+            "outbox-dispatcher",
+            "--run",
+            "--database-url",
+            "sqlite+aiosqlite:///./unused.db",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["shutdown_requested"] is True
+    assert isinstance(captured["shutdown_event"], asyncio.Event)
+
+
+def test_outbox_dispatcher_shutdown_signal_sets_event(monkeypatch) -> None:
+    installed: dict[signal.Signals, object] = {}
+
+    def fake_signal(sig, handler):
+        installed[sig] = handler
+        return signal.SIG_DFL
+
+    async def exercise() -> None:
+        monkeypatch.setattr("core.cli.operations.signal.signal", fake_signal)
+        shutdown_event = asyncio.Event()
+
+        cleanup = operations._install_shutdown_signal_handlers(shutdown_event)
+        installed[signal.SIGTERM](signal.SIGTERM, None)
+        cleanup()
+
+        assert shutdown_event.is_set()
+
+    asyncio.run(exercise())
 
 
 def test_outbox_dispatcher_run_records_process_heartbeat(
@@ -573,6 +631,12 @@ def test_release_checkpoint_outputs_profile_parameter_matrix(capsys) -> None:
         "core serve --run --host 127.0.0.1 --port 8000"
     )
     assert payload["profile_matrix"]["worker"]["env"]["OBSERVABILITY__SERVICE_ROLE"] == "worker"
+    assert payload["profile_matrix"]["outbox-dispatcher"]["env"][
+        "OUTBOX_DISPATCHER__BATCH_SIZE"
+    ] == "20"
+    assert "--batch-size ${OUTBOX_DISPATCHER__BATCH_SIZE}" in payload["profile_matrix"][
+        "outbox-dispatcher"
+    ]["command"]
     assert payload["profile_matrix"]["scheduler"]["drift_check_command"] == (
         "core config drift-check --profile local --role scheduler --json"
     )

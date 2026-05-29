@@ -128,6 +128,8 @@ def _local_template() -> ProfileTemplate:
             "SECURITY__JWT_SECRET": "change-me",
             "SECURITY__TRUSTED_HOSTS": '["localhost","127.0.0.1","testserver"]',
             "OBSERVABILITY__SERVICE_ROLE": "server",
+            "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
+            "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
         },
         processes={
@@ -147,7 +149,11 @@ def _local_template() -> ProfileTemplate:
                 replicas=1,
             ),
             "outbox-dispatcher": ProcessTemplate(
-                command="core outbox-dispatcher --run --instance-id ${INSTANCE_ID}",
+                command=(
+                    "core outbox-dispatcher --run --instance-id ${INSTANCE_ID} "
+                    "--batch-size ${OUTBOX_DISPATCHER__BATCH_SIZE} "
+                    "--idle-sleep-seconds ${OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS}"
+                ),
                 replicas=1,
             ),
             "migrate": ProcessTemplate(
@@ -181,6 +187,8 @@ def _private_template() -> ProfileTemplate:
             "SECURITY__TRUSTED_HOSTS": '["api.internal.example"]',
             "SECURITY__CORS_ORIGINS": '["https://console.internal.example"]',
             "OBSERVABILITY__SERVICE_ROLE": "server",
+            "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
+            "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
         },
         processes={
@@ -202,7 +210,11 @@ def _private_template() -> ProfileTemplate:
                 notes=["Use one active instance or external leader election."],
             ),
             "outbox-dispatcher": ProcessTemplate(
-                command="core outbox-dispatcher --run --instance-id ${INSTANCE_ID}",
+                command=(
+                    "core outbox-dispatcher --run --instance-id ${INSTANCE_ID} "
+                    "--batch-size ${OUTBOX_DISPATCHER__BATCH_SIZE} "
+                    "--idle-sleep-seconds ${OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS}"
+                ),
                 replicas=2,
             ),
             "migrate": ProcessTemplate(
@@ -237,6 +249,8 @@ def _cloud_template() -> ProfileTemplate:
             "SECURITY__TRUSTED_HOSTS": '["api.example.com"]',
             "SECURITY__CORS_ORIGINS": '["https://console.example.com"]',
             "OBSERVABILITY__SERVICE_ROLE": "server",
+            "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
+            "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
         },
         processes={
@@ -257,7 +271,11 @@ def _cloud_template() -> ProfileTemplate:
                 notes=["Run as singleton or leader-elected job."],
             ),
             "outbox-dispatcher": ProcessTemplate(
-                command="core outbox-dispatcher --run --instance-id ${INSTANCE_ID}",
+                command=(
+                    "core outbox-dispatcher --run --instance-id ${INSTANCE_ID} "
+                    "--batch-size ${OUTBOX_DISPATCHER__BATCH_SIZE} "
+                    "--idle-sleep-seconds ${OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS}"
+                ),
                 replicas="autoscale",
             ),
             "migrate": ProcessTemplate(
