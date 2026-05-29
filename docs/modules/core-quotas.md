@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: quota provider、rule 和 usage 抽象已落地。
+- Done: quota provider、rule、usage 抽象和数据库持久 usage store 已落地。
 - Next:
-  - [ ] 接持久 usage store。
   - [ ] 将配额检查接入文件、任务和业务 mutation 的统一 gate。
 
 ## 职责
@@ -58,7 +57,7 @@ file_count
 
 ## 当前实现
 
-已落地 `QuotaRule`、`QuotaSubject`、`QuotaRegistry`、`QuotaService` 和 `MemoryQuotaUsageStore`：
+已落地 `QuotaRule`、`QuotaSubject`、`QuotaRegistry`、`QuotaService`、`MemoryQuotaUsageStore` 和 `DatabaseQuotaUsageStore`：
 
 - `QuotaRegistry.from_tenant_config()` 可从租户配置生成 metric 规则。
 - `QuotaRule` 声明 `metric`、`limit` 和 `scope`，scope 支持 `tenant`、`user`、`resource`。
@@ -67,7 +66,8 @@ file_count
 - `QuotaService.reserve()` 执行强校验并在通过时增加用量，适合文件上传、创建用户、提交任务等关键写操作。
 - `QuotaService.require_reserve()` 在配额不足时抛 `QUOTA_EXCEEDED`，并带稳定 details。
 - `QuotaService.release()` 支持释放并发类配额，例如 `concurrent_tasks`。
+- `DatabaseQuotaUsageStore` 使用 `quota_usage` 表持久化 usage key 和 used 值；`reserve()` 通过数据库条件更新实现 check-and-increment，超限时不增加用量。
 - 配额不足时会写可选 `MetricsRegistry` 的 `quota_exceeded_total{metric,scope}`，并可通过 `AuditRecorder` 写 `quota.exceeded` 审计。
 - 指标契约已预留 `quota_exceeded_total`。
 
-内存 store 只用于 local profile、测试和单机版。private/cloud profile 后续应替换为数据库或 Redis-backed store，并保证 `reserve()` 的 check-and-increment 语义是原子的。
+内存 store 只用于 local profile、测试和单机版。private/cloud profile 应使用 `DatabaseQuotaUsageStore` 或等价 Redis-backed store，并保证 `reserve()` 的 check-and-increment 语义是原子的。
