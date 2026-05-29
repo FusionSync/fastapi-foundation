@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim、状态流转 store、response replay/cache 语义、过期清理命令、冲突诊断命令和 outbox handler 执行幂等复用已落地。
-- Next:
-  - [ ] 将高风险写 route 的可复用 idempotency dependency 接到 accounts/files/tasks mutation。
+- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim、状态流转 store、response replay/cache 语义、过期清理命令、冲突诊断命令、outbox handler 执行幂等复用，以及 accounts/files/tasks 高风险写操作的可复用 mutation guard 已落地。
+- Next: _none_
 
 ## 职责
 
@@ -103,5 +102,8 @@ processing
 - `locked_until` 过期后允许重新领取；`expires_at` 过期后允许复用同一 key。
 - `core idempotency expire --yes --json` 会把过期记录标记为 `expired` 并清理 `locked_until`。
 - `core idempotency diagnose --tenant-id ... --user-id ... --route ... --idempotency-key ... --request-hash ... --json` 输出稳定诊断 JSON；`replayable` 结果会包含可直接返回的 `response_code`、`response_body`、`task_id` 和 `outbox_event_id`。
+- `IdempotencyMutationGuard.run()` 封装高风险写操作的显式调用模式：首次请求 claim 后执行 handler，保存 response；重复请求直接 replay 已保存 response，不再次创建 account、写 file storage 或提交 task。
+- guard 可通过 `task_id_builder` / `outbox_event_id_builder` 将异步副作用绑定到幂等记录，客户端重试时返回同一 `task_id` / `outbox_event_id`。
+- handler 抛错时 guard 会把记录标记为 `failed`，默认不自动重试；需要重试的接口必须显式设置 `retry_failed=true`。
 
-第一版没有直接做 HTTP middleware。推荐先由高风险写接口在 service/route 入口显式调用 store，等账户、文件、任务等大功能全部连通后，再抽象成可复用 dependency。
+当前没有直接做全局 HTTP middleware。高风险写接口应在 service/route 入口显式调用 `IdempotencyMutationGuard`，避免无意覆盖低风险读接口或非幂等业务语义。

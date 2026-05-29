@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler 本地提交链路、worker 本地执行 loop、task trace_id handoff 和 worker heartbeat 已落地。
+- Done: task registry、sync provider、TaskRun 持久状态、repository、stale recovery、task CLI、scheduler 本地提交链路、worker 本地执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint 和 worker heartbeat 已落地。
 - Next:
   - [ ] 接 RQ/Celery 或等价队列 provider。
   - [ ] 串通队列 ack/retry/backoff 和部署 profile 参数。

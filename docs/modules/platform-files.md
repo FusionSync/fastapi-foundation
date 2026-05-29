@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: file metadata、local/S3 storage provider、owner/authorization gate、业务资源级 authorization adapter、upload quota gate、virus scan gate、delete retention cleanup、upload/download/delete 权限和基础 storage tests 已落地。
+- Done: file metadata、local/S3 storage provider、owner/authorization gate、业务资源级 authorization adapter、upload quota gate、virus scan gate、delete retention cleanup、upload 幂等 mutation guard checkpoint、upload/download/delete 权限和基础 storage tests 已落地。
 - Next: _none_
 
 ## 职责

@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: local user/password credential、session fact、auth session store、permissions、session.created 强一致审计和基础 account integration tests 已落地。
+- Done: local user/password credential、session fact、auth session store、permissions、session.created 强一致审计、account create 幂等 mutation guard checkpoint 和基础 account integration tests 已落地。
 - Next:
   - [ ] 补用户资料、password reset、外部身份绑定和 session 管理 API。
   - [ ] 将账号安全事件 outbox、token refresh 和失败登录审计流程接入。
