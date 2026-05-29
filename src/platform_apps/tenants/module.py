@@ -1,7 +1,15 @@
 from core.apps import AppModule, EventSchemaSpec, MigrationSpec
+from core.exceptions import ErrorCodeSpec
 from core.tenancy import TENANT_MEMBER_ACTIVATED_EVENT
 from platform_apps.tenants.permissions import PERMISSIONS
-from platform_apps.tenants.router import router
+from platform_apps.tenants.router import (
+    invitation_accept_router,
+    invitation_issue_router,
+    invitation_revoke_router,
+    member_manage_router,
+    member_read_router,
+    platform_router,
+)
 from platform_apps.tenants.services import (
     TENANT_INVITATION_ACCEPTED_EVENT,
     TENANT_INVITATION_ISSUED_EVENT,
@@ -11,10 +19,27 @@ from platform_apps.tenants.services import (
 module = AppModule(
     label="platform_tenants",
     version="0.1.0",
-    routers=[router],
+    routers=[
+        platform_router,
+        member_read_router,
+        member_manage_router,
+        invitation_issue_router,
+        invitation_revoke_router,
+        invitation_accept_router,
+    ],
     models=["platform_apps.tenants.models"],
     migrations=MigrationSpec(path="platform_apps.tenants.migrations"),
     permissions=PERMISSIONS,
+    error_codes=[
+        ErrorCodeSpec(
+            "PLATFORM_TENANTS_HTTP_NOT_READY",
+            501,
+            "Platform tenants HTTP endpoint is not connected yet",
+            owner_module="platform_tenants",
+            details_schema={},
+            deprecated=False,
+        )
+    ],
     event_schemas=[
         EventSchemaSpec(
             event_type=TENANT_INVITATION_ISSUED_EVENT,

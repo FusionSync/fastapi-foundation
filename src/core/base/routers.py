@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
 from starlette.requests import Request
@@ -15,6 +15,7 @@ CORE_ROUTE_SECURITY_POLICY_ATTR = "_core_route_security_policy"
 CORE_ROUTE_AUTHORIZATION_RESULT_ATTR = "_core_route_authorization_result"
 RouteAuthorizer = Callable[[RequestContext | None, "RouteSecurityPolicy"], object]
 RequestSecurityResolver = Callable[[Request, "RouteSecurityPolicy"], object]
+PermissionScope = Literal["tenant", "platform"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class RouteSecurityPolicy:
     auth_required: bool = True
     tenant_required: bool = True
     permissions: tuple[str, ...] = field(default_factory=tuple)
+    permission_scope: PermissionScope | None = None
     tenant_operation: str = "read"
 
     def to_dict(self) -> dict[str, Any]:
@@ -31,6 +33,7 @@ class RouteSecurityPolicy:
             "auth_required": self.auth_required,
             "tenant_required": self.tenant_required,
             "permissions": list(self.permissions),
+            "permission_scope": self.permission_scope,
             "tenant_operation": self.tenant_operation,
         }
 
@@ -43,6 +46,7 @@ def create_router(
     auth_required: bool = True,
     tenant_required: bool = True,
     permissions: list[str] | tuple[str, ...] | None = None,
+    permission_scope: PermissionScope | None = None,
     tenant_operation: str = "read",
 ) -> APIRouter:
     policy = _build_route_security_policy(
@@ -50,6 +54,7 @@ def create_router(
         auth_required=auth_required,
         tenant_required=tenant_required,
         permissions=permissions,
+        permission_scope=permission_scope,
         tenant_operation=tenant_operation,
     )
     dependencies = [] if policy.public else [Depends(_route_security_dependency(policy))]
@@ -118,23 +123,34 @@ def _build_route_security_policy(
     auth_required: bool,
     tenant_required: bool,
     permissions: list[str] | tuple[str, ...] | None,
+    permission_scope: PermissionScope | None,
     tenant_operation: str,
 ) -> RouteSecurityPolicy:
+    if permission_scope is not None and permission_scope not in {"tenant", "platform"}:
+        raise ValueError("permission_scope must be tenant or platform")
+    resolved_permissions = tuple(permissions or ())
+    resolved_permission_scope = (
+        permission_scope if resolved_permissions else None
+    ) or ("tenant" if resolved_permissions else None)
     if public:
         if permissions:
             raise ValueError("public routers cannot declare permissions")
+        if permission_scope is not None:
+            raise ValueError("public routers cannot declare permission_scope")
         return RouteSecurityPolicy(
             public=True,
             auth_required=False,
             tenant_required=False,
             permissions=(),
+            permission_scope=None,
             tenant_operation=tenant_operation,
         )
     return RouteSecurityPolicy(
         public=False,
         auth_required=auth_required,
         tenant_required=tenant_required,
-        permissions=tuple(permissions or ()),
+        permissions=resolved_permissions,
+        permission_scope=resolved_permission_scope,
         tenant_operation=tenant_operation,
     )
 

@@ -37,6 +37,20 @@ PERMISSIONS = [
         risk_level="critical",
     ),
     PermissionSpec(
+        resource="tenant_member",
+        action="read",
+        scope="tenant",
+        description="Read tenant membership.",
+        risk_level="normal",
+    ),
+    PermissionSpec(
+        resource="tenant_member",
+        action="manage",
+        scope="tenant",
+        description="Manage tenant membership.",
+        risk_level="high",
+    ),
+    PermissionSpec(
         resource="tenant_invitation",
         action="invite",
         scope="tenant",

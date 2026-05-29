@@ -1,7 +1,9 @@
 from core.apps import AppRegistry
 from core.apps.conformance import check_app
+from core.base import get_router_security_policy
 from core.migrations import MigrationRegistry
 from core.permissions import PermissionRegistry
+from platform_apps.tenants import module as tenants_module
 
 PLATFORM_APP_MODULES = [
     "platform_apps.accounts.module",
@@ -40,3 +42,53 @@ def test_platform_apps_register_permissions_and_migrations() -> None:
         ("platform_files", "file", "download"),
         ("platform_tenants", "tenant", "manage"),
     }
+
+
+def test_platform_tenant_routes_declare_security_policies() -> None:
+    policies = {
+        (
+            router.prefix,
+            get_router_security_policy(router).permissions,
+            get_router_security_policy(router).tenant_required,
+            get_router_security_policy(router).permission_scope,
+        )
+        for router in tenants_module.routers
+        if get_router_security_policy(router) is not None
+    }
+
+    assert (
+        "/platform/tenants",
+        ("tenant:manage",),
+        False,
+        "platform",
+    ) in policies
+    assert (
+        "/tenants/{tenant_id}/members",
+        ("tenant_member:read",),
+        True,
+        "tenant",
+    ) in policies
+    assert (
+        "/tenants/{tenant_id}/members",
+        ("tenant_member:manage",),
+        True,
+        "tenant",
+    ) in policies
+    assert (
+        "/tenants/{tenant_id}/invitations",
+        ("tenant_invitation:invite",),
+        True,
+        "tenant",
+    ) in policies
+    assert (
+        "/tenants/{tenant_id}/invitations",
+        ("tenant_invitation:revoke",),
+        True,
+        "tenant",
+    ) in policies
+    assert (
+        "/tenant-invitations",
+        (),
+        False,
+        None,
+    ) in policies

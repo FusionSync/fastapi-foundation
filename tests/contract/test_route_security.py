@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from core.base import RouteSecurityPolicy, create_router
+from core.base import RouteSecurityPolicy, create_router, get_router_security_policy
 from core.context import RequestContext
 from core.exceptions import AppError, register_exception_handlers
 from core.permissions import AuthorizationDecision, route_authorization_decision
@@ -134,3 +134,20 @@ def test_route_dependency_rejects_missing_authorization_decision() -> None:
     assert response.status_code == 403
     assert response.json()["code"] == "PERMISSION_DENIED"
     assert response.json()["details"] == {"reason": "missing_route_authorization_decision"}
+
+
+def test_create_router_declares_platform_permission_scope() -> None:
+    router = create_router(
+        "/platform",
+        tenant_required=False,
+        permissions=["tenant:manage"],
+        permission_scope="platform",
+    )
+
+    policy = get_router_security_policy(router)
+
+    assert policy is not None
+    assert policy.permissions == ("tenant:manage",)
+    assert policy.tenant_required is False
+    assert policy.permission_scope == "platform"
+    assert policy.to_dict()["permission_scope"] == "platform"

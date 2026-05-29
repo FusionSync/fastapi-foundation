@@ -10,7 +10,7 @@ from core.auth.errors import invalid_auth_token
 from core.auth.jwt_provider import LocalJwtProvider
 from core.auth.session import AuthSessionStore, AuthSessionValidator
 from core.base import RouteSecurityPolicy, parse_route_permission
-from core.context import RequestContext
+from core.context import RequestContext, get_current_context, set_current_context
 from core.exceptions import AppError
 from core.permissions import AuthorizationDecision, AuthorizationService
 from core.tenancy import DatabaseTenantContextResolver
@@ -42,12 +42,15 @@ class DatabaseRequestSecurityPipeline:
             current_user = await AuthSessionValidator(
                 self.session_store_factory(session)
             ).authenticate(claims)
-            await DatabaseTenantContextResolver(session).resolve(
-                current_user=current_user,
-                token_tenant_id=claims.tenant_id,
-                header_tenant_id=request.headers.get("X-Tenant-ID"),
-                operation=policy.tenant_operation,  # type: ignore[arg-type]
-            )
+            if _requires_tenant_resolution(policy):
+                await DatabaseTenantContextResolver(session).resolve(
+                    current_user=current_user,
+                    token_tenant_id=claims.tenant_id,
+                    header_tenant_id=request.headers.get("X-Tenant-ID"),
+                    operation=policy.tenant_operation,  # type: ignore[arg-type]
+                )
+                return
+            _bind_authenticated_user(current_user.id)
 
     async def authorize(
         self,
@@ -56,11 +59,11 @@ class DatabaseRequestSecurityPipeline:
     ) -> tuple[AuthorizationDecision, ...]:
         if not policy.permissions:
             return ()
-        if context is None or not context.user_id or not context.tenant_id:
+        if context is None or not context.user_id:
             raise AppError(
-                "TENANT_ACCESS_DENIED",
-                "Tenant context is required before permission authorization",
-                status_code=403,
+                "AUTH_INVALID_TOKEN",
+                "Authenticated user is required before permission authorization",
+                status_code=401,
             )
         async with self.session_factory() as session:
             audit = self.audit_factory(session) if self.audit_factory is not None else None
@@ -69,6 +72,22 @@ class DatabaseRequestSecurityPipeline:
             try:
                 for permission in policy.permissions:
                     resource, action = parse_route_permission(permission)
+                    if policy.permission_scope == "platform":
+                        decisions.append(
+                            await authorization.require_platform(
+                                user_id=context.user_id,
+                                resource=resource,
+                                action=action,
+                                request_id=context.request_id,
+                            )
+                        )
+                        continue
+                    if not context.tenant_id:
+                        raise AppError(
+                            "TENANT_ACCESS_DENIED",
+                            "Tenant context is required before permission authorization",
+                            status_code=403,
+                        )
                     decisions.append(
                         await authorization.require(
                             user_id=context.user_id,
@@ -93,3 +112,16 @@ def _bearer_token(request: Request) -> str:
     if not separator or scheme.lower() != "bearer" or not token.strip():
         invalid_auth_token("invalid_authorization_header")
     return token.strip()
+
+
+def _requires_tenant_resolution(policy: RouteSecurityPolicy) -> bool:
+    return policy.tenant_required or (
+        bool(policy.permissions) and policy.permission_scope != "platform"
+    )
+
+
+def _bind_authenticated_user(user_id: str) -> None:
+    context = get_current_context()
+    if context is None:
+        return
+    set_current_context(context.with_user(user_id).freeze())

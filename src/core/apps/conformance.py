@@ -609,7 +609,8 @@ class _TenantQueryLintVisitor(ast.NodeVisitor):
 
 def _check_router_security(app_module: AppModule, result: AppCheckResult) -> None:
     declared_permissions = {
-        (permission.resource, permission.action) for permission in app_module.permissions
+        (permission.scope, permission.resource, permission.action)
+        for permission in app_module.permissions
     }
     for router in app_module.routers:
         policy = get_router_security_policy(router)
@@ -628,7 +629,8 @@ def _check_router_security(app_module: AppModule, result: AppCheckResult) -> Non
                     f"route security permission {permission} must use resource:action format"
                 )
                 continue
-            if (resource, action) not in declared_permissions:
+            permission_scope = policy.permission_scope or "tenant"
+            if (permission_scope, resource, action) not in declared_permissions:
                 result.errors.append(
                     f"route security permission {permission} must be declared in "
                     "AppModule.permissions"

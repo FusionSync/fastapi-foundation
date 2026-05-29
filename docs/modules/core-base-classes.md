@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository、route security policy、ListQuerySchema 分页/过滤/排序 helper、repository 查询应用 helper、业务 repository 继承 conformance gate 和 service/router 查询绕过 lint 已被上层 gate 或 contract tests 使用。
+- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository、route security policy、platform permission scope、ListQuerySchema 分页/过滤/排序 helper、repository 查询应用 helper、业务 repository 继承 conformance gate 和 service/router 查询绕过 lint 已被上层 gate 或 contract tests 使用。
 - Next: _none_
 
 ## 职责
@@ -127,6 +127,7 @@ router = create_router(prefix="/health", tags=["health"], public=True)
 
 如果 router 声明 `permissions=[...]`，运行时必须在 `app.state.route_authorizer` 挂载授权器。
 route dependency 会在认证/租户上下文检查后调用该授权器；未挂载授权器时拒绝请求，避免权限声明只停留在元数据层。
+带权限的 route 默认使用 tenant scope；platform 级 route 必须显式声明 `permission_scope="platform"`，并通常配合 `tenant_required=False`，运行时通过 platform domain 的授权事实校验。
 
 app conformance 会拒绝裸 `APIRouter`，避免业务 app 绕过统一认证、租户和后续权限/限流装配。
 
