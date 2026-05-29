@@ -2,10 +2,9 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: contract/integration 测试目录、app conformance gate、错误码和 message catalog metadata/app 注册检查、repository 继承检查、route permission conformance 与权限拒绝审计、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、security hardening checklist、rate-limit middleware/sliding-window、observability request logging/monitoring contract、outbox schema/version/error classification/shutdown/profile 参数、migration phase/execution records、database runtime diagnostics/read split/tenant fallback、database/Redis lock provider、Redis cache provider、cache invalidation rules、database quota usage store、file upload quota gate、quota mutation/task submit gate、S3 storage provider、file virus scan/retention cleanup、file resource authorization adapter、tenant lifecycle configurable policy diagnostics、idempotency replay/diagnostics CLI、idempotency mutation guard accounts/files/tasks checkpoint、account security events/token refresh/failed login audit、platform accounts HTTP API profile/password/identity/session checkpoint、external OIDC provider callback checkpoint、task database queue provider/retry backoff/profile 参数、scheduler persistent state/misfire/profile 参数、tenant invitation/RoleGrant projection、platform tenants HTTP API service wiring、tenant deletion orchestration retry checkpoint、outbox/migration/audit hash chain 跨进程锁使用点、audit WORM/SIEM export、permission facts/projection、cross-tenant platform gate、route authorization dependency、task/scheduler trace handoff、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、app lifecycle diagnostics、API list query contract、platform app foundation 等 checkpoint 测试已落地。
-- Next:
-  - [ ] 增加业务 app fixture、tenant/user fixture 和发布前完整验证清单。
+- Status: `connected`
+- Done: contract/integration 测试目录、app conformance gate、错误码和 message catalog metadata/app 注册检查、repository 继承检查、route permission conformance 与权限拒绝审计、admin/migration metadata diagnostics、binary response conformance whitelist、app registry version/capability diagnostics、Settings 派生 runtime capability、runtime startup diagnostics、tenant isolation、security、security hardening checklist、rate-limit middleware/sliding-window、observability request logging/monitoring contract、outbox schema/version/error classification/shutdown/profile 参数、migration phase/execution records、database runtime diagnostics/read split/tenant fallback、database/Redis lock provider、Redis cache provider、cache invalidation rules、database quota usage store、file upload quota gate、quota mutation/task submit gate、S3 storage provider、file virus scan/retention cleanup、file resource authorization adapter、tenant lifecycle configurable policy diagnostics、idempotency replay/diagnostics CLI、idempotency mutation guard accounts/files/tasks checkpoint、account security events/token refresh/failed login audit、platform accounts HTTP API profile/password/identity/session checkpoint、external OIDC provider callback checkpoint、task database queue provider/retry backoff/profile 参数、scheduler persistent state/misfire/profile 参数、tenant invitation/RoleGrant projection、platform tenants HTTP API service wiring、tenant deletion orchestration retry checkpoint、outbox/migration/audit hash chain 跨进程锁使用点、audit WORM/SIEM export、permission facts/projection、cross-tenant platform gate、route authorization dependency、task/scheduler trace handoff、CLI error envelope、config profile/drift/deployment artifacts、release checkpoint suite、dependency-probes、app lifecycle diagnostics、API list query contract、platform app foundation、业务 app fixture、tenant/user fixture 和发布前完整验证清单等 checkpoint 测试已落地。
+- Next: _none_
 
 ## 职责
 
@@ -22,6 +21,20 @@ src/core/testing/
   permissions.py
   factories.py
 ```
+
+当前落地入口集中在 `core.testing`：
+
+```python
+from core.testing import (
+    build_prerelease_checklist,
+    create_business_app_fixture,
+    create_tenant_user_fixture,
+)
+```
+
+- `create_business_app_fixture(label, target_root=...)` 默认生成 `test_apps.{label}` 后端业务 app 测试骨架，返回 `module_path`、`Settings(installed_apps=[...])`、生成文件列表和 `check_app` 命令。
+- `create_tenant_user_fixture(...)` 返回可直接用于 service/router 测试的 `Tenant`、`TenantMember`、auth `CurrentUser`、tenancy resolver `CurrentUser` 和 `RequestContext`。
+- `build_prerelease_checklist(profile, artifact_target, installed_apps)` 输出发布前必须执行的 lint、pytest、diff、app conformance、permission catalog、migration plan、release checkpoint 和生产 profile dependency probe 命令。
 
 ## 核心能力
 
