@@ -9,6 +9,7 @@ from core.base.models import BaseModel
 from core.context import RequestContext, reset_current_context, set_current_context
 from core.db import unit_of_work
 from core.exceptions import AppError
+from core.locks import MemoryLockProvider
 from platform_apps.audit import AuditLog, AuditService, audit_hash
 
 
@@ -185,6 +186,65 @@ async def test_audit_record_serializes_writes_until_transaction_ends(
     assert audit_logs["tenant-first"].hash == first.hash
     assert audit_logs["tenant-second"].hash == second.hash
     assert audit_logs["tenant-second"].hash_prev == first.hash
+
+
+@pytest.mark.asyncio
+async def test_audit_record_uses_distributed_chain_lock_until_transaction_ends(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    locks = MemoryLockProvider()
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        await AuditService(
+            uow.session,
+            lock_provider=locks,
+            lock_owner_token="audit-worker-1",
+            lock_ttl_seconds=60,
+        ).record(
+            tenant_id="tenant-a",
+            action="tenant.first",
+            resource_type="tenant",
+            resource_id="tenant-first",
+            result="success",
+        )
+
+        assert await locks.locked("audit:hash-chain:tenant:tenant-a") is True
+
+    await asyncio.sleep(0)
+    assert await locks.locked("audit:hash-chain:tenant:tenant-a") is False
+
+
+@pytest.mark.asyncio
+async def test_audit_record_rejects_when_distributed_chain_lock_is_held(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    locks = MemoryLockProvider()
+    await locks.acquire(
+        "audit:hash-chain:tenant:tenant-a",
+        owner_token="audit-worker-2",
+        ttl_seconds=60,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            await AuditService(
+                uow.session,
+                lock_provider=locks,
+                lock_owner_token="audit-worker-1",
+                lock_ttl_seconds=60,
+            ).record(
+                tenant_id="tenant-a",
+                action="tenant.first",
+                resource_type="tenant",
+                resource_id="tenant-first",
+                result="success",
+            )
+
+    assert exc_info.value.code == "LOCK_NOT_ACQUIRED"
+    assert await _audit_count(session_factory) == 0
+    assert await locks.locked("audit:hash-chain:tenant:tenant-a") is True
 
 
 @pytest.mark.asyncio

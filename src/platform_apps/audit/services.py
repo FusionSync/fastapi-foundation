@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.context import get_current_context
 from core.exceptions import AppError
+from core.locks import LockProvider
 from core.security import redact_sensitive_data
 from platform_apps.audit.models import AuditLog
 
@@ -29,9 +30,32 @@ class AuditChainVerificationResult:
     errors: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _DistributedAuditChainLock:
+    provider: LockProvider
+    lock_key: str
+    owner_token: str
+
+
+@dataclass(frozen=True, slots=True)
+class _HeldAuditChainLock:
+    local_lock: asyncio.Lock
+    distributed_lock: _DistributedAuditChainLock | None = None
+
+
 class AuditService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        lock_provider: LockProvider | None = None,
+        lock_owner_token: str | None = None,
+        lock_ttl_seconds: int = 300,
+    ) -> None:
         self.session = session
+        self.lock_provider = lock_provider
+        self.lock_owner_token = lock_owner_token
+        self.lock_ttl_seconds = lock_ttl_seconds
 
     async def record(
         self,
@@ -58,7 +82,13 @@ class AuditService:
         self._validate_required(action=action, resource_type=resource_type, result=result)
         context = get_current_context()
         resolved_tenant_id = tenant_id or (context.tenant_id if context else None)
-        await _acquire_audit_chain_lock(self.session, resolved_tenant_id)
+        await _acquire_audit_chain_lock(
+            self.session,
+            resolved_tenant_id,
+            lock_provider=self.lock_provider,
+            lock_owner_token=self.lock_owner_token,
+            lock_ttl_seconds=self.lock_ttl_seconds,
+        )
         previous_hash = await self._latest_hash(resolved_tenant_id)
         redacted_payload = redact_sensitive_data(payload or {})
         audit_log = AuditLog(
@@ -130,7 +160,14 @@ class AuditService:
             raise AppError("VALIDATION_ERROR", "audit result is invalid", status_code=400)
 
 
-async def _acquire_audit_chain_lock(session: AsyncSession, tenant_id: str | None) -> None:
+async def _acquire_audit_chain_lock(
+    session: AsyncSession,
+    tenant_id: str | None,
+    *,
+    lock_provider: LockProvider | None = None,
+    lock_owner_token: str | None = None,
+    lock_ttl_seconds: int = 300,
+) -> None:
     key = _audit_chain_lock_key(tenant_id)
     held_locks = session.sync_session.info.setdefault(_SESSION_AUDIT_CHAIN_LOCKS, {})
     if key in held_locks:
@@ -139,8 +176,47 @@ async def _acquire_audit_chain_lock(session: AsyncSession, tenant_id: str | None
     async with _AUDIT_CHAIN_LOCKS_GUARD:
         lock = _AUDIT_CHAIN_LOCKS.setdefault(key, asyncio.Lock())
     await lock.acquire()
-    held_locks[key] = lock
-    _register_audit_chain_lock_release(session)
+    try:
+        distributed_lock = await _acquire_distributed_audit_chain_lock(
+            session,
+            tenant_id,
+            lock_provider=lock_provider,
+            lock_owner_token=lock_owner_token,
+            lock_ttl_seconds=lock_ttl_seconds,
+        )
+        held_locks[key] = _HeldAuditChainLock(
+            local_lock=lock,
+            distributed_lock=distributed_lock,
+        )
+        _register_audit_chain_lock_release(session)
+    except BaseException:
+        if lock.locked():
+            lock.release()
+        raise
+
+
+async def _acquire_distributed_audit_chain_lock(
+    session: AsyncSession,
+    tenant_id: str | None,
+    *,
+    lock_provider: LockProvider | None,
+    lock_owner_token: str | None,
+    lock_ttl_seconds: int,
+) -> _DistributedAuditChainLock | None:
+    if lock_provider is None:
+        return None
+    lock_key = _audit_chain_distributed_lock_key(tenant_id)
+    owner_token = lock_owner_token or _audit_chain_owner_token(session, tenant_id)
+    await lock_provider.require_acquire(
+        lock_key,
+        owner_token=owner_token,
+        ttl_seconds=lock_ttl_seconds,
+    )
+    return _DistributedAuditChainLock(
+        provider=lock_provider,
+        lock_key=lock_key,
+        owner_token=owner_token,
+    )
 
 
 def _register_audit_chain_lock_release(session: AsyncSession) -> None:
@@ -152,9 +228,11 @@ def _register_audit_chain_lock_release(session: AsyncSession) -> None:
         if transaction.parent is not None:
             return
         held_locks = session_.info.pop(_SESSION_AUDIT_CHAIN_LOCKS, {})
-        for lock in held_locks.values():
-            if lock.locked():
-                lock.release()
+        for held_lock in held_locks.values():
+            if held_lock.local_lock.locked():
+                held_lock.local_lock.release()
+            if held_lock.distributed_lock is not None:
+                _schedule_distributed_audit_chain_lock_release(held_lock.distributed_lock)
 
     sync_session.info[_SESSION_AUDIT_CHAIN_RELEASE_REGISTERED] = True
     event.listen(sync_session, "after_transaction_end", release_locks_after_transaction_end)
@@ -162,6 +240,33 @@ def _register_audit_chain_lock_release(session: AsyncSession) -> None:
 
 def _audit_chain_lock_key(tenant_id: str | None) -> str:
     return f"tenant:{tenant_id}" if tenant_id is not None else "platform"
+
+
+def _audit_chain_distributed_lock_key(tenant_id: str | None) -> str:
+    return f"audit:hash-chain:{_audit_chain_lock_key(tenant_id)}"
+
+
+def _audit_chain_owner_token(session: AsyncSession, tenant_id: str | None) -> str:
+    return f"audit-chain:{id(session.sync_session)}:{_audit_chain_lock_key(tenant_id)}"
+
+
+def _schedule_distributed_audit_chain_lock_release(
+    distributed_lock: _DistributedAuditChainLock,
+) -> None:
+    task = asyncio.create_task(
+        distributed_lock.provider.release(
+            distributed_lock.lock_key,
+            owner_token=distributed_lock.owner_token,
+        )
+    )
+    task.add_done_callback(_consume_lock_release_result)
+
+
+def _consume_lock_release_result(task: asyncio.Task[bool]) -> None:
+    try:
+        task.result()
+    except Exception:
+        return
 
 
 def _verify_hash_chain(audit_logs: list[AuditLog]) -> list[str]:

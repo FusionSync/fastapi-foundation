@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: audit model、AuditService、result/reason/session/policy fields、request/trace/route/method 默认 context 字段、hash chain、进程内链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
+- Done: audit model、AuditService、result/reason/session/policy fields、request/trace/route/method 默认 context 字段、hash chain、进程内链路锁、可选分布式链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计和 tenant lifecycle 审计已落地。
 - Next:
   - [ ] 接 WORM/SIEM export。
-  - [ ] 为 private/cloud 多 worker 部署补分布式 hash chain 串行化。
 
 ## 职责
 
@@ -72,6 +71,7 @@ AuditLog
 - 入库前通过 `core.security.redact_sensitive_data()` 脱敏 password、token、secret、authorization 等字段。
 - 每条记录写入 `hash_prev` 和 `hash`，hash chain 按 `tenant_id` 分区；平台级 `tenant_id=None` 记录使用独立链路，避免租户级导出或校验引用其他租户记录。
 - `AuditService.record()` 对同一进程内的同一 tenant/platform 链路加锁，并持有到当前 SQLAlchemy session 外层事务结束，防止应用内并发写入形成 hash chain 分叉。
+- private/cloud profile 可向 `AuditService` 注入 `LockProvider`，为每个 tenant/platform hash chain 获取 `audit:hash-chain:*` 分布式锁；锁占用时返回 `LOCK_NOT_ACQUIRED`，获取成功后同样持有到外层事务结束再释放。
 - `AuditService.verify_hash_chain(tenant_id)` 可按租户校验本库内审计链路，发现 hash 不匹配、前驱缺失、分叉、多根和断链。
 - `core.permissions.AuthorizationService` 会在权限拒绝时写入 `authorization.denied` 审计。
 - `DatabaseRequestSecurityPipeline` 可通过 `audit_factory=AuditService` 持久化 route-level permission denied 审计；该审计记录会复用 `RequestContext` 中的 tenant、actor、request、IP 和 user agent 默认字段。
@@ -80,4 +80,4 @@ AuditLog
 - `TenantLifecycleService` 可注入 `AuditService`，租户创建、暂停、恢复、删除和归档会写对应 `tenant.*` 审计。
 - `platform_apps.audit.permissions.PERMISSIONS` 注册 `audit_log.read` 和 `audit_log.export` 平台权限。
 
-当前 hash chain 是数据库内轻量链路，不替代外部 WORM 或 SIEM。进程内链路锁只覆盖单进程并发；private/cloud 多 worker 部署必须继续接数据库 advisory lock、Redis lock 或同等分布式串行化能力。生产环境如果有合规要求，应把审计导出和不可篡改存储作为部署 profile 能力继续接上。
+当前 hash chain 是数据库内轻量链路，不替代外部 WORM 或 SIEM。多 worker 部署应使用 `DatabaseLockProvider`、后续 Redis/advisory lock provider 或同等分布式串行化能力。生产环境如果有合规要求，应把审计导出和不可篡改存储作为部署 profile 能力继续接上。
