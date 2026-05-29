@@ -208,6 +208,11 @@ def _private_template() -> ProfileTemplate:
             "TASK_QUEUE__MAX_ATTEMPTS": "3",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
+            "DEPENDENCIES__REDIS_URL": "redis://redis:6379/0",
+            "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT": "http://minio:9000",
+            "DEPENDENCIES__OIDC_ISSUER_URL": (
+                "https://keycloak.internal.example/realms/wps-bid"
+            ),
             "SCHEDULER__PROVIDER": "local",
             "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__LOCK_TTL_SECONDS": "60",
@@ -289,6 +294,9 @@ def _cloud_template() -> ProfileTemplate:
             "TASK_QUEUE__MAX_ATTEMPTS": "3",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
+            "DEPENDENCIES__REDIS_URL": "rediss://:${REDIS_PASSWORD}@redis.example.com:6379/0",
+            "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT": "https://s3.example.com",
+            "DEPENDENCIES__OIDC_ISSUER_URL": "https://auth.example.com/oidc",
             "SCHEDULER__PROVIDER": "local",
             "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__LOCK_TTL_SECONDS": "60",

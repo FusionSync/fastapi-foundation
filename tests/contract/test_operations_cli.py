@@ -660,6 +660,7 @@ def test_release_checkpoint_outputs_profile_parameter_matrix(capsys) -> None:
         "config-check",
         "backup-readiness",
         "config-drift",
+        "dependency-probes",
         "migrate-run",
         "smoke",
     ]
@@ -686,6 +687,8 @@ def test_release_checkpoint_outputs_profile_parameter_matrix(capsys) -> None:
     )
     assert payload["stages"][1]["result"]["files"][0]["path"] == "docker-compose.local.yml"
     assert payload["stages"][4]["result"]["mode"] == "profile-template"
+    assert payload["stages"][5]["result"]["mode"] == "configuration"
+    assert payload["stages"][5]["result"]["probes"]["task_queue"]["status"] == "configured"
 
 
 def test_release_checkpoint_blocks_config_drift_with_redacted_details(capsys) -> None:

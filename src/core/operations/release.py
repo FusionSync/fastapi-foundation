@@ -16,6 +16,7 @@ from core.migrations import (
 )
 from core.operations.backup import check_backup_readiness
 from core.operations.config import check_config
+from core.operations.dependencies import check_profile_dependencies
 from core.operations.health import ProcessRole
 from core.operations.smoke import SMOKE_ROLES, run_deployment_smoke
 
@@ -61,6 +62,7 @@ def run_release_checkpoint(
     latest_backup_at: datetime | None = None,
     max_backup_age_hours: int | None = None,
     installed_apps: list[str] | None = None,
+    probe_dependencies: bool = False,
 ) -> ReleaseCheckpointResult:
     template = render_profile_template(profile)
     settings = _settings_from_profile_env(expected_profile_env(profile))
@@ -79,6 +81,11 @@ def run_release_checkpoint(
         profile=profile,
         actual_env=actual_env or {},
         role_actual_env=role_actual_env or {},
+    )
+    dependency_result = check_profile_dependencies(
+        profile,
+        settings,
+        run_actual=probe_dependencies,
     )
     migrate_result = _run_migrate_checkpoint(
         installed_apps=installed_apps or [],
@@ -112,6 +119,11 @@ def run_release_checkpoint(
             name="config-drift",
             ok=bool(drift_result["ok"]),
             result=drift_result,
+        ),
+        ReleaseCheckpointStage(
+            name="dependency-probes",
+            ok=dependency_result.ok,
+            result=dependency_result.to_dict(),
         ),
         ReleaseCheckpointStage(
             name="migrate-run",
@@ -255,6 +267,15 @@ def _settings_from_profile_env(env: dict[str, str]) -> Settings:
         database["tenant_fallback_setting_name"] = env[
             "DATABASE__TENANT_FALLBACK_SETTING_NAME"
         ]
+    dependencies: dict[str, object] = {}
+    if "DEPENDENCIES__REDIS_URL" in env:
+        dependencies["redis_url"] = env["DEPENDENCIES__REDIS_URL"]
+    if "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT" in env:
+        dependencies["object_storage_endpoint"] = env[
+            "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT"
+        ]
+    if "DEPENDENCIES__OIDC_ISSUER_URL" in env:
+        dependencies["oidc_issuer_url"] = env["DEPENDENCIES__OIDC_ISSUER_URL"]
     return Settings(
         app={"env": env["APP__ENV"]},
         api={"error_http_status_mode": env["API__ERROR_HTTP_STATUS_MODE"]},
@@ -271,5 +292,6 @@ def _settings_from_profile_env(env: dict[str, str]) -> Settings:
             "idle_sleep_seconds": float(env["SCHEDULER__IDLE_SLEEP_SECONDS"]),
             "lock_ttl_seconds": int(env["SCHEDULER__LOCK_TTL_SECONDS"]),
         },
+        dependencies=dependencies,
         installed_apps=json.loads(env["INSTALLED_APPS"]),
     )

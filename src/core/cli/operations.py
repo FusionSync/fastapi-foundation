@@ -81,6 +81,7 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
     checkpoint_parser.add_argument("--latest-backup-at")
     checkpoint_parser.add_argument("--max-age-hours", type=int)
     checkpoint_parser.add_argument("--installed-app", action="append", default=[])
+    checkpoint_parser.add_argument("--probe-dependencies", action="store_true")
     checkpoint_parser.add_argument("--json", action="store_true", dest="as_json")
     checkpoint_parser.set_defaults(handler=_handle_release_checkpoint)
 
@@ -187,6 +188,7 @@ def _handle_release_checkpoint(args: argparse.Namespace) -> int:
         latest_backup_at=parse_backup_time(args.latest_backup_at),
         max_backup_age_hours=args.max_age_hours,
         installed_apps=installed_apps(args.installed_app),
+        probe_dependencies=args.probe_dependencies,
     )
     payload = {
         "command": "release checkpoint",

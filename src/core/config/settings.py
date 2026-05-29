@@ -67,6 +67,12 @@ class TenantLifecycleSettings(BaseModel):
     allow_archived_file_download: bool = False
 
 
+class DependencySettings(BaseModel):
+    redis_url: str | None = None
+    object_storage_endpoint: str | None = None
+    oidc_issuer_url: str | None = None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
@@ -82,6 +88,7 @@ class Settings(BaseSettings):
     task_queue: TaskQueueSettings = Field(default_factory=TaskQueueSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
     tenant_lifecycle: TenantLifecycleSettings = Field(default_factory=TenantLifecycleSettings)
+    dependencies: DependencySettings = Field(default_factory=DependencySettings)
     installed_apps: list[str] = Field(default_factory=list)
 
 

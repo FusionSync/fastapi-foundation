@@ -20,6 +20,11 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
     assert payload["env"]["TASK_QUEUE__MAX_ATTEMPTS"] == "3"
     assert payload["env"]["TASK_QUEUE__RETRY_BACKOFF_SECONDS"] == "30"
     assert payload["env"]["TASK_QUEUE__IDLE_SLEEP_SECONDS"] == "1.0"
+    assert payload["env"]["DEPENDENCIES__REDIS_URL"] == "redis://redis:6379/0"
+    assert payload["env"]["DEPENDENCIES__OBJECT_STORAGE_ENDPOINT"] == "http://minio:9000"
+    assert payload["env"]["DEPENDENCIES__OIDC_ISSUER_URL"] == (
+        "https://keycloak.internal.example/realms/wps-bid"
+    )
     assert payload["env"]["SCHEDULER__PROVIDER"] == "local"
     assert payload["env"]["SCHEDULER__IDLE_SLEEP_SECONDS"] == "1.0"
     assert payload["env"]["SCHEDULER__LOCK_TTL_SECONDS"] == "60"
@@ -118,6 +123,11 @@ def test_cloud_profile_template_uses_standard_http_and_external_secret_ref(capsy
     assert payload["env"]["API__ERROR_HTTP_STATUS_MODE"] == "standard"
     assert payload["env"]["DATABASE__TENANT_FALLBACK_MODE"] == "session_variable"
     assert payload["env"]["DATABASE__TENANT_FALLBACK_SETTING_NAME"] == "app.tenant_id"
+    assert payload["env"]["DEPENDENCIES__REDIS_URL"].startswith("rediss://")
+    assert payload["env"]["DEPENDENCIES__OBJECT_STORAGE_ENDPOINT"] == "https://s3.example.com"
+    assert payload["env"]["DEPENDENCIES__OIDC_ISSUER_URL"] == (
+        "https://auth.example.com/oidc"
+    )
     assert payload["env"]["SECURITY__JWT_SECRET_REF"] == "APP_JWT_SECRET"
     assert payload["env"]["SECURITY__TRUSTED_HOSTS"] == '["api.example.com"]'
     assert payload["env"]["SECURITY__CORS_ORIGINS"] == '["https://console.example.com"]'
@@ -179,6 +189,12 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "--actual",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS=1.0",
             "--actual",
+            "DEPENDENCIES__REDIS_URL=redis://redis:6379/0",
+            "--actual",
+            "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT=http://minio:9000",
+            "--actual",
+            "DEPENDENCIES__OIDC_ISSUER_URL=https://keycloak.internal.example/realms/wps-bid",
+            "--actual",
             "SCHEDULER__PROVIDER=local",
             "--actual",
             "SCHEDULER__IDLE_SLEEP_SECONDS=1.0",
@@ -219,6 +235,9 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "TASK_QUEUE__MAX_ATTEMPTS",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS",
+            "DEPENDENCIES__REDIS_URL",
+            "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT",
+            "DEPENDENCIES__OIDC_ISSUER_URL",
             "SCHEDULER__PROVIDER",
             "SCHEDULER__IDLE_SLEEP_SECONDS",
             "SCHEDULER__LOCK_TTL_SECONDS",
@@ -265,6 +284,12 @@ def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS=30",
             "--actual",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS=1.0",
+            "--actual",
+            "DEPENDENCIES__REDIS_URL=redis://redis:6379/0",
+            "--actual",
+            "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT=http://minio:9000",
+            "--actual",
+            "DEPENDENCIES__OIDC_ISSUER_URL=https://keycloak.internal.example/realms/wps-bid",
             "--actual",
             "SCHEDULER__PROVIDER=local",
             "--actual",
@@ -326,7 +351,7 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
             "labels": {"profile": "private"},
             "annotations": {
                 "summary": "Runtime configuration drift detected for private profile",
-                "missing_count": "17",
+                "missing_count": "20",
                 "mismatched_count": "2",
                 "runbook": "core config drift-check --profile private --json",
             },
