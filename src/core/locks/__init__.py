@@ -2,6 +2,7 @@ from core.locks.database import DatabaseLockProvider
 from core.locks.memory import MemoryLockProvider
 from core.locks.models import DatabaseLock
 from core.locks.provider import LockHandle, LockProvider
+from core.locks.redis import RedisLockClient, RedisLockProvider
 
 __all__ = [
     "DatabaseLock",
@@ -9,4 +10,6 @@ __all__ = [
     "LockHandle",
     "LockProvider",
     "MemoryLockProvider",
+    "RedisLockClient",
+    "RedisLockProvider",
 ]

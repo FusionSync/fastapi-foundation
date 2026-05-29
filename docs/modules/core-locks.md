@@ -2,10 +2,9 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: lock provider 抽象、内存实现、数据库表实现、scheduler trigger 并发保护，以及 outbox/migration/audit hash chain 跨进程锁使用点已落地。
-- Next:
-  - [ ] 接 Redis 或 PostgreSQL advisory lock provider。
+- Status: `connected`
+- Done: lock provider 抽象、内存实现、数据库表实现、Redis provider、scheduler trigger 并发保护，以及 outbox/migration/audit hash chain 跨进程锁使用点已落地。
+- Next: 无。
 
 ## 职责
 
@@ -72,6 +71,8 @@ fencing_token
 - 内存 provider 只适合 local profile、测试和单机版。private/cloud profile 必须使用 Redis、数据库 advisory lock 或等价 provider。
 - `DatabaseLockProvider` 使用 `core_locks` 表保存 `lock_key`、`owner_token`、`expires_at` 和 `fencing_token`，并通过注入的 `async_sessionmaker` 为 acquire/release/extend 执行独立短事务，避免锁行滞留在调用方长事务中不可见。
 - 表锁 provider 适合共享数据库部署的跨进程保护；高并发 PostgreSQL profile 后续可替换为 advisory lock 或 Redis provider，但必须保持同一 `LockProvider` 契约。
+- `RedisLockProvider` 通过注入的 async Redis client 工作，不在 core 内部强绑定 Redis 依赖；acquire 使用 `SET NX PX` 和独立 fencing key，release/extend 使用 Lua 脚本校验 owner token 后再删除或续租。
+- Redis fencing token 单调递增；高竞争下失败尝试可能造成 token 跳号，但成功获取后的 token 仍可用于下游拒绝旧 owner 写入。
 - `OutboxDispatcher` 可注入 `LockProvider`，在批量领取前获取 `outbox:dispatch` 粗粒度锁；`apply_migrations()` 在执行真实 migration 前通过注入的 provider 获取 `migrations:apply` 锁；`AuditService` 可注入 provider，为每个 tenant/platform hash chain 获取 `audit:hash-chain:*` 锁并持有到事务结束。
 
 Locks 只解决并发窗口，不替代 `IdempotencyRecord`、业务唯一约束或 outbox handler 幂等。
