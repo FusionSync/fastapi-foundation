@@ -5,6 +5,7 @@ from core.admin.registry import (
     RegisteredModelAdmin,
     RegisteredRouteAdmin,
 )
+from core.admin.routes import build_admin_router
 from core.admin.specs import (
     AdminDashboardWidgetSpec,
     AdminModelSpec,
@@ -22,4 +23,5 @@ __all__ = [
     "RegisteredDashboardWidget",
     "RegisteredModelAdmin",
     "RegisteredRouteAdmin",
+    "build_admin_router",
 ]

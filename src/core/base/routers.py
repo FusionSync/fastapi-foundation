@@ -71,7 +71,7 @@ def get_router_security_policy(router: APIRouter) -> RouteSecurityPolicy | None:
 
 
 def parse_route_permission(permission: str) -> tuple[str, str]:
-    resource, separator, action = permission.partition(":")
+    resource, separator, action = permission.rpartition(":")
     if not separator or not resource.strip() or not action.strip():
         raise AppError(
             "VALIDATION_ERROR",

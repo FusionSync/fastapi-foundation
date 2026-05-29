@@ -3,7 +3,12 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from core.base import RouteSecurityPolicy, create_router, get_router_security_policy
+from core.base import (
+    RouteSecurityPolicy,
+    create_router,
+    get_router_security_policy,
+    parse_route_permission,
+)
 from core.context import RequestContext
 from core.exceptions import AppError, register_exception_handlers
 from core.permissions import AuthorizationDecision, route_authorization_decision
@@ -151,3 +156,10 @@ def test_create_router_declares_platform_permission_scope() -> None:
     assert policy.tenant_required is False
     assert policy.permission_scope == "platform"
     assert policy.to_dict()["permission_scope"] == "platform"
+
+
+def test_route_permission_parser_allows_admin_resource_prefix() -> None:
+    assert parse_route_permission("admin:search_index:rebuild") == (
+        "admin:search_index",
+        "rebuild",
+    )

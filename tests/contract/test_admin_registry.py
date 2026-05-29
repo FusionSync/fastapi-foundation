@@ -2,6 +2,8 @@ import sys
 import types
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from core.admin import (
     AdminDashboardWidgetSpec,
@@ -9,8 +11,11 @@ from core.admin import (
     AdminPermissionSpec,
     AdminRegistry,
     AdminRouteSpec,
+    build_admin_router,
 )
 from core.apps import AppModule, AppRegistry, validate_app_module
+from core.context import RequestContext, set_current_context
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 
 
 def test_admin_registry_collects_specs_from_app_modules(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -232,6 +237,71 @@ def test_admin_registry_rejects_duplicate_route_and_widget_ids() -> None:
                 )
             ],
         )
+
+
+def test_admin_registry_builds_platform_protected_admin_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handler_module = types.ModuleType("fake_admin_handlers")
+
+    async def rebuild_index() -> dict[str, object]:
+        return {"ok": True, "rebuilt": True}
+
+    handler_module.rebuild_index = rebuild_index
+    monkeypatch.setitem(sys.modules, "fake_admin_handlers", handler_module)
+    registry = AdminRegistry()
+    registry.register(
+        "ops",
+        admin_routes=[
+            AdminRouteSpec(
+                route_id="ops.rebuild_index",
+                path="/admin/ops/rebuild-index",
+                methods=("POST",),
+                handler_path="fake_admin_handlers.rebuild_index",
+                permissions=[AdminPermissionSpec(resource="search_index", action="rebuild")],
+            )
+        ],
+    )
+    app = FastAPI()
+    policies = []
+
+    async def resolve_admin_context(_request, _policy) -> None:
+        set_current_context(
+            RequestContext(request_id="req-admin", user_id="admin-1").freeze()
+        )
+
+    def authorize_admin(context, policy):
+        policies.append(policy)
+        return AuthorizationDecision(
+            allowed=True,
+            tenant_id=PLATFORM_TENANT_ID,
+            user_id=context.user_id,
+            resource="admin:search_index",
+            action="rebuild",
+            reason="matched_projected_policy",
+            policy_version=1,
+        )
+
+    app.state.request_security_resolver = resolve_admin_context
+    app.state.route_authorizer = authorize_admin
+    app.include_router(build_admin_router(registry))
+    client = TestClient(app)
+
+    response = client.post("/admin/ops/rebuild-index")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "rebuilt": True}
+    assert len(policies) == 1
+    assert policies[0].permission_scope == "platform"
+    assert policies[0].tenant_required is False
+    assert policies[0].permissions == ("admin:search_index:rebuild",)
+
+    console_response = client.get("/admin")
+
+    assert console_response.status_code == 200
+    assert "ops.rebuild_index" in console_response.text
+    assert policies[-1].permission_scope == "platform"
+    assert policies[-1].permissions == ("admin:search_index:rebuild",)
 
 
 def test_admin_specs_validate_routes_methods_and_platform_boundaries() -> None:

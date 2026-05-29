@@ -9,8 +9,10 @@ from core.app import create_app
 from core.apps.conformance import check_app
 from core.cache import MemoryCacheProvider
 from core.config import Settings
+from core.context import RequestContext, set_current_context
 from core.exceptions import AppError, get_error_code
 from core.operations import DependencyProbeResult
+from core.permissions import PLATFORM_TENANT_ID, AuthorizationDecision
 from core.rate_limit import CacheRateLimiter, RateLimitRegistry, RateLimitRule
 
 
@@ -366,6 +368,38 @@ def test_create_app_assembles_runtime_registries_and_imports_models(
     assert app.state.admin_registry.to_dict()["admin_permissions"] == []
 
 
+def test_create_app_mounts_declared_admin_routes_with_platform_protection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_runtime_app(tmp_path, "admin_runtime", admin_route=True)
+    security = _FakeAdminSecurityPipeline()
+
+    app = create_app(
+        Settings(installed_apps=["runtime_apps.admin_runtime.module"]),
+        request_security_pipeline=security,
+    )
+    client = TestClient(app)
+
+    response = client.post("/admin/runtime/export")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "exported": True}
+    assert client.post("/api/v1/admin/runtime/export").status_code == 404
+    assert [policy.permissions for policy in security.policies] == [
+        ("admin:runtime_export:create",)
+    ]
+    assert security.policies[0].permission_scope == "platform"
+    assert security.policies[0].tenant_required is False
+    assert app.state.permission_registry.has_permission(
+        resource="admin:runtime_export",
+        action="create",
+        scope="platform",
+    )
+
+
 def test_create_app_exposes_database_runtime() -> None:
     app = create_app(Settings(database={"url": "sqlite+aiosqlite:///:memory:"}))
 
@@ -562,6 +596,7 @@ def _write_runtime_app(
     bad_tenant_model: bool = False,
     bad_admin_metadata: bool = False,
     bad_migration_metadata: bool = False,
+    admin_route: bool = False,
     lifecycle_hooks: bool = False,
     invalid_lifecycle_signature: bool = False,
     failing_startup_hook: bool = False,
@@ -699,6 +734,28 @@ def _write_runtime_app(
         "from core.permissions import PermissionSpec\n\n"
         "PERMISSIONS = [PermissionSpec(resource='runtime', action='read')]\n",
     )
+    admin_import = ""
+    admin_arg = ""
+    if admin_route:
+        _write(
+            app_dir / "admin.py",
+            "async def export():\n"
+            "    return {'ok': True, 'exported': True}\n",
+        )
+        admin_import = "AdminPermissionSpec, AdminRouteSpec"
+        admin_arg = (
+            "    admin_routes=[\n"
+            "        AdminRouteSpec(\n"
+            "            route_id='runtime.export',\n"
+            "            path='/admin/runtime/export',\n"
+            f"            handler_path='runtime_apps.{name}.admin.export',\n"
+            "            methods=('POST',),\n"
+            "            permissions=[\n"
+            "                AdminPermissionSpec(resource='runtime_export', action='create'),\n"
+            "            ],\n"
+            "        )\n"
+            "    ],\n"
+        )
     _write(migrations_dir / "__init__.py", "")
     if bad_migration_metadata:
         _write(
@@ -721,8 +778,6 @@ def _write_runtime_app(
         required_capabilities_arg = f"    required_capabilities={required_capabilities!r},\n"
     error_code_import = "from core.exceptions import ErrorCodeSpec\n" if error_codes else ""
     error_codes_arg = f"    error_codes={error_codes},\n" if error_codes else ""
-    admin_import = ""
-    admin_arg = ""
     if bad_admin_metadata:
         admin_import = "AdminPermissionSpec, AdminRouteSpec"
         admin_arg = (
@@ -784,4 +839,26 @@ class _FailingReadinessProbe:
             ok=False,
             details={"service": "database"},
             error="database down",
+        )
+
+
+class _FakeAdminSecurityPipeline:
+    def __init__(self) -> None:
+        self.policies = []
+
+    async def resolve(self, _request, _policy) -> None:
+        set_current_context(
+            RequestContext(request_id="req-admin", user_id="admin-1").freeze()
+        )
+
+    def authorize(self, context, policy):
+        self.policies.append(policy)
+        return AuthorizationDecision(
+            allowed=True,
+            tenant_id=PLATFORM_TENANT_ID,
+            user_id=context.user_id,
+            resource="admin:runtime_export",
+            action="create",
+            reason="matched_projected_policy",
+            policy_version=1,
         )

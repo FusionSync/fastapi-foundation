@@ -2,11 +2,9 @@
 
 ## Progress
 
-- Status: `partial`
-- Done: `AdminModelSpec` 和 `AdminRegistry.from_app_registry()` 已能从 app metadata 汇总后台注册信息。
-- Next:
-  - [ ] 接入真实 admin UI/route protection。
-  - [ ] 为 app 声明的 admin 权限补 contract tests。
+- Status: `connected`
+- Done: `AdminModelSpec`、`AdminRouteSpec`、`AdminDashboardWidgetSpec`、`AdminRegistry.from_app_registry()`、admin console route、app admin route runtime mount、platform route protection 和 app admin 权限 contract tests 已接入。
+- Next: _none_
 
 ## 职责
 
@@ -66,6 +64,21 @@ risk_level defaults to high unless overridden
 
 后台权限 metadata 冲突属于启动期契约错误。权限目录可以报告该错误，但业务应在部署前通过 contract test 或 CLI 检查修复。
 app conformance 会在启动前导入 `AdminModelSpec.model_path`、`AdminRouteSpec.handler_path` 和 `AdminDashboardWidgetSpec.provider_path`，并把不可导入或不可调用的错误定位到具体 admin id 和 dotted path。
+
+## Runtime Mount
+
+`create_app()` 会从同一个 `AppRegistry` 生成 `AdminRegistry`，再调用 admin runtime router 挂载：
+
+- `GET /admin`：内部 admin console，渲染当前注册的 admin routes、model admins 和 dashboard widgets。
+- app 声明的 `AdminRouteSpec.path`：按声明路径直接挂载，例如 `/admin/audit/export`，不放入普通 API prefix。
+
+所有 admin runtime route 都使用 core `create_router()` 保护：
+
+- `tenant_required=False`
+- `permission_scope="platform"`
+- route permission 使用 `admin:<resource>:<action>`，由 `AdminPermissionSpec` 转换而来。
+
+因此后台 route 必须走平台级授权事实；不能依赖 `CurrentUser.is_platform_admin` 之类绕过字段。`PermissionRegistry.from_app_registry()` 会把 app admin metadata 转换成 `scope=platform` 的权限目录项，contract tests 覆盖 admin route mount、platform permission policy 和权限目录收集。
 
 ## 设计要求
 

@@ -6,7 +6,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from core.admin import AdminRegistry
+from core.admin import AdminRegistry, build_admin_router
 from core.app.diagnostics import build_startup_diagnostics, merge_provider_readiness
 from core.app.lifecycle import run_lifecycle_hooks
 from core.apps import AppRegistry, resolve_runtime_capabilities
@@ -283,3 +283,4 @@ def _assemble_app_runtime_registries(app: FastAPI, registry: AppRegistry) -> Non
     app.state.event_registry = event_registry
     app.state.task_registry = task_registry
     app.state.schedule_registry = schedule_registry
+    app.include_router(build_admin_router(admin_registry))
