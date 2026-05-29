@@ -32,6 +32,9 @@ REQUIRED_APP_FILES = (
 )
 HTTP_ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "options", "head"}
 BINARY_RESPONSE_CLASSES = (FileResponse, StreamingResponse)
+TENANT_QUERY_LINT_FILES = ("services.py", "service.py", "router.py")
+FORBIDDEN_SQLALCHEMY_CALLS = {"select", "insert", "update", "delete", "text"}
+QUERY_EXECUTE_METHODS = {"execute", "scalar", "scalars"}
 
 
 @dataclass(slots=True)
@@ -92,6 +95,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_lifecycle_hook_signatures(app_module, result)
     _check_model_constraints(app_module, result)
     _check_repository_inheritance(module_path, result)
+    _check_tenant_query_static_lint(module_path, app_module, package_dir, result)
     _check_router_security(app_module, result)
     _check_router_response_envelopes(package_dir, result)
     _check_router_openapi_envelopes(app_module, result)
@@ -488,6 +492,121 @@ def _check_repository_inheritance(
             )
 
 
+def _check_tenant_query_static_lint(
+    module_path: str,
+    app_module: AppModule,
+    package_dir: Path,
+    result: AppCheckResult,
+) -> None:
+    if module_path.startswith("platform_apps."):
+        return
+    tenant_model_names = _tenant_scoped_model_names(app_module)
+    if not tenant_model_names:
+        return
+    for file_name in TENANT_QUERY_LINT_FILES:
+        file_path = package_dir / file_name
+        if not file_path.is_file():
+            continue
+        try:
+            tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
+        except SyntaxError as exc:
+            result.errors.append(f"{file_name}: syntax error: {exc}")
+            continue
+        visitor = _TenantQueryLintVisitor(
+            file_name=file_name,
+            tenant_model_names=tenant_model_names,
+        )
+        visitor.visit(tree)
+        result.errors.extend(visitor.errors)
+
+
+def _tenant_scoped_model_names(app_module: AppModule) -> set[str]:
+    tenant_model_names: set[str] = set()
+    for model_path in app_module.models:
+        try:
+            model_module = importlib.import_module(model_path)
+        except Exception:
+            continue
+        for _, model in inspect.getmembers(model_module, inspect.isclass):
+            if model.__module__ != model_module.__name__:
+                continue
+            if model is TenantScopedModel or not issubclass(model, TenantScopedModel):
+                continue
+            tenant_model_names.add(model.__name__)
+    return tenant_model_names
+
+
+class _TenantQueryLintVisitor(ast.NodeVisitor):
+    def __init__(self, *, file_name: str, tenant_model_names: set[str]) -> None:
+        self.file_name = file_name
+        self.tenant_model_names = tenant_model_names
+        self.errors: list[str] = []
+        self._emitted: set[tuple[int, str]] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            if alias.name == "sqlalchemy" or alias.name.startswith("sqlalchemy."):
+                self._add_sqlalchemy_import_error(node.lineno)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module and (
+            node.module == "sqlalchemy" or node.module.startswith("sqlalchemy.")
+        ):
+            self._add_sqlalchemy_import_error(node.lineno)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if self._is_forbidden_sqlalchemy_call(node) or self._is_query_execute_call(node):
+            self._add_orm_query_error(node.lineno)
+        self.generic_visit(node)
+
+    def _is_forbidden_sqlalchemy_call(self, node: ast.Call) -> bool:
+        call_name = _call_name(node.func)
+        if call_name not in FORBIDDEN_SQLALCHEMY_CALLS:
+            return False
+        return any(
+            _node_references_name(argument, self.tenant_model_names)
+            for argument in node.args
+        )
+
+    def _is_query_execute_call(self, node: ast.Call) -> bool:
+        if not isinstance(node.func, ast.Attribute):
+            return False
+        if node.func.attr not in QUERY_EXECUTE_METHODS:
+            return False
+        return _looks_like_session_object(node.func.value)
+
+    def _add_sqlalchemy_import_error(self, line_number: int) -> None:
+        self._add_once(
+            line_number,
+            "import",
+            f"{self.file_name}:{line_number} tenant-scoped app must not import SQLAlchemy "
+            "in router/service; use TenantScopedRepository or core.db.sql wrappers",
+        )
+
+    def _add_orm_query_error(self, line_number: int) -> None:
+        self._add_once(
+            line_number,
+            "query",
+            f"{self.file_name}:{line_number} tenant-scoped app must not execute ORM queries "
+            "in router/service; move queries behind TenantScopedRepository or "
+            "CrossTenantRepository",
+        )
+
+    def _add_once(
+        self,
+        line_number: int,
+        kind: str,
+        message: str,
+    ) -> None:
+        key = (line_number, kind)
+        if key in self._emitted:
+            return
+        self._emitted.add(key)
+        self.errors.append(message)
+
+
 def _check_router_security(app_module: AppModule, result: AppCheckResult) -> None:
     declared_permissions = {
         (permission.resource, permission.action) for permission in app_module.permissions
@@ -566,6 +685,28 @@ def _has_explicit_binary_response_class(route: APIRoute) -> bool:
         response_class,
         BINARY_RESPONSE_CLASSES,
     )
+
+
+def _call_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _node_references_name(node: ast.AST, names: set[str]) -> bool:
+    return any(isinstance(child, ast.Name) and child.id in names for child in ast.walk(node))
+
+
+def _looks_like_session_object(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in {"session", "db", "database_session"}
+    if isinstance(node, ast.Attribute):
+        if node.attr in {"session", "db", "database_session"}:
+            return True
+        return _looks_like_session_object(node.value)
+    return False
 
 
 def _is_route_handler(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:

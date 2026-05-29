@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository、route security policy、ListQuerySchema 分页/过滤/排序 helper、repository 查询应用 helper 和业务 repository 继承 conformance gate 已被上层 gate 或 contract tests 使用。
+- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository、route security policy、ListQuerySchema 分页/过滤/排序 helper、repository 查询应用 helper、业务 repository 继承 conformance gate 和 service/router 查询绕过 lint 已被上层 gate 或 contract tests 使用。
 - Next: _none_
 
 ## 职责
@@ -179,4 +179,4 @@ CrossTenantRepository
   应用过滤、排序和分页；字段到 ORM column 的映射必须显式传入。
 - raw SQL 必须使用 `core.db.sql` wrapper。
 - app conformance 会扫描 app 包内 `repository.py` / `repositories.py`，发现指向 `TenantScopedModel` 的 `*Repository` 未继承 `TenantScopedRepository` 或 `CrossTenantRepository` 时拒绝装载。
-- 后续更细的静态 lint 仍应覆盖 service/router 中直接拼 ORM 查询的绕过路径。
+- app conformance 会扫描 tenant-scoped 业务 app 的 `services.py` / `service.py` / `router.py`，拒绝 SQLAlchemy 查询 API 导入和直接 `session.execute()` 等查询执行，防止 service/router 绕过 repository。

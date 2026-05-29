@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: tenant-scoped repository/query、raw SQL guard、跨租户 reason gate、业务唯一约束检查和 app model conformance 已落地。
+- Done: tenant-scoped repository/query、raw SQL guard、跨租户 reason gate、业务唯一约束检查、app model/repository conformance 和 service/router 静态查询 lint 已落地。
 - Next:
   - [ ] 补数据库级 RLS/advisory 策略验证，作为 cloud profile 兜底。
-  - [ ] 增加静态导入/查询 lint，防止业务绕过 tenant repository。
 
 ## 职责
 
@@ -114,6 +113,13 @@ core testing 必须提供租户隔离契约测试：
 - 跨租户方法未带审计 reason。
 
 当前 app conformance 已在启动期导入 `AppModule.models`，对 `TenantScopedModel` 执行 `check_tenant_scoped_model()`；发现 `tenant_id` 可空、未覆盖索引/约束，或业务 `UniqueConstraint` 未包含 `tenant_id` 时，app 装载失败。conformance 还会扫描 app 包内 `repository.py` / `repositories.py`，拒绝指向 tenant-scoped model 但未继承 `TenantScopedRepository` 或 `CrossTenantRepository` 的 repository。
+
+对声明了 `TenantScopedModel` 的业务 app，conformance 还会静态扫描 `services.py`、`service.py` 和 `router.py`：
+
+- 禁止在 service/router 中导入 SQLAlchemy 查询 API。
+- 禁止在 service/router 中直接调用 `session.execute()` / `session.scalar()` / `session.scalars()`。
+- 查询必须移动到 `TenantScopedRepository`、`CrossTenantRepository` 或 `core.db.sql` wrapper 后面。
+- `platform_apps.*` 作为平台底座实现层暂不套用该业务 app lint；平台 app 仍由模块契约、权限、审计和专门集成测试约束。
 
 ## 数据库级兜底
 

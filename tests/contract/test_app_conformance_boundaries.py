@@ -209,6 +209,73 @@ def test_check_app_accepts_tenant_scoped_repository_base(isolated_apps: Path) ->
     assert result.errors == []
 
 
+def test_check_app_rejects_service_direct_tenant_scoped_query(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "unsafe_service_query_domain",
+        tenant_model=True,
+        service_import=(
+            "from sqlalchemy import select\n"
+            "from apps.unsafe_service_query_domain.models import ExampleRecord"
+        ),
+        service_body=(
+            "async def unsafe_query(session):\n"
+            "    return await session.execute(select(ExampleRecord))\n"
+        ),
+    )
+
+    result = check_app("apps.unsafe_service_query_domain.module")
+
+    assert result.ok is False
+    assert any(
+        "services.py:" in error
+        and "must not import SQLAlchemy in router/service" in error
+        for error in result.errors
+    )
+    assert any(
+        "services.py:" in error
+        and "must not execute ORM queries in router/service" in error
+        for error in result.errors
+    )
+
+
+def test_check_app_rejects_router_direct_tenant_scoped_query(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "unsafe_router_query_domain",
+        tenant_model=True,
+        router_body=(
+            "from sqlalchemy import select\n"
+            "from apps.unsafe_router_query_domain.models import ExampleRecord\n"
+            "from core.base import create_router\n"
+            "from core.serialization import Envelope, ok\n\n"
+            "router = create_router('/examples')\n\n"
+            "@router.get('/unsafe', response_model=Envelope[dict])\n"
+            "async def unsafe(session):\n"
+            "    rows = await session.execute(select(ExampleRecord))\n"
+            "    return ok({'count': len(rows.all())})\n"
+        ),
+    )
+
+    result = check_app("apps.unsafe_router_query_domain.module")
+
+    assert result.ok is False
+    assert any(
+        "router.py:" in error
+        and "must not import SQLAlchemy in router/service" in error
+        for error in result.errors
+    )
+    assert any(
+        "router.py:" in error
+        and "must not execute ORM queries in router/service" in error
+        for error in result.errors
+    )
+
+
 def test_check_app_rejects_error_code_owner_mismatch(isolated_apps: Path) -> None:
     _write_app(
         isolated_apps,
@@ -449,6 +516,8 @@ def _write_app(
     label: str | None = None,
     dependencies: Iterable[str] = (),
     service_import: str = "",
+    service_body: str = "",
+    router_body: str | None = None,
     event_handler_body: str | None = None,
     task_handler_body: str | None = None,
     error_codes: str | None = None,
@@ -480,7 +549,10 @@ def _write_app(
         )
     else:
         _write(app_dir / "models.py", "class ExampleModel:\n    pass\n")
-    _write(app_dir / "services.py", f"{service_import}\n\nclass ExampleService:\n    pass\n")
+    _write(
+        app_dir / "services.py",
+        f"{service_import}\n\nclass ExampleService:\n    pass\n\n{service_body}",
+    )
     if repository_body is not None:
         _write(app_dir / "repository.py", repository_body)
     permissions_arg = (
@@ -488,8 +560,11 @@ def _write_app(
     )
     _write(
         app_dir / "router.py",
-        "from core.base import create_router\n\n"
-        f"router = create_router('/examples'{permissions_arg})\n",
+        router_body
+        or (
+            "from core.base import create_router\n\n"
+            f"router = create_router('/examples'{permissions_arg})\n"
+        ),
     )
     _write(
         app_dir / "permissions.py",
