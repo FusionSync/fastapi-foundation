@@ -1,4 +1,4 @@
-# FastAPI Core Framework Constitution
+# FastAPI Foundation Constitution
 
 ## Core Principles
 

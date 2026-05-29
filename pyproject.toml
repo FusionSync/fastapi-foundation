@@ -1,5 +1,5 @@
 [project]
-name = "wps-bid-assistant-api"
+name = "fastapi-foundation"
 version = "0.1.0"
 description = "Reusable FastAPI backend foundation"
 requires-python = ">=3.11"

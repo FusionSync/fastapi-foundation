@@ -1,4 +1,4 @@
-# FastAPI Core Framework
+# FastAPI Foundation
 
 这是一个可扩展 FastAPI 后台项目框架的设计仓库。仓库根目录就是后端项目，不再额外创建 `backend/` 目录。
 

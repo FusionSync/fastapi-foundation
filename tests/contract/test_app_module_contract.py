@@ -451,7 +451,7 @@ def test_runtime_capabilities_are_derived_from_profile_and_providers() -> None:
     capabilities = resolve_runtime_capabilities(
         Settings(
             app={"env": "cloud"},
-            database={"url": "postgresql+asyncpg://app:secret@db.example.com:5432/wps_bid"},
+            database={"url": "postgresql+asyncpg://app:secret@db.example.com:5432/fastapi_foundation"},
             security={"jwt_secret": "not-default", "jwt_secret_ref": "APP_JWT_SECRET"},
             observability={"service_role": "worker", "metrics_enabled": True},
         )

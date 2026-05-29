@@ -79,7 +79,7 @@ def _cloud_settings(
     return Settings(
         app={"env": "cloud"},
         database={
-            "url": "postgresql+asyncpg://app:secret@db.example.com:5432/wps_bid",
+            "url": "postgresql+asyncpg://app:secret@db.example.com:5432/fastapi_foundation",
             "tenant_fallback_mode": "session_variable",
             "tenant_fallback_setting_name": "app.tenant_id",
         },

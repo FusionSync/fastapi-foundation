@@ -8,7 +8,7 @@ def test_cloud_postgresql_tenant_guard_reports_rls_and_advisory_strategy() -> No
         Settings(
             app={"env": "cloud"},
             database={
-                "url": "postgresql+asyncpg://app:secret@db.example.com:5432/wps_bid",
+                "url": "postgresql+asyncpg://app:secret@db.example.com:5432/fastapi_foundation",
                 "tenant_fallback_mode": "session_variable",
                 "tenant_fallback_setting_name": "app.tenant_id",
             },
@@ -57,7 +57,7 @@ def test_cloud_tenant_guard_rejects_missing_session_variable_fallback() -> None:
         Settings(
             app={"env": "cloud"},
             database={
-                "url": "postgresql+asyncpg://app:secret@db.example.com:5432/wps_bid",
+                "url": "postgresql+asyncpg://app:secret@db.example.com:5432/fastapi_foundation",
                 "tenant_fallback_mode": "disabled",
             },
         )
@@ -77,7 +77,7 @@ def test_cloud_config_check_includes_database_tenant_guard_evidence() -> None:
         Settings(
             app={"env": "cloud"},
             database={
-                "url": "postgresql+asyncpg://app:secret@db.example.com:5432/wps_bid",
+                "url": "postgresql+asyncpg://app:secret@db.example.com:5432/fastapi_foundation",
                 "tenant_fallback_mode": "session_variable",
                 "tenant_fallback_setting_name": "app.tenant_id",
             },

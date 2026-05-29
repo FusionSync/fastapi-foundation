@@ -69,7 +69,7 @@ def render_deployment_artifacts(
 
 def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
     lines = [
-        f"name: wps-bid-{template.profile}",
+        f"name: fastapi-foundation-{template.profile}",
         "x-profile-validation:",
         "  commands:",
     ]
@@ -99,7 +99,7 @@ def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtif
         if process.notes:
             lines.append("    labels:")
             for index, note in enumerate(process.notes, start=1):
-                lines.append(f"      wps-bid.note.{index}: {_yaml_scalar(note)}")
+                lines.append(f"      fastapi-foundation.note.{index}: {_yaml_scalar(note)}")
     return [
         DeploymentArtifact(
             path=f"docker-compose.{template.profile}.yml",
@@ -111,7 +111,7 @@ def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtif
 def _systemd_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
     files = [
         DeploymentArtifact(
-            path=f"wps-bid-{template.profile}.env",
+            path=f"fastapi-foundation-{template.profile}.env",
             content=_env_file(
                 template.env,
                 hardening_items=template.security_hardening,
@@ -124,13 +124,13 @@ def _systemd_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
         service_type = "oneshot" if role == "migrate" else "simple"
         lines = [
             "[Unit]",
-            f"Description=WPS Bid {template.profile} {role}",
+            f"Description=FastAPI Foundation {template.profile} {role}",
             "After=network-online.target",
             "Wants=network-online.target",
             "",
             "[Service]",
             f"Type={service_type}",
-            f"EnvironmentFile=/etc/wps-bid/{template.profile}.env",
+            f"EnvironmentFile=/etc/fastapi-foundation/{template.profile}.env",
             f"Environment=OBSERVABILITY__SERVICE_ROLE={role}",
             f"ExecStart=/usr/bin/env {process.command}",
             f"Restart={restart}",
@@ -149,7 +149,7 @@ def _systemd_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
         )
         files.append(
             DeploymentArtifact(
-                path=f"wps-bid-{role}.service",
+                path=f"fastapi-foundation-{role}.service",
                 content="\n".join(lines) + "\n",
             )
         )

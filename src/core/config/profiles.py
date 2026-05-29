@@ -197,7 +197,7 @@ def _private_template() -> ProfileTemplate:
         env={
             "APP__ENV": "private",
             "DATABASE__URL": (
-                "postgresql+asyncpg://app:${DATABASE_PASSWORD}@postgres:5432/wps_bid"
+                "postgresql+asyncpg://app:${DATABASE_PASSWORD}@postgres:5432/fastapi_foundation"
             ),
             "API__ERROR_HTTP_STATUS_MODE": "standard",
             "SECURITY__JWT_SECRET_REF": "APP_JWT_SECRET",
@@ -211,7 +211,7 @@ def _private_template() -> ProfileTemplate:
             "DEPENDENCIES__REDIS_URL": "redis://redis:6379/0",
             "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT": "http://minio:9000",
             "DEPENDENCIES__OIDC_ISSUER_URL": (
-                "https://keycloak.internal.example/realms/wps-bid"
+                "https://keycloak.internal.example/realms/fastapi-foundation"
             ),
             "SCHEDULER__PROVIDER": "local",
             "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
@@ -281,7 +281,7 @@ def _cloud_template() -> ProfileTemplate:
         env={
             "APP__ENV": "cloud",
             "DATABASE__URL": (
-                "postgresql+asyncpg://app:${DATABASE_PASSWORD}@db.example.com:5432/wps_bid"
+                "postgresql+asyncpg://app:${DATABASE_PASSWORD}@db.example.com:5432/fastapi_foundation"
             ),
             "DATABASE__TENANT_FALLBACK_MODE": "session_variable",
             "DATABASE__TENANT_FALLBACK_SETTING_NAME": "app.tenant_id",

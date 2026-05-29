@@ -703,7 +703,7 @@ def test_release_checkpoint_blocks_config_drift_with_redacted_details(capsys) ->
             "--actual",
             "APP__ENV=local",
             "--actual",
-            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/wps_bid",
+            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/fastapi_foundation",
             "--json",
         ]
     )

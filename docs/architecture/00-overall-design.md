@@ -134,7 +134,7 @@ module = AppModule(
 
 ```env
 ENV=private
-DATABASE__URL=postgres://user:pass@postgres:5432/service_core
+DATABASE__URL=postgres://user:pass@postgres:5432/fastapi_foundation
 AUTH__PROVIDER=logto
 AUTH__OIDC_ISSUER=https://auth.example.com/oidc
 STORAGE__PROVIDER=s3

@@ -12,7 +12,7 @@ DatabaseTenantFallbackMode = Literal["disabled", "session_variable"]
 
 
 class AppSettings(BaseModel):
-    name: str = "FastAPI Core Framework"
+    name: str = "FastAPI Foundation"
     version: str = "0.1.0"
     env: DeploymentMode = "local"
     debug: bool = False

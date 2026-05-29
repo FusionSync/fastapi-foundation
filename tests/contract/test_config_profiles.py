@@ -23,7 +23,7 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
     assert payload["env"]["DEPENDENCIES__REDIS_URL"] == "redis://redis:6379/0"
     assert payload["env"]["DEPENDENCIES__OBJECT_STORAGE_ENDPOINT"] == "http://minio:9000"
     assert payload["env"]["DEPENDENCIES__OIDC_ISSUER_URL"] == (
-        "https://keycloak.internal.example/realms/wps-bid"
+        "https://keycloak.internal.example/realms/fastapi-foundation"
     )
     assert payload["env"]["SCHEDULER__PROVIDER"] == "local"
     assert payload["env"]["SCHEDULER__IDLE_SLEEP_SECONDS"] == "1.0"
@@ -146,7 +146,7 @@ def test_private_profile_config_check_accepts_external_secret_reference() -> Non
         Settings(
             app={"env": "private"},
             database={
-                "url": "postgresql+asyncpg://app:${DATABASE_PASSWORD}@postgres:5432/wps_bid"
+                "url": "postgresql+asyncpg://app:${DATABASE_PASSWORD}@postgres:5432/fastapi_foundation"
             },
             security={
                 "jwt_secret_ref": "APP_JWT_SECRET",
@@ -169,7 +169,7 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "--actual",
             "APP__ENV=private",
             "--actual",
-            "DATABASE__URL=postgresql+asyncpg://app:runtime-password@postgres:5432/wps_bid",
+            "DATABASE__URL=postgresql+asyncpg://app:runtime-password@postgres:5432/fastapi_foundation",
             "--actual",
             "API__ERROR_HTTP_STATUS_MODE=standard",
             "--actual",
@@ -193,7 +193,7 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "--actual",
             "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT=http://minio:9000",
             "--actual",
-            "DEPENDENCIES__OIDC_ISSUER_URL=https://keycloak.internal.example/realms/wps-bid",
+            "DEPENDENCIES__OIDC_ISSUER_URL=https://keycloak.internal.example/realms/fastapi-foundation",
             "--actual",
             "SCHEDULER__PROVIDER=local",
             "--actual",
@@ -265,7 +265,7 @@ def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
             "--actual",
             "APP__ENV=private",
             "--actual",
-            "DATABASE__URL=postgresql+asyncpg://app:runtime-password@postgres:5432/wps_bid",
+            "DATABASE__URL=postgresql+asyncpg://app:runtime-password@postgres:5432/fastapi_foundation",
             "--actual",
             "API__ERROR_HTTP_STATUS_MODE=standard",
             "--actual",
@@ -289,7 +289,7 @@ def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
             "--actual",
             "DEPENDENCIES__OBJECT_STORAGE_ENDPOINT=http://minio:9000",
             "--actual",
-            "DEPENDENCIES__OIDC_ISSUER_URL=https://keycloak.internal.example/realms/wps-bid",
+            "DEPENDENCIES__OIDC_ISSUER_URL=https://keycloak.internal.example/realms/fastapi-foundation",
             "--actual",
             "SCHEDULER__PROVIDER=local",
             "--actual",
@@ -329,7 +329,7 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
             "--actual",
             "APP__ENV=local",
             "--actual",
-            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/wps_bid",
+            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/fastapi_foundation",
             "--actual",
             "API__ERROR_HTTP_STATUS_MODE=standard",
             "--json",
@@ -486,7 +486,7 @@ def test_deployment_artifacts_validate_actual_env_with_redacted_drift(capsys) ->
             "--actual",
             "APP__ENV=local",
             "--actual",
-            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/wps_bid",
+            "DATABASE__URL=postgresql+asyncpg://app:super-secret@wrong-host:5432/fastapi_foundation",
             "--json",
         ]
     )

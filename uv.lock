@@ -952,7 +952,7 @@ wheels = [
 ]
 
 [[package]]
-name = "wps-bid-assistant-api"
+name = "fastapi-foundation"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
