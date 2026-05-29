@@ -1,5 +1,10 @@
 from core.permissions.authorization import AuthorizationService
 from core.permissions.cache import PermissionCache
+from core.permissions.cross_tenant import (
+    CrossTenantPermission,
+    CrossTenantPermissionGate,
+    assert_cross_tenant_permission,
+)
 from core.permissions.decisions import (
     PLATFORM_TENANT_ID,
     AuthorizationDecision,
@@ -23,6 +28,8 @@ from core.permissions.specs import PermissionSpec
 __all__ = [
     "AuthorizationDecision",
     "AuthorizationService",
+    "CrossTenantPermission",
+    "CrossTenantPermissionGate",
     "PLATFORM_TENANT_ID",
     "ROLE_GRANT_CHANGED_EVENT",
     "PermissionCache",
@@ -36,6 +43,7 @@ __all__ = [
     "RoleGrant",
     "RoleGrantService",
     "RoleTemplate",
+    "assert_cross_tenant_permission",
     "assert_authorization_decision",
     "assert_platform_decision",
     "route_authorization_decision",

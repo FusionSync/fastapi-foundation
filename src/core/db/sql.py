@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.context import get_current_context
 from core.exceptions import AppError
-from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
+from core.permissions.cross_tenant import CrossTenantPermission, cross_tenant_reason_and_decision
+from core.permissions.decisions import AuthorizationDecision
 
 _SQL_COMMENT_PATTERN = re.compile(r"(--[^\r\n]*(?:\r?\n|$))|(/\*.*?\*/)", re.DOTALL)
 _SQL_SINGLE_QUOTED_STRING_PATTERN = re.compile(r"'(?:''|[^'])*'")
@@ -66,16 +67,15 @@ async def execute_cross_tenant(
     statement: str,
     parameters: Mapping[str, Any] | None = None,
     *,
-    reason: str,
-    platform_decision: AuthorizationDecision,
+    reason: str | None = None,
+    platform_decision: AuthorizationDecision | None = None,
+    platform_access: CrossTenantPermission | None = None,
 ) -> Any:
-    if not reason.strip():
-        raise AppError(
-            "PERMISSION_DENIED",
-            "Cross-tenant SQL requires an audit reason",
-            status_code=403,
-        )
-    assert_platform_decision(platform_decision)
+    cross_tenant_reason_and_decision(
+        reason=reason,
+        platform_decision=platform_decision,
+        platform_access=platform_access,
+    )
     return await session.execute(text(statement), dict(parameters or {}))
 
 

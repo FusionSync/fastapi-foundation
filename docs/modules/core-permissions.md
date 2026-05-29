@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、route authorization dependency、route permission conformance、projection cache invalidation、resource owner adapter、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
-- Next:
-  - [ ] 补跨租户平台权限统一 gate。
+- Done: permission registry、authorization decision、platform/tenant scope 校验、跨租户平台权限统一 gate、route authorization dependency、route permission conformance、projection cache invalidation、resource owner adapter、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
+- Next: _none_
 
 ## 职责
 
@@ -35,6 +34,7 @@ alice, tenant_b, workspace, write -> deny
 src/core/permissions/
   enforcer.py
   deps.py
+  cross_tenant.py
   model.conf
   registry.py
 ```
@@ -55,7 +55,7 @@ decision = await AuthorizationService(session).authorize(
 禁止业务 app 直接操作 Casbin enforcer。
 平台级权限使用 `scope=platform` 的 RoleGrant，不允许通过 `CurrentUser.is_platform_admin` 绕过授权接口。
 平台级授权使用固定 domain `__platform__`，由 `AuthorizationService.require_platform()` 返回 `AuthorizationDecision`。
-跨租户 SQL 和 repository 入口只接受这个 decision，不接受调用方传入的裸布尔值。
+跨租户 SQL 和 repository 入口优先接受 `CrossTenantPermissionGate` 生成的 `CrossTenantPermission`，兼容直接传 platform `AuthorizationDecision` 和 reason；入口不接受调用方传入的裸布尔值。
 角色授予和撤销同样只接受 `AuthorizationDecision` 作为授权证明，不能只传 `actor_id`；service 会校验 decision 已允许、scope 匹配目标租户或 platform scope，并且 actor 与 decision user 一致。
 高权限写操作统一使用 `assert_authorization_decision()` 校验授权证明，校验项包括：
 
@@ -95,6 +95,9 @@ async def mutate_workspace(
 - 第一版 subject 固定为 `user:{user_id}`，tenant domain 固定为 `tenant_id`。
 - 业务 app 不直接查询 `ProjectedPolicy`；文件、任务、业务资源等入口应接入 `AuthorizationService`。
 - `platform_apps.files.AuthorizationServiceFileResourceAdapter` 复用 `AuthorizationService`，把文件 `upload/download/delete` 映射到 owner resource 的 `write/read/write` 实例权限，并保留 tenant/owner 归属校验。
+- `CrossTenantPermissionGate.require()` 使用 `AuthorizationService.require_platform()` 校验 platform domain 权限，同时强制提供 audit reason 和至少一个目标 tenant。
+- `CrossTenantPermission` 携带 platform decision、reason、目标 tenant 列表、resource/action、request_id 和 resource_id，可直接传给 `execute_cross_tenant(..., platform_access=...)` 或 `CrossTenantRepository(..., platform_access=...)`。
+- `assert_cross_tenant_permission()` 会复核 platform decision、resource/action、actor 和目标 tenant 范围，避免跨租户入口各自重复校验。
 
 ## 权限点注册
 

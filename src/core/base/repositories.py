@@ -8,6 +8,7 @@ from core.base.models import BaseModel
 from core.base.schemas import ListQuerySchema
 from core.context import get_current_context
 from core.exceptions import AppError
+from core.permissions.cross_tenant import CrossTenantPermission, cross_tenant_reason_and_decision
 from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -166,16 +167,16 @@ class CrossTenantRepository(BaseRepository[ModelT]):
         self,
         session: AsyncSession,
         *,
-        reason: str,
-        platform_decision: AuthorizationDecision,
+        reason: str | None = None,
+        platform_decision: AuthorizationDecision | None = None,
+        platform_access: CrossTenantPermission | None = None,
     ) -> None:
-        if not reason.strip():
-            raise AppError(
-                "PERMISSION_DENIED",
-                "Cross-tenant access requires an audit reason",
-                status_code=403,
-            )
-        assert_platform_decision(platform_decision)
+        resolved_reason, resolved_decision = cross_tenant_reason_and_decision(
+            reason=reason,
+            platform_decision=platform_decision,
+            platform_access=platform_access,
+        )
+        assert_platform_decision(resolved_decision)
         super().__init__(session)
-        self.reason = reason
-        self.platform_decision = platform_decision
+        self.reason = resolved_reason
+        self.platform_decision = resolved_decision

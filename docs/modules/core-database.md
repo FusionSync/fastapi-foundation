@@ -97,7 +97,7 @@ AuditUserMixin
 - 查询服务必须从租户上下文取 `tenant_id`。
 - 租户表必须使用 `TenantScopedRepository` 或等价查询构造器。
 - 默认查询必须自动追加 `tenant_id = current_tenant.id` 和 `deleted_at is null`。
-- 跨租户查询必须使用显式 `CrossTenantRepository` 或 `execute_cross_tenant()`，并要求 platform `AuthorizationDecision`、reason 和审计；入口不接受裸布尔值作为授权证明。
+- 跨租户查询必须使用显式 `CrossTenantRepository` 或 `execute_cross_tenant()`，并优先传入 `CrossTenantPermissionGate` 生成的 `platform_access`；兼容 platform `AuthorizationDecision` + reason，但入口不接受裸布尔值作为授权证明。
 - raw SQL 必须走 `core.db.sql` 受控封装，禁止业务 app 直接裸执行 SQL；tenant-scoped SQL 必须包含显式 `tenant_id = :tenant_id` 谓词，不能只依赖参数注入或注释/子串命中。
 - 禁止在 router 中直接写复杂查询。
 - 跨租户管理接口必须放在平台管理命名空间，并有独立权限。
