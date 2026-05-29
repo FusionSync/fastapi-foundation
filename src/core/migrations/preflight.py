@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.migrations.drift import DriftReport
-from core.migrations.manifest import MigrationManifest
+from core.migrations.manifest import MigrationManifest, MigrationPhase
 from core.migrations.planner import MigrationPlan, plan_migrations
 
 
@@ -28,16 +28,17 @@ def run_preflight(
     *,
     drift_report: DriftReport | None = None,
     backup_ready: bool = False,
+    phase: MigrationPhase | None = None,
 ) -> PreflightResult:
     errors: list[str] = []
     warnings: list[str] = []
-    plan = plan_migrations(manifests)
+    plan = plan_migrations(manifests, phase=phase)
     errors.extend(plan.errors)
 
     if drift_report and drift_report.has_drift:
         errors.extend(f"schema drift: {detail}" for detail in drift_report.details)
 
-    for manifest in manifests:
+    for manifest in plan.migrations:
         errors.extend(manifest.validate())
         backup_required = manifest.classification in {
             "destructive",

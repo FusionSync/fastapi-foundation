@@ -321,6 +321,77 @@ def test_migrate_apply_refuses_metadata_noop_when_gates_pass(monkeypatch, capsys
     ]
 
 
+def test_migrate_apply_phase_filters_metadata_result(monkeypatch, capsys) -> None:
+    _install_app(
+        monkeypatch,
+        "fake_alpha",
+        label="alpha",
+        manifests=[
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0001_initial",
+                alembic_revision="alpha_0001_initial",
+                phase="expand",
+                classification="reversible",
+            ),
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0002_backfill_items",
+                alembic_revision="alpha_0002_backfill_items",
+                phase="backfill",
+                classification="reversible",
+                depends_on=["0001_initial"],
+                backfill_required=True,
+                backfill_plan="Backfill alpha_items in tenant-sized batches.",
+            ),
+            MigrationManifest(
+                app_label="alpha",
+                migration_id="0003_drop_legacy",
+                alembic_revision="alpha_0003_drop_legacy",
+                phase="contract",
+                classification="destructive",
+                depends_on=["0002_backfill_items"],
+                destructive_operations=["drop column legacy_name"],
+                approved_by="dba",
+                approved_at="2026-05-28T00:00:00Z",
+                rollback_strategy="restore backup or forward-fix",
+            ),
+        ],
+    )
+
+    exit_code = main(
+        [
+            "migrate",
+            "apply",
+            "--installed-app",
+            "fake_alpha",
+            "--phase",
+            "backfill",
+            "--yes",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["applied"] is False
+    assert payload["mode"] == "metadata-apply-disabled"
+    assert [item["key"] for item in payload["migrations"]] == [
+        "alpha:0002_backfill_items"
+    ]
+    assert payload["execution_records"] == [
+        {
+            "migration_key": "alpha:0002_backfill_items",
+            "alembic_revision": "alpha_0002_backfill_items",
+            "phase": "backfill",
+            "classification": "reversible",
+            "rollback_strategy": None,
+            "forward_fix_required": False,
+        }
+    ]
+
+
 def _install_app(
     monkeypatch,
     module_path: str,

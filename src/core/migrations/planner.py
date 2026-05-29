@@ -3,30 +3,35 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.apps import AppRegistry
-from core.migrations.manifest import MigrationManifest
+from core.migrations.manifest import MigrationManifest, MigrationPhase
 
 
 @dataclass(slots=True)
 class MigrationPlan:
     migrations: list[MigrationManifest] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    phase: MigrationPhase | None = None
 
     @property
     def ok(self) -> bool:
         return not self.errors
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "ok": self.ok,
             "migrations": [manifest.to_dict() for manifest in self.migrations],
             "errors": self.errors,
         }
+        if self.phase is not None:
+            payload["phase"] = self.phase
+        return payload
 
 
 def plan_migrations(
     manifests: list[MigrationManifest],
     *,
     app_registry: AppRegistry | None = None,
+    phase: MigrationPhase | None = None,
 ) -> MigrationPlan:
     manifests_by_key = {manifest.key: manifest for manifest in manifests}
     errors: list[str] = []
@@ -77,9 +82,18 @@ def plan_migrations(
     for key in sorted(graph):
         visit(key)
 
+    ordered_migrations = [
+        manifests_by_key[key] for key in ordered_keys if key in manifests_by_key
+    ]
+    if phase is not None:
+        ordered_migrations = [
+            manifest for manifest in ordered_migrations if manifest.phase == phase
+        ]
+
     return MigrationPlan(
-        migrations=[manifests_by_key[key] for key in ordered_keys if key in manifests_by_key],
+        migrations=ordered_migrations,
         errors=errors,
+        phase=phase,
     )
 
 

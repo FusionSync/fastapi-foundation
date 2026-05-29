@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: SQLAlchemy async runtime、session factory、UnitOfWork、base model、raw SQL guard 和 tenant constraint helper 已落地。
+- Done: SQLAlchemy async runtime、session factory、UnitOfWork、base model、raw SQL guard、tenant constraint helper、真实 Alembic executor 和 revision 状态验证已落地。
 - Next:
-  - [ ] 接真实 Alembic executor 和 revision 状态验证。
   - [ ] 增加连接池诊断、读写拆分预留和数据库级租户兜底策略。
 
 ## 职责

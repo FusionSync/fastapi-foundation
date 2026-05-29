@@ -22,6 +22,7 @@ class MigrationApplyResult:
     migrations: list[MigrationManifest] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    execution_records: list[dict[str, object]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -31,6 +32,7 @@ class MigrationApplyResult:
             "migrations": [manifest.to_dict() for manifest in self.migrations],
             "errors": self.errors,
             "warnings": self.warnings,
+            "execution_records": self.execution_records,
         }
 
 
@@ -66,6 +68,9 @@ async def apply_migrations(
             migrations=preflight.plan.migrations if preflight.plan else [],
             errors=preflight.errors,
             warnings=preflight.warnings,
+            execution_records=_execution_records(
+                preflight.plan.migrations if preflight.plan else []
+            ),
         )
 
     lock_acquired = False
@@ -89,6 +94,7 @@ async def apply_migrations(
                 migrations=preflight.plan.migrations,
                 errors=executor_result.errors,
                 warnings=warnings,
+                execution_records=_execution_records(preflight.plan.migrations),
             )
         if executor_result.applied_revisions != expected_revisions:
             return MigrationApplyResult(
@@ -98,6 +104,7 @@ async def apply_migrations(
                 migrations=preflight.plan.migrations,
                 errors=["migration executor revision mismatch"],
                 warnings=warnings,
+                execution_records=_execution_records(preflight.plan.migrations),
             )
         return MigrationApplyResult(
             ok=True,
@@ -105,6 +112,7 @@ async def apply_migrations(
             mode="executor",
             migrations=preflight.plan.migrations,
             warnings=warnings,
+            execution_records=_execution_records(preflight.plan.migrations),
         )
     except AppError as exc:
         return MigrationApplyResult(
@@ -114,6 +122,7 @@ async def apply_migrations(
             migrations=preflight.plan.migrations,
             errors=[f"{exc.code}: {exc.message}"],
             warnings=preflight.warnings,
+            execution_records=_execution_records(preflight.plan.migrations),
         )
     except Exception as exc:
         return MigrationApplyResult(
@@ -123,6 +132,7 @@ async def apply_migrations(
             migrations=preflight.plan.migrations,
             errors=[f"{type(exc).__name__}: {exc}"],
             warnings=preflight.warnings,
+            execution_records=_execution_records(preflight.plan.migrations),
         )
     finally:
         if lock_acquired:
@@ -140,6 +150,9 @@ def apply_migration_metadata(
             migrations=preflight.plan.migrations if preflight.plan else [],
             errors=preflight.errors,
             warnings=preflight.warnings,
+            execution_records=_execution_records(
+                preflight.plan.migrations if preflight.plan else []
+            ),
         )
     return MigrationApplyResult(
         ok=False,
@@ -148,6 +161,7 @@ def apply_migration_metadata(
         migrations=preflight.plan.migrations,
         errors=[METADATA_APPLY_DISABLED_ERROR],
         warnings=preflight.warnings,
+        execution_records=_execution_records(preflight.plan.migrations),
     )
 
 
@@ -162,6 +176,9 @@ def dry_run_migration_metadata(
             migrations=preflight.plan.migrations if preflight.plan else [],
             errors=preflight.errors,
             warnings=preflight.warnings,
+            execution_records=_execution_records(
+                preflight.plan.migrations if preflight.plan else []
+            ),
         )
     return MigrationApplyResult(
         ok=True,
@@ -170,4 +187,29 @@ def dry_run_migration_metadata(
         migrations=preflight.plan.migrations,
         errors=[],
         warnings=preflight.warnings,
+        execution_records=_execution_records(preflight.plan.migrations),
     )
+
+
+def _execution_records(
+    migrations: Sequence[MigrationManifest],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "migration_key": migration.key,
+            "alembic_revision": migration.alembic_revision,
+            "phase": migration.phase,
+            "classification": migration.classification,
+            "rollback_strategy": _rollback_strategy_for_record(migration),
+            "forward_fix_required": migration.classification == "forward_only",
+        }
+        for migration in migrations
+    ]
+
+
+def _rollback_strategy_for_record(migration: MigrationManifest) -> str | None:
+    if migration.rollback_strategy:
+        return migration.rollback_strategy
+    if migration.classification == "forward_only":
+        return "forward-fix"
+    return None

@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status/run 契约、显式 Alembic executor apply 路径、跨进程 migration lock provider 使用点和 release checkpoint migrate dry-run stage 已落地；默认未配置 executor 时仍保持 metadata-disabled。
-- Next:
-  - [ ] 细化 expand/backfill/contract 分阶段 apply 命令和回滚/forward-fix 记录。
+- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status/run 契约、显式 Alembic executor apply 路径、expand/backfill/contract/maintenance 分阶段执行、回滚/forward-fix 执行记录、跨进程 migration lock provider 使用点和 release checkpoint migrate dry-run stage 已落地；默认未配置 executor 时仍保持 metadata-disabled。
+- Next: 无。
 
 ## 职责
 
@@ -182,12 +181,12 @@ core migrate drift-check
 core migrate run
 ```
 
-所有命令支持：
+相关命令按需支持：
 
 ```text
 --json
---dry-run
 --yes
+--phase expand|backfill|contract|maintenance
 ```
 
 ## 当前实现
@@ -209,5 +208,7 @@ core migrate run
 - `AlembicMigrationExecutor` 使用显式 Alembic config 执行 manifest 绑定的 revision，并在每个 revision 后读取数据库当前 heads 验证已到达目标 revision。
 - `core migrate apply --alembic-config <path> --database-url <url> --yes --json` 会通过真实 executor 执行；部署 profile 后续必须把进程内默认锁切换为跨进程 provider。
 - `core migrate run --json` 是 migrate 进程角色入口；默认执行 `plan -> preflight -> dry-run` 并输出阶段化 envelope，传 `--apply --yes` 时复用 `migrate apply` 的 preflight、approval 和 executor gate。
+- `plan`、`preflight`、`dry-run`、`apply` 和 `run` 支持 `--phase`，可以按 expand/backfill/contract/maintenance 单阶段输出计划和执行；phase 过滤保留全量依赖排序，但只对目标阶段执行 preflight/apply gate。
+- `MigrationApplyResult.execution_records` 为每个目标 migration 输出 `phase`、`classification`、`rollback_strategy` 和 `forward_fix_required`；`forward_only` 未显式声明 rollback strategy 时记录为 `forward-fix`。
 
 后续扩展真实 runner 时，必须复用同一个 `MigrationApplyResult` 输出结构和 preflight gate，不能绕过 manifest 治理；只有真实执行数据库变更并验证 revision 状态后才能返回 `applied=true`。dry-run 只允许验证将执行的 revision，不允许改变数据库状态。

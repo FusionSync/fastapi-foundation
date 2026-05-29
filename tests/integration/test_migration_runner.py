@@ -74,6 +74,90 @@ async def test_apply_migrations_runs_with_database_lock_provider(
 
 
 @pytest.mark.asyncio
+async def test_apply_migrations_can_run_only_selected_phase() -> None:
+    manifests = [
+        _manifest("0001_initial", "alpha_0001_initial", phase="expand"),
+        _manifest(
+            "0002_backfill_items",
+            "alpha_0002_backfill_items",
+            phase="backfill",
+            depends_on=["0001_initial"],
+            backfill_required=True,
+            backfill_plan="Backfill alpha_items in tenant-sized batches.",
+        ),
+        _manifest(
+            "0003_drop_legacy",
+            "alpha_0003_drop_legacy",
+            phase="contract",
+            classification="destructive",
+            depends_on=["0002_backfill_items"],
+            destructive_operations=["drop column legacy_name"],
+            approved_by="dba",
+            approved_at="2026-05-28T00:00:00Z",
+            rollback_strategy="restore backup or forward-fix",
+        ),
+    ]
+    executor = RecordingMigrationExecutor(["alpha_0002_backfill_items"])
+    locks = MemoryLockProvider()
+
+    result = await apply_migrations(
+        run_preflight(manifests, phase="backfill"),
+        executor=executor,
+        lock_provider=locks,
+        owner_token="migrator-1",
+    )
+
+    assert result.ok is True
+    assert result.applied is True
+    assert executor.calls == [["alpha_0002_backfill_items"]]
+    assert [manifest.key for manifest in result.migrations] == [
+        "alpha:0002_backfill_items"
+    ]
+    assert result.execution_records == [
+        {
+            "migration_key": "alpha:0002_backfill_items",
+            "alembic_revision": "alpha_0002_backfill_items",
+            "phase": "backfill",
+            "classification": "reversible",
+            "rollback_strategy": None,
+            "forward_fix_required": False,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_apply_migrations_records_forward_fix_for_forward_only_migration() -> None:
+    manifest = _manifest(
+        "0004_repair_legacy_names",
+        "alpha_0004_repair_legacy_names",
+        phase="maintenance",
+        classification="forward_only",
+    )
+    executor = RecordingMigrationExecutor(["alpha_0004_repair_legacy_names"])
+    locks = MemoryLockProvider()
+
+    result = await apply_migrations(
+        run_preflight([manifest], phase="maintenance"),
+        executor=executor,
+        lock_provider=locks,
+        owner_token="migrator-1",
+    )
+
+    assert result.ok is True
+    assert result.applied is True
+    assert result.execution_records == [
+        {
+            "migration_key": "alpha:0004_repair_legacy_names",
+            "alembic_revision": "alpha_0004_repair_legacy_names",
+            "phase": "maintenance",
+            "classification": "forward_only",
+            "rollback_strategy": "forward-fix",
+            "forward_fix_required": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_apply_migrations_does_not_run_executor_without_migration_lock() -> None:
     manifest = _manifest("0001_initial", "alpha_0001_initial")
     executor = RecordingMigrationExecutor(["alpha_0001_initial"])
@@ -233,13 +317,33 @@ class RecordingMigrationExecutor:
         )
 
 
-def _manifest(migration_id: str, revision: str) -> MigrationManifest:
+def _manifest(
+    migration_id: str,
+    revision: str,
+    *,
+    phase: str = "expand",
+    classification: str = "reversible",
+    depends_on: list[str] | None = None,
+    backfill_required: bool = False,
+    backfill_plan: str | None = None,
+    destructive_operations: list[str] | None = None,
+    approved_by: str | None = None,
+    approved_at: str | None = None,
+    rollback_strategy: str | None = None,
+) -> MigrationManifest:
     return MigrationManifest(
         app_label="alpha",
         migration_id=migration_id,
         alembic_revision=revision,
-        phase="expand",
-        classification="reversible",
+        phase=phase,
+        classification=classification,
+        depends_on=depends_on or [],
+        backfill_required=backfill_required,
+        backfill_plan=backfill_plan,
+        destructive_operations=destructive_operations or [],
+        approved_by=approved_by,
+        approved_at=approved_at,
+        rollback_strategy=rollback_strategy,
     )
 
 

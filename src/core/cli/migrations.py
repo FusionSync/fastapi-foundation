@@ -27,6 +27,8 @@ from core.migrations import (
     run_preflight,
 )
 
+_MIGRATION_PHASES = ["expand", "backfill", "contract", "maintenance"]
+
 
 def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
     migrate_parser = subparsers.add_parser("migrate")
@@ -35,6 +37,8 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
         command_parser = migrate_subparsers.add_parser(command)
         command_parser.add_argument("--installed-app", action="append", default=[])
         command_parser.add_argument("--json", action="store_true", dest="as_json")
+        if command != "status":
+            command_parser.add_argument("--phase", choices=_MIGRATION_PHASES)
         if command in {"preflight", "dry-run"}:
             command_parser.add_argument("--backup-ready", action="store_true")
         command_parser.set_defaults(handler=_handle_migrate)
@@ -49,6 +53,7 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
     apply_parser.add_argument("--script-location")
     apply_parser.add_argument("--lock-owner")
     apply_parser.add_argument("--lock-ttl-seconds", type=int, default=300)
+    apply_parser.add_argument("--phase", choices=_MIGRATION_PHASES)
     apply_parser.set_defaults(handler=_handle_migrate)
 
     run_parser = migrate_subparsers.add_parser("run")
@@ -62,6 +67,7 @@ def register_migration_commands(subparsers: argparse._SubParsersAction) -> None:
     run_parser.add_argument("--script-location")
     run_parser.add_argument("--lock-owner")
     run_parser.add_argument("--lock-ttl-seconds", type=int, default=300)
+    run_parser.add_argument("--phase", choices=_MIGRATION_PHASES)
     run_parser.set_defaults(handler=_handle_migrate_run)
 
     drift_parser = migrate_subparsers.add_parser("drift-check")
@@ -83,7 +89,11 @@ def _handle_migrate(args: argparse.Namespace) -> int:
         return 1
 
     if args.migrate_command == "plan":
-        plan = plan_migrations(migration_registry.manifests, app_registry=app_registry)
+        plan = plan_migrations(
+            migration_registry.manifests,
+            app_registry=app_registry,
+            phase=args.phase,
+        )
         payload = {
             **plan.to_dict(),
             "ok": not migration_registry.errors and plan.ok,
@@ -93,6 +103,7 @@ def _handle_migrate(args: argparse.Namespace) -> int:
         result = run_preflight(
             migration_registry.manifests,
             backup_ready=args.backup_ready,
+            phase=args.phase,
         )
         payload = {
             **result.to_dict(),
@@ -103,6 +114,7 @@ def _handle_migrate(args: argparse.Namespace) -> int:
         result = run_preflight(
             migration_registry.manifests,
             backup_ready=args.backup_ready,
+            phase=args.phase,
         )
         dry_run_result = dry_run_migration_metadata(result)
         payload = {
@@ -134,7 +146,11 @@ def _handle_migrate_run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    plan = plan_migrations(migration_registry.manifests, app_registry=app_registry)
+    plan = plan_migrations(
+        migration_registry.manifests,
+        app_registry=app_registry,
+        phase=args.phase,
+    )
     plan_payload = {
         **plan.to_dict(),
         "ok": not migration_registry.errors and plan.ok,
@@ -143,6 +159,7 @@ def _handle_migrate_run(args: argparse.Namespace) -> int:
     preflight = run_preflight(
         migration_registry.manifests,
         backup_ready=args.backup_ready,
+        phase=args.phase,
     )
     preflight_payload = {
         **preflight.to_dict(),
@@ -200,6 +217,7 @@ def _apply_migrations(
     result = run_preflight(
         migration_registry.manifests,
         backup_ready=args.backup_ready,
+        phase=args.phase,
     )
     if args.alembic_config:
         apply_result = asyncio.run(
