@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: tenant/member public app、module metadata、permissions 和与 core tenancy model 的复用关系已落地。
+- Done: tenant/member public app、module metadata、permissions、invitation flow、接受邀请后的初始 RoleGrant/projection outbox 链路和与 core tenancy model 的复用关系已落地。
 - Next:
-  - [ ] 补 invitation flow。
-  - [ ] 将成员接受邀请后的初始角色交给 RoleGrant/permission projection 处理。
+  - [ ] 补租户、成员和 invitation HTTP API route protection。
 
 ## 职责
 
@@ -33,7 +32,8 @@ TenantInvitation
   tenant_id
   email
   role_template_id
-  token
+  token_hash
+  status
   expires_at
 ```
 
@@ -56,11 +56,14 @@ PATCH /api/v1/tenants/{id}/members/{member_id}
 ## 与权限模块关系
 
 Tenants 负责成员关系和成员状态，Permissions 负责 RoleGrant、授权决策和策略投影。邀请可以携带初始 `role_template_id`，用户接受邀请后由权限模块创建 RoleGrant。
+创建带初始角色的邀请时必须同时提供 `tenant_invitation:invite` 和 `role_grant:grant` 授权决策；接受邀请后由 `TenantInvitationService` 激活 `TenantMember`，再通过 `RoleGrantService` 写入 `RoleGrant` 并发布 `permissions.role_grant_changed`，由 permission projector 生成 `ProjectedPolicy`。
 
 ## 当前实现
 
-第一版 `platform_apps.tenants.module` 先作为 tenant lifecycle 的平台权限入口：
+第一版 `platform_apps.tenants.module` 先提供 tenant lifecycle 和 invitation 的平台能力入口：
 
-- 通过 `platform_apps.tenants.permissions.PERMISSIONS` 注册 `tenant.manage`、`tenant.provision`、`tenant.suspend`、`tenant.reactivate` 和 `tenant.delete`。
-- 通过 `platform_apps.tenants.public_api` 暴露 `Tenant`、`TenantMember` 和 `TenantLifecycleService`。
+- 通过 `platform_apps.tenants.permissions.PERMISSIONS` 注册 `tenant.manage`、`tenant.provision`、`tenant.suspend`、`tenant.reactivate`、`tenant.delete`、`tenant_invitation:invite`、`tenant_invitation:revoke` 和 `tenant_invitation:manage`。
+- 通过 `platform_apps.tenants.public_api` 暴露 `Tenant`、`TenantMember`、`TenantInvitation`、`TenantLifecycleService` 和 `TenantInvitationService`。
+- `TenantInvitation` 只持久化 `token_hash`，明文 token 只在 `TenantInvitationIssue` 中返回一次。
+- `tenant.invitation_issued`、`tenant.invitation_accepted` 和 `tenant.invitation_revoked` 已声明为 app event schema。
 - 模型事实仍复用 `core.tenancy.models`，避免在平台 app 中重复定义租户状态机表。

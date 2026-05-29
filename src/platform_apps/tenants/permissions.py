@@ -36,4 +36,25 @@ PERMISSIONS = [
         description="Begin or finish tenant deletion.",
         risk_level="critical",
     ),
+    PermissionSpec(
+        resource="tenant_invitation",
+        action="invite",
+        scope="tenant",
+        description="Invite a user into a tenant.",
+        risk_level="high",
+    ),
+    PermissionSpec(
+        resource="tenant_invitation",
+        action="revoke",
+        scope="tenant",
+        description="Revoke a pending tenant invitation.",
+        risk_level="high",
+    ),
+    PermissionSpec(
+        resource="tenant_invitation",
+        action="manage",
+        scope="tenant",
+        description="Manage tenant invitations.",
+        risk_level="high",
+    ),
 ]

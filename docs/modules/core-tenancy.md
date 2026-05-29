@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: tenant model、member model、resolver、lifecycle service、membership 校验、租户上下文、outbox-backed lifecycle events、route/task/file download/background cleanup lifecycle gate 已落地。
+- Done: tenant model、member model、invitation model、resolver、lifecycle service、membership 校验、租户上下文、outbox-backed lifecycle/invitation events、route/task/file download/background cleanup lifecycle gate 已落地。
 - Next:
   - [ ] 增加 membership/cache invalidation 与权限投影的联动。
 
