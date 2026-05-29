@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: cache provider 抽象、内存实现和 key 约定已落地。
+- Done: cache provider 抽象、内存实现、Redis provider 和 key 约定已落地。
 - Next:
-  - [ ] 接 Redis provider。
   - [ ] 定义权限、租户生命周期和 outbox 事件驱动的缓存失效规则。
 
 ## 职责
@@ -63,9 +62,10 @@ rate:{tenant_id}:{user_id}:{route}
 
 ## 当前实现
 
-已落地 `CacheProvider`、`MemoryCacheProvider` 和 `cache_key()`：
+已落地 `CacheProvider`、`MemoryCacheProvider`、`RedisCacheProvider` 和 `cache_key()`：
 
 - `MemoryCacheProvider` 支持 `get`、`set`、`delete`、`exists`、`incr`、`expire`、`get_json`、`set_json`。
+- `RedisCacheProvider` 通过注入的 async Redis client 工作，不在 core 内部强绑定 Redis 依赖；它支持同一组 provider 方法，并使用 Redis TTL、`INCRBY` 和 `EXPIRE` 保持跨进程缓存语义。
 - `set`、`set_json` 和首次 `incr` 默认必须提供 `ttl_seconds`；只有显式 `permanent=True` 才允许无 TTL。
 - 过期 key 在读取、删除、续期和加计数时惰性清理。
 - `cache_key(namespace, *parts)` 统一生成 `:` 分隔 key，并拒绝空片段和包含 `:` 的片段，避免 key 语义歧义。
