@@ -13,7 +13,7 @@ from core.base import RouteSecurityPolicy, parse_route_permission
 from core.context import RequestContext, get_current_context, set_current_context
 from core.exceptions import AppError
 from core.permissions import AuthorizationDecision, AuthorizationService
-from core.tenancy import DatabaseTenantContextResolver
+from core.tenancy import DatabaseTenantContextResolver, TenantLifecyclePolicy
 
 SessionStoreFactory = Callable[[AsyncSession], AuthSessionStore]
 AuditFactory = Callable[[AsyncSession], AuditRecorder]
@@ -27,11 +27,13 @@ class DatabaseRequestSecurityPipeline:
         jwt_provider: LocalJwtProvider,
         session_store_factory: SessionStoreFactory,
         audit_factory: AuditFactory | None = None,
+        tenant_lifecycle_policy: TenantLifecyclePolicy | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.jwt_provider = jwt_provider
         self.session_store_factory = session_store_factory
         self.audit_factory = audit_factory
+        self.tenant_lifecycle_policy = tenant_lifecycle_policy
 
     async def resolve(self, request: Request, policy: RouteSecurityPolicy) -> None:
         if not (policy.auth_required or policy.tenant_required or policy.permissions):
@@ -43,7 +45,10 @@ class DatabaseRequestSecurityPipeline:
                 self.session_store_factory(session)
             ).authenticate(claims)
             if _requires_tenant_resolution(policy):
-                await DatabaseTenantContextResolver(session).resolve(
+                await DatabaseTenantContextResolver(
+                    session,
+                    policy=self.tenant_lifecycle_policy,
+                ).resolve(
                     current_user=current_user,
                     token_tenant_id=claims.tenant_id,
                     header_tenant_id=request.headers.get("X-Tenant-ID"),

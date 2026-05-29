@@ -114,6 +114,7 @@ migrate health
 local profile 可以使用 sync task provider；private/cloud profile 后续接 Redis、外部 broker 和 leader lock 时必须复用同一输出结构。
 profile 模板通过 `TASK_QUEUE__PROVIDER`、`TASK_QUEUE__MAX_ATTEMPTS`、`TASK_QUEUE__RETRY_BACKOFF_SECONDS` 和 `TASK_QUEUE__IDLE_SLEEP_SECONDS` 参数化 worker；local 默认 `sync`，private/cloud 默认 SQLAlchemy database queue provider，可在后续替换为 RQ/Celery 等外部 broker provider。
 profile 模板通过 `SCHEDULER__IDLE_SLEEP_SECONDS` 和 `SCHEDULER__LOCK_TTL_SECONDS` 参数化 scheduler loop；cron 状态持久化到数据库，错过触发按 schedule 的 misfire policy 处理。
+profile 模板通过 `TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD`、`TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ` 和 `TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD` 参数化 tenant lifecycle policy；默认均为 `false`，调整后应通过 `/readyz` 或 `core <role> --json` 核对 `tenant_lifecycle_policy`。
 `core config template --profile <profile> --json` 是部署 profile 的配置和进程矩阵来源；发布脚本、Docker Compose、Helm 或 systemd 示例必须从其中的 `env`、`processes` 和 `validation_commands` 派生，避免文档、脚本和 CLI 参数漂移。
 `core config artifacts --profile <profile> --target <docker-compose|systemd|helm-values> --json` 会直接从该矩阵输出部署产物内容；发布仓库或安装包应消费 `files` 字段，而不是手工复制命令。
 private/cloud profile 的 template 还会输出 `security_hardening`；部署产物会在 Docker Compose 的 `x-security-hardening`、Helm values 的 `securityHardening` 或 systemd env 注释中保留同一清单。发布前必须逐项核对 ingress/reverse proxy 的 CSP、Secure/HttpOnly/SameSite cookie、TLS/HSTS 和安全响应头配置；cloud profile 的 HSTS 必须覆盖 `preload`。

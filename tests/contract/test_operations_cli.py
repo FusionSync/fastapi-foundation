@@ -46,6 +46,11 @@ def test_process_role_commands_return_health_json(capsys) -> None:
         assert payload["ok"] is True
         assert payload["command"] == command
         assert payload["checks"]["database_configured"] is True
+        assert payload["details"]["tenant_lifecycle_policy"] == {
+            "allow_suspended_file_download": False,
+            "allow_archived_read": False,
+            "allow_archived_file_download": False,
+        }
 
 
 def test_serve_role_can_emit_startup_plan(capsys) -> None:

@@ -6,6 +6,7 @@ from typing import Literal
 
 from core.config import Settings
 from core.operations.heartbeat import ProcessHeartbeatSnapshot
+from core.tenancy import tenant_lifecycle_policy_from_settings
 
 ProcessRole = Literal["server", "worker", "scheduler", "outbox-dispatcher", "migrate"]
 
@@ -42,6 +43,9 @@ def check_process_health(
     details: dict[str, object] = {
         "service_role": role,
         "app_env": resolved_settings.app.env,
+        "tenant_lifecycle_policy": tenant_lifecycle_policy_from_settings(
+            resolved_settings
+        ).to_dict(),
     }
     if role == "server":
         checks["http_routes_configured"] = bool(resolved_settings.api.prefix)

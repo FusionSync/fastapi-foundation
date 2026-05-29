@@ -134,6 +134,7 @@ def _local_template() -> ProfileTemplate:
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__LOCK_TTL_SECONDS": "60",
+            **_tenant_lifecycle_env(),
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -207,6 +208,7 @@ def _private_template() -> ProfileTemplate:
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__LOCK_TTL_SECONDS": "60",
+            **_tenant_lifecycle_env(),
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -283,6 +285,7 @@ def _cloud_template() -> ProfileTemplate:
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
             "SCHEDULER__LOCK_TTL_SECONDS": "60",
+            **_tenant_lifecycle_env(),
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -345,6 +348,14 @@ def _matches_expected(expected: str, actual: str) -> bool:
     pattern = re.escape(expected)
     pattern = re.sub(r"\\\$\\\{[A-Z0-9_]+\\\}", r".+", pattern)
     return re.fullmatch(pattern, actual) is not None
+
+
+def _tenant_lifecycle_env() -> dict[str, str]:
+    return {
+        "TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD": "false",
+        "TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ": "false",
+        "TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD": "false",
+    }
 
 
 def _redact_value(key: str, value: str) -> str:

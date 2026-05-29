@@ -1,5 +1,6 @@
 import pytest
 
+from core.config import Settings
 from core.context import (
     RequestContext,
     get_current_context,
@@ -7,7 +8,13 @@ from core.context import (
     set_current_context,
 )
 from core.exceptions import AppError
-from core.tenancy import CurrentUser, TenantMembership, TenantRecord, resolve_current_tenant
+from core.tenancy import (
+    CurrentUser,
+    TenantMembership,
+    TenantRecord,
+    resolve_current_tenant,
+    tenant_lifecycle_policy_from_settings,
+)
 
 
 def test_resolve_current_tenant_injects_frozen_context() -> None:
@@ -84,6 +91,22 @@ def test_suspended_tenant_allows_read_but_rejects_write() -> None:
         )
 
     assert exc_info.value.code == "TENANT_STATE_FORBIDDEN"
+
+
+def test_archived_read_can_be_enabled_from_settings_policy() -> None:
+    policy = tenant_lifecycle_policy_from_settings(
+        Settings(tenant_lifecycle={"allow_archived_read": True})
+    )
+
+    tenant_id = resolve_current_tenant(
+        current_user=_user("user-1", "tenant-a"),
+        header_tenant_id="tenant-a",
+        tenant=TenantRecord(tenant_id="tenant-a", status="archived"),
+        operation="read",
+        policy=policy,
+    )
+
+    assert tenant_id == "tenant-a"
 
 
 def _user(user_id: str, tenant_id: str) -> CurrentUser:

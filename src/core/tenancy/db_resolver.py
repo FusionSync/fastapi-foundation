@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth.schemas import CurrentUser as AuthenticatedUser
 from core.exceptions import AppError
-from core.tenancy.lifecycle import TenantOperation
+from core.tenancy.lifecycle import TenantLifecyclePolicy, TenantOperation
 from core.tenancy.models import Tenant, TenantMember
 from core.tenancy.resolver import (
     CurrentUser,
@@ -16,8 +16,14 @@ from core.tenancy.resolver import (
 
 
 class DatabaseTenantContextResolver:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        policy: TenantLifecyclePolicy | None = None,
+    ) -> None:
         self.session = session
+        self.policy = policy
 
     async def resolve(
         self,
@@ -45,6 +51,7 @@ class DatabaseTenantContextResolver:
             header_tenant_id=header_tenant_id,
             tenant=tenant_record,
             operation=operation,
+            policy=self.policy,
         )
 
     async def _tenant_record(self, tenant_id: str | None) -> TenantRecord | None:

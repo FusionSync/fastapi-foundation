@@ -18,6 +18,7 @@ from core.tenancy.lifecycle import (
     TenantStatus,
     assert_tenant_operation_allowed,
     is_tenant_operation_allowed,
+    tenant_lifecycle_policy_from_settings,
     validate_tenant_transition,
 )
 from core.tenancy.models import (
@@ -67,5 +68,6 @@ __all__ = [
     "publish_tenant_lifecycle_event",
     "publish_tenant_membership_event",
     "resolve_current_tenant",
+    "tenant_lifecycle_policy_from_settings",
     "validate_tenant_transition",
 ]

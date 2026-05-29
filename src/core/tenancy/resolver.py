@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from core.context import get_current_context, set_current_context
 from core.exceptions import AppError
 from core.tenancy.lifecycle import (
+    TenantLifecyclePolicy,
     TenantOperation,
     TenantStatus,
     assert_tenant_operation_allowed,
@@ -37,6 +38,7 @@ def resolve_current_tenant(
     header_tenant_id: str | None = None,
     tenant: TenantRecord | None = None,
     operation: TenantOperation = "read",
+    policy: TenantLifecyclePolicy | None = None,
 ) -> str:
     if current_user is None:
         raise AppError(
@@ -87,6 +89,7 @@ def resolve_current_tenant(
         tenant_id=selected_tenant_id,
         status=tenant_record.status,
         operation=operation,
+        policy=policy,
     )
 
     context = get_current_context()

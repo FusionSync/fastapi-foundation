@@ -38,6 +38,7 @@ from core.security import (
 )
 from core.serialization import ok
 from core.tasks import TaskRegistry
+from core.tenancy import tenant_lifecycle_policy_from_settings
 
 _IMPORTED_APP_MODEL_MODULES: set[str] = set()
 
@@ -208,6 +209,7 @@ def _build_declared_request_security_pipeline(
         session_factory=session_factory,
         jwt_provider=LocalJwtProvider(LocalJwtConfig(secret=settings.security.jwt_secret)),
         session_store_factory=session_store_factory,
+        tenant_lifecycle_policy=tenant_lifecycle_policy_from_settings(settings),
     )
 
 

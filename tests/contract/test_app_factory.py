@@ -33,6 +33,11 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
         Settings(
             database={"url": "sqlite+aiosqlite:///:memory:"},
             installed_apps=["apps.example_domain.module"],
+            tenant_lifecycle={
+                "allow_suspended_file_download": True,
+                "allow_archived_read": True,
+                "allow_archived_file_download": False,
+            },
         )
     )
     client = TestClient(app)
@@ -59,6 +64,11 @@ def test_ready_endpoint_exposes_runtime_readiness_checks() -> None:
     )
     assert body["data"]["details"]["lifecycle_hooks"] == {"startup": [], "shutdown": []}
     assert body["data"]["details"]["dependencies"]["database"]["ok"] is True
+    assert body["data"]["details"]["tenant_lifecycle_policy"] == {
+        "allow_suspended_file_download": True,
+        "allow_archived_read": True,
+        "allow_archived_file_download": False,
+    }
 
 
 def test_ready_endpoint_exposes_unified_startup_diagnostics() -> None:

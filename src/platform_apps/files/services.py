@@ -18,7 +18,7 @@ from core.security import (
     validate_upload,
 )
 from core.storage import StorageProvider, file_object_key
-from core.tenancy import TenantStatus, assert_tenant_operation_allowed
+from core.tenancy import TenantLifecyclePolicy, TenantStatus, assert_tenant_operation_allowed
 from platform_apps.files.models import FileObject
 
 if TYPE_CHECKING:
@@ -180,6 +180,7 @@ class FileService:
         virus_scanner: FileVirusScanner | None = None,
         delete_retention_seconds: int = 0,
         resource_authorization: FileResourceAuthorizationAdapter | None = None,
+        tenant_lifecycle_policy: TenantLifecyclePolicy | None = None,
     ) -> None:
         if delete_retention_seconds < 0:
             raise AppError(
@@ -197,6 +198,7 @@ class FileService:
         self.resource_authorization = (
             resource_authorization or OwnerOnlyFileResourceAuthorizationAdapter()
         )
+        self.tenant_lifecycle_policy = tenant_lifecycle_policy
 
     async def upload_bytes(
         self,
@@ -291,6 +293,7 @@ class FileService:
             tenant_id=tenant_id,
             status=tenant_status,
             operation="file_download",
+            policy=self.tenant_lifecycle_policy,
         )
         file_object = await self._load_available_file(file_id)
         await self._require_file_resource_access(
@@ -369,6 +372,7 @@ class FileService:
             tenant_id=tenant_id,
             status=tenant_status,
             operation="background_cleanup",
+            policy=self.tenant_lifecycle_policy,
         )
         resolved_now = _coerce_utc(now or datetime.now(UTC))
         retention_cutoff = resolved_now - timedelta(seconds=self.delete_retention_seconds)

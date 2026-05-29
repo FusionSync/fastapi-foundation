@@ -59,6 +59,12 @@ class SchedulerSettings(BaseModel):
     lock_ttl_seconds: int = 60
 
 
+class TenantLifecycleSettings(BaseModel):
+    allow_suspended_file_download: bool = False
+    allow_archived_read: bool = False
+    allow_archived_file_download: bool = False
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
@@ -73,6 +79,7 @@ class Settings(BaseSettings):
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     task_queue: TaskQueueSettings = Field(default_factory=TaskQueueSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
+    tenant_lifecycle: TenantLifecycleSettings = Field(default_factory=TenantLifecycleSettings)
     installed_apps: list[str] = Field(default_factory=list)
 
 

@@ -22,6 +22,9 @@ def test_private_profile_template_outputs_process_matrix(capsys) -> None:
     assert payload["env"]["TASK_QUEUE__IDLE_SLEEP_SECONDS"] == "1.0"
     assert payload["env"]["SCHEDULER__IDLE_SLEEP_SECONDS"] == "1.0"
     assert payload["env"]["SCHEDULER__LOCK_TTL_SECONDS"] == "60"
+    assert payload["env"]["TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD"] == "false"
+    assert payload["env"]["TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ"] == "false"
+    assert payload["env"]["TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD"] == "false"
     assert payload["env"]["OUTBOX_DISPATCHER__BATCH_SIZE"] == "20"
     assert payload["env"]["OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS"] == "1.0"
     assert "SECURITY__JWT_SECRET" not in payload["env"]
@@ -176,6 +179,12 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "--actual",
             "SCHEDULER__LOCK_TTL_SECONDS=60",
             "--actual",
+            "TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD=false",
+            "--actual",
+            "TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ=false",
+            "--actual",
+            "TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD=false",
+            "--actual",
             "OUTBOX_DISPATCHER__BATCH_SIZE=20",
             "--actual",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS=1.0",
@@ -206,6 +215,9 @@ def test_private_profile_drift_check_accepts_matching_env(capsys) -> None:
             "TASK_QUEUE__IDLE_SLEEP_SECONDS",
             "SCHEDULER__IDLE_SLEEP_SECONDS",
             "SCHEDULER__LOCK_TTL_SECONDS",
+            "TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD",
+            "TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ",
+            "TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD",
             "OUTBOX_DISPATCHER__BATCH_SIZE",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS",
             "INSTALLED_APPS",
@@ -250,6 +262,12 @@ def test_private_profile_drift_check_accepts_worker_role_env(capsys) -> None:
             "SCHEDULER__IDLE_SLEEP_SECONDS=1.0",
             "--actual",
             "SCHEDULER__LOCK_TTL_SECONDS=60",
+            "--actual",
+            "TENANT_LIFECYCLE__ALLOW_SUSPENDED_FILE_DOWNLOAD=false",
+            "--actual",
+            "TENANT_LIFECYCLE__ALLOW_ARCHIVED_READ=false",
+            "--actual",
+            "TENANT_LIFECYCLE__ALLOW_ARCHIVED_FILE_DOWNLOAD=false",
             "--actual",
             "OUTBOX_DISPATCHER__BATCH_SIZE=20",
             "--actual",
@@ -299,7 +317,7 @@ def test_profile_drift_check_reports_missing_and_redacted_mismatch(capsys) -> No
             "labels": {"profile": "private"},
             "annotations": {
                 "summary": "Runtime configuration drift detected for private profile",
-                "missing_count": "13",
+                "missing_count": "16",
                 "mismatched_count": "2",
                 "runbook": "core config drift-check --profile private --json",
             },

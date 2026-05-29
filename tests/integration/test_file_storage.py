@@ -15,6 +15,7 @@ from core.permissions import AuthorizationService, ProjectedPolicy
 from core.quotas import MemoryQuotaUsageStore, QuotaRule, QuotaService
 from core.security import UploadSecurityPolicy
 from core.storage import LocalStorageProvider
+from core.tenancy import TenantLifecyclePolicy
 from platform_apps.audit import AuditLog, AuditService
 from platform_apps.files import FileObject, FileService
 
@@ -381,6 +382,51 @@ async def test_download_enforces_tenant_owner_and_lifecycle_gate(
     assert tenant_error.value.code == "TENANT_CONTEXT_CONFLICT"
     assert owner_error.value.code == "PERMISSION_DENIED"
     assert lifecycle_error.value.code == "TENANT_STATE_FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_download_uses_configured_tenant_lifecycle_policy(
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorageProvider(root=tmp_path, bucket="local-files")
+    policy = TenantLifecyclePolicy(
+        allow_suspended_file_download=True,
+        allow_archived_file_download=True,
+    )
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _grant_file_permissions(uow.session, actions=("upload", "download"))
+        file_object = await FileService(uow.session, storage).upload_bytes(
+            tenant_id="tenant-a",
+            owner_type="bid",
+            owner_id="bid-1",
+            file_name="proposal.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            data=b"docx-bytes",
+            file_type="upload",
+            user_id="user-1",
+            authorization=AuthorizationService(uow.session),
+        )
+
+    for status in ("suspended", "archived"):
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            download = await FileService(
+                uow.session,
+                storage,
+                tenant_lifecycle_policy=policy,
+            ).download_bytes(
+                file_id=file_object.id,
+                tenant_id="tenant-a",
+                owner_type="bid",
+                owner_id="bid-1",
+                tenant_status=status,
+                user_id="user-1",
+                authorization=AuthorizationService(uow.session),
+            )
+
+        assert download.data == b"docx-bytes"
 
 
 @pytest.mark.asyncio

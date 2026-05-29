@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from core.apps import AppRegistry
 from core.config import Settings
 from core.observability import MetricsRegistry
+from core.tenancy import tenant_lifecycle_policy_from_settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +102,7 @@ def check_app_readiness(
         else None,
         "dependencies": {},
         "lifecycle_hooks": _lifecycle_diagnostics_payload(lifecycle_diagnostics),
+        "tenant_lifecycle_policy": tenant_lifecycle_policy_from_settings(settings).to_dict(),
         "startup_diagnostics": dict(startup_diagnostics or {}),
     }
     for dependency_name, result in (dependency_results or {}).items():

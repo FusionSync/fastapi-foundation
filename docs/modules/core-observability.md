@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: metrics middleware、低基数字段、请求结构化日志、外部 HTTP client 指标和 trace header 传播、task/outbox/scheduler 非 HTTP trace propagation、audit/security 关键 context 字段、readiness、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入、smoke 角色健康检查、private/cloud 部署 profile 监控面板和告警契约已落地。
+- Done: metrics middleware、低基数字段、请求结构化日志、外部 HTTP client 指标和 trace header 传播、task/outbox/scheduler 非 HTTP trace propagation、audit/security 关键 context 字段、readiness、tenant lifecycle policy 诊断、lifecycle hook 结构化日志和启动诊断、process heartbeat、worker/scheduler/outbox 运行 loop heartbeat 写入、smoke 角色健康检查、private/cloud 部署 profile 监控面板和告警契约已落地。
 - Next: _none_
 
 ## 职责
@@ -51,12 +51,12 @@ GET /version
 GET /metrics
 ```
 
-`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、数据库可连接性、AppRegistry、MetricsRegistry 和 lifecycle startup hook 完成状态。`readyz` 不通过时必须返回 HTTP 503，避免平台探针把不可服务实例加入流量。
+`healthz` 只检查进程存活，`readyz` 返回统一 readiness envelope，当前覆盖 config、database URL、数据库可连接性、AppRegistry、MetricsRegistry、tenant lifecycle policy 和 lifecycle startup hook 完成状态。`readyz` 不通过时必须返回 HTTP 503，避免平台探针把不可服务实例加入流量。
 `AppModule.lifecycle_hooks` 执行结果会通过 `core.app.lifecycle` logger 输出结构化 `lifecycle_hook` 字段，并进入 `/readyz` 的 `details.lifecycle_hooks`。
 worker、scheduler 和 outbox-dispatcher 也必须提供等价探针或 CLI health check。
 非 HTTP 角色通过 `process_heartbeats` 保存最近一次心跳事实；`core worker --run`、`core scheduler --run` 和 `core outbox-dispatcher --run` 传入 `--instance-id` 后会在每轮 loop 写入 heartbeat。健康检查读取最新
 `ProcessHeartbeatSnapshot` 后，按角色匹配、状态和 freshness 窗口判定是否可用。
-没有传入 heartbeat 时，`ProcessHealth` 只表示配置级检查结果，适合本地 CLI smoke 和启动前检查。
+没有传入 heartbeat 时，`ProcessHealth` 只表示配置级检查结果，适合本地 CLI smoke 和启动前检查；health details 会包含当前 tenant lifecycle policy，便于排查 suspended/archived 访问策略是否与部署 profile 一致。
 
 ## 指标
 

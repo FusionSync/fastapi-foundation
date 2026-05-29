@@ -32,6 +32,26 @@ class TenantLifecyclePolicy:
     allow_archived_read: bool = False
     allow_archived_file_download: bool = False
 
+    def to_dict(self) -> dict[str, bool]:
+        return {
+            "allow_suspended_file_download": self.allow_suspended_file_download,
+            "allow_archived_read": self.allow_archived_read,
+            "allow_archived_file_download": self.allow_archived_file_download,
+        }
+
+
+def tenant_lifecycle_policy_from_settings(settings: object) -> TenantLifecyclePolicy:
+    config = getattr(settings, "tenant_lifecycle", None)
+    return TenantLifecyclePolicy(
+        allow_suspended_file_download=bool(
+            getattr(config, "allow_suspended_file_download", False)
+        ),
+        allow_archived_read=bool(getattr(config, "allow_archived_read", False)),
+        allow_archived_file_download=bool(
+            getattr(config, "allow_archived_file_download", False)
+        ),
+    )
+
 
 ALLOWED_TRANSITIONS: dict[TenantStatus, set[TenantStatus]] = {
     "provisioning": {"active", "deleted"},
