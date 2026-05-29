@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff、handler schema/version 校验和 handler 幂等执行保护已落地。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff、handler schema/version 校验、handler 幂等执行保护和可选跨进程 dispatcher lock 已落地。
 - Next:
-  - [ ] 接跨进程锁。
   - [ ] 补充 handler 外部 side-effect 幂等指南。
   - [ ] 为 outbox-dispatcher 增加 shutdown signal 和部署 profile 参数。
 
@@ -159,6 +158,8 @@ dispatcher 需要：
 - PostgreSQL profile 可使用 `FOR UPDATE SKIP LOCKED` 优化领取；SQLite/local profile 可使用单 worker。
 - 领取成功后设置 `status=publishing`、`locked_by`、`locked_until`，并递增 `claim_version` 作为 fencing token。
 - 标记 `published` 或 `failed/dead_letter` 时必须使用条件更新再次校验 dispatcher lease：事件仍为 `publishing`、`locked_by` 等于当前 dispatcher、`claim_version` 等于领取时的 token，并且 `locked_until` 仍未过期；未领取、已完成、死信、非当前 dispatcher 持有、锁已过期或已被重新领取的事件不得被完成。
+- `OutboxDispatcher` 可注入 `LockProvider`，在每轮批量领取前先获取默认 `outbox:dispatch` 锁；获取失败时返回 0 claimed/published/failed/dead_lettered 且不领取事件。
+- dispatcher 跨进程锁只是减少多实例同时扫描的粗粒度保护，不能替代 `outbox_events` 条件领取、`claim_version` fencing 或 handler 幂等记录。
 - 调用 handler 前通过 `IdempotencyStore` 以 `event_id + handler_key` 记录 handler 执行结果；已成功的 handler replay 时跳过，失败记录允许后续重试重新领取。
 - 调用 handler 前会再次通过 `EventRegistry.validate_event()` 校验 schema/version，防止 schema 变更后历史坏事件反复调用 handler；schema 错误按 permanent failure 直接进入 dead letter。
 - handler 未分类异常默认按 transient failure 重试；明确抛出 `EventHandlerPermanentError` 时直接 dead-letter，并在 `last_error` / `dead_letter_reason` 中保留 `permanent` 分类。

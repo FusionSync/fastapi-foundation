@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from core.events import EventRegistry
 from core.idempotency import IdempotencyStore
+from core.locks import LockProvider
 from core.observability import MetricsRegistry
 from core.outbox.repository import OutboxRepository
 
@@ -27,6 +28,9 @@ class OutboxDispatcher:
         retry_delay_seconds: int = 30,
         metrics: MetricsRegistry | None = None,
         idempotency_store: IdempotencyStore | None = None,
+        lock_provider: LockProvider | None = None,
+        lock_key: str = "outbox:dispatch",
+        lock_ttl_seconds: int = 60,
     ) -> None:
         self.repository = repository
         self.registry = registry
@@ -35,8 +39,30 @@ class OutboxDispatcher:
         self.retry_delay_seconds = retry_delay_seconds
         self.metrics = metrics
         self.idempotency_store = idempotency_store or IdempotencyStore(repository.session)
+        self.lock_provider = lock_provider
+        self.lock_key = lock_key
+        self.lock_ttl_seconds = lock_ttl_seconds
 
     async def dispatch_once(self) -> DispatchStats:
+        lock_acquired = False
+        if self.lock_provider is not None:
+            handle = await self.lock_provider.acquire(
+                self.lock_key,
+                ttl_seconds=self.lock_ttl_seconds,
+                owner_token=self.dispatcher_id,
+            )
+            if not handle.acquired:
+                stats = DispatchStats()
+                await self._record_metrics(stats)
+                return stats
+            lock_acquired = True
+        try:
+            return await self._dispatch_claimed()
+        finally:
+            if lock_acquired and self.lock_provider is not None:
+                await self.lock_provider.release(self.lock_key, owner_token=self.dispatcher_id)
+
+    async def _dispatch_claimed(self) -> DispatchStats:
         events = await self.repository.claim_batch(
             dispatcher_id=self.dispatcher_id,
             batch_size=self.batch_size,

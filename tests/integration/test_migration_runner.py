@@ -1,15 +1,17 @@
 import json
 import sys
 import types
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.apps import AppModule, MigrationSpec
+from core.base.models import BaseModel
 from core.cli.main import main
-from core.locks import MemoryLockProvider
+from core.locks import DatabaseLockProvider, MemoryLockProvider
 from core.migrations import (
     AlembicMigrationExecutor,
     MigrationExecutorResult,
@@ -17,6 +19,17 @@ from core.migrations import (
     apply_migrations,
     run_preflight,
 )
+
+
+@pytest.fixture
+async def async_session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    try:
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -35,6 +48,27 @@ async def test_apply_migrations_runs_exact_manifest_revisions_under_lock() -> No
     assert result.ok is True
     assert result.applied is True
     assert result.mode == "executor"
+    assert executor.calls == [["alpha_0001_initial"]]
+    assert await locks.locked("migrations:apply") is False
+
+
+@pytest.mark.asyncio
+async def test_apply_migrations_runs_with_database_lock_provider(
+    async_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    manifest = _manifest("0001_initial", "alpha_0001_initial")
+    executor = RecordingMigrationExecutor(["alpha_0001_initial"])
+    locks = DatabaseLockProvider(async_session_factory)
+
+    result = await apply_migrations(
+        run_preflight([manifest]),
+        executor=executor,
+        lock_provider=locks,
+        owner_token="migrator-1",
+    )
+
+    assert result.ok is True
+    assert result.applied is True
     assert executor.calls == [["alpha_0001_initial"]]
     assert await locks.locked("migrations:apply") is False
 
@@ -59,6 +93,28 @@ async def test_apply_migrations_does_not_run_executor_without_migration_lock() -
     assert executor.calls == []
     assert any("LOCK_NOT_ACQUIRED" in error for error in result.errors)
     assert await locks.locked("migrations:apply") is True
+
+
+@pytest.mark.asyncio
+async def test_apply_migrations_does_not_run_executor_when_database_lock_is_held(
+    async_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    manifest = _manifest("0001_initial", "alpha_0001_initial")
+    executor = RecordingMigrationExecutor(["alpha_0001_initial"])
+    locks = DatabaseLockProvider(async_session_factory)
+
+    await locks.acquire("migrations:apply", owner_token="other-migrator", ttl_seconds=60)
+    result = await apply_migrations(
+        run_preflight([manifest]),
+        executor=executor,
+        lock_provider=locks,
+        owner_token="migrator-1",
+    )
+
+    assert result.ok is False
+    assert result.applied is False
+    assert executor.calls == []
+    assert any("LOCK_NOT_ACQUIRED" in error for error in result.errors)
 
 
 @pytest.mark.asyncio

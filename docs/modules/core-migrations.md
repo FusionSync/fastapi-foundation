@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status/run 契约、显式 Alembic executor apply 路径和 release checkpoint migrate dry-run stage 已落地；默认未配置 executor 时仍保持 metadata-disabled。
+- Done: migration manifest、registry、planner、preflight、drift check、CLI plan/apply/status/run 契约、显式 Alembic executor apply 路径、跨进程 migration lock provider 使用点和 release checkpoint migrate dry-run stage 已落地；默认未配置 executor 时仍保持 metadata-disabled。
 - Next:
-  - [ ] 接跨进程 migration lock provider。
   - [ ] 细化 expand/backfill/contract 分阶段 apply 命令和回滚/forward-fix 记录。
 
 ## 职责
@@ -205,9 +204,10 @@ core migrate run
 - `core migrate apply` 已接入门禁：必须传 `--yes`，并在 apply 前运行 preflight；destructive 或 `requires_backup_restore` migration 必须额外传 `--backup-ready`。
 - 未传 `--alembic-config` 时，`apply` 仍返回 `ok=false`、`applied=false`、`mode=metadata-apply-disabled`，避免 CI/CD 把 metadata/no-op 当作已应用。
 - `apply_migrations()` 提供真实 executor 的受控执行契约：调用方必须注入 `MigrationExecutor` 和 `LockProvider`，执行前获取 `migrations:apply` 锁，执行后释放锁。
+- private/cloud profile 可向 `apply_migrations()` 注入 `DatabaseLockProvider`，用共享数据库中的 `core_locks` 表提供跨进程 migration apply 互斥；CLI profile 参数化之前，CLI 默认路径仍使用进程内 provider。
 - executor 只能执行 preflight plan 中声明的 `alembic_revision`；runner 会校验 executor 返回的 `applied_revisions` 与计划完全一致，否则返回 `ok=false`、`applied=false`、`migration executor revision mismatch`。
 - `AlembicMigrationExecutor` 使用显式 Alembic config 执行 manifest 绑定的 revision，并在每个 revision 后读取数据库当前 heads 验证已到达目标 revision。
-- `core migrate apply --alembic-config <path> --database-url <url> --yes --json` 会通过真实 executor 执行；CLI 当前使用进程内 lock provider，后续 private/cloud profile 必须替换为跨进程 lock provider。
+- `core migrate apply --alembic-config <path> --database-url <url> --yes --json` 会通过真实 executor 执行；部署 profile 后续必须把进程内默认锁切换为跨进程 provider。
 - `core migrate run --json` 是 migrate 进程角色入口；默认执行 `plan -> preflight -> dry-run` 并输出阶段化 envelope，传 `--apply --yes` 时复用 `migrate apply` 的 preflight、approval 和 executor gate。
 
 后续扩展真实 runner 时，必须复用同一个 `MigrationApplyResult` 输出结构和 preflight gate，不能绕过 manifest 治理；只有真实执行数据库变更并验证 revision 状态后才能返回 `applied=true`。dry-run 只允许验证将执行的 revision，不允许改变数据库状态。

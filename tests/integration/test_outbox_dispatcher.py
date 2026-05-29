@@ -18,6 +18,7 @@ from core.db import unit_of_work
 from core.events import EventEnvelope, EventHandlerPermanentError, EventRegistry
 from core.exceptions import AppError
 from core.idempotency import IdempotencyStore, hash_request_payload
+from core.locks import MemoryLockProvider
 from core.observability import MetricsRegistry
 from core.outbox import OutboxDispatcher, OutboxEvent, OutboxRepository
 
@@ -63,6 +64,62 @@ async def test_dispatcher_publishes_claimed_event(
     assert event.published_at is not None
     assert 'outbox_dispatch_events_total{outcome="claimed"} 1' in rendered_metrics
     assert 'outbox_dispatch_events_total{outcome="published"} 1' in rendered_metrics
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_skips_claim_when_cross_process_lock_is_held(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    delivered: list[str] = []
+    locks = MemoryLockProvider()
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: delivered.append(event.event_id))
+    await _add_event(session_factory, registry)
+    await locks.acquire("outbox:dispatch", owner_token="dispatcher-2", ttl_seconds=60)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+            lock_provider=locks,
+            lock_key="outbox:dispatch",
+            lock_ttl_seconds=60,
+        ).dispatch_once()
+
+    event = await _first_event(session_factory)
+    assert stats.claimed == 0
+    assert stats.published == 0
+    assert stats.failed == 0
+    assert stats.dead_lettered == 0
+    assert delivered == []
+    assert event.status == "pending"
+    assert event.locked_by is None
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_releases_cross_process_lock_after_dispatch(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    locks = MemoryLockProvider()
+    registry = EventRegistry()
+    registry.register("business.created", 1, lambda event: None)
+    await _add_event(session_factory, registry)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+            lock_provider=locks,
+            lock_key="outbox:dispatch",
+            lock_ttl_seconds=60,
+        ).dispatch_once()
+
+    assert stats.published == 1
+    assert await locks.locked("outbox:dispatch") is False
 
 
 @pytest.mark.asyncio
