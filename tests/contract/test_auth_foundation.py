@@ -1,14 +1,27 @@
+import base64
+import hashlib
+import hmac
+import json
 from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from core.auth import (
     AuthSessionValidator,
+    ExternalAuthCallback,
+    HmacOidcIdTokenVerifier,
     LocalJwtConfig,
     LocalJwtProvider,
+    MemoryExternalAuthStateStore,
+    OidcProviderAdapter,
+    OidcProviderConfig,
+    OidcTokenSet,
     SessionPrincipal,
     StaticAuthSessionStore,
     TokenClaims,
+    keycloak_oidc_provider_config,
+    logto_oidc_provider_config,
 )
 from core.exceptions import AppError
 from core.security import PasswordHasher
@@ -236,3 +249,183 @@ async def test_auth_session_validator_rejects_revoked_or_stale_facts(
     assert rejected.value.status_code == 401
     assert rejected.value.headers == {"WWW-Authenticate": "Bearer"}
     assert rejected.value.details == {"reason": reason}
+
+
+@pytest.mark.asyncio
+async def test_oidc_provider_adapter_builds_authorization_url_and_handles_callback() -> None:
+    now = datetime(2026, 5, 29, 10, 0, tzinfo=UTC)
+    config = OidcProviderConfig(
+        provider="logto",
+        issuer="https://auth.example.com/oidc",
+        client_id="web-app",
+        client_secret="oidc-secret",
+        redirect_uri="https://api.example.com/api/v1/auth/external/logto/callback",
+        authorization_endpoint="https://auth.example.com/oidc/auth",
+        token_endpoint="https://auth.example.com/oidc/token",
+        scopes=("openid", "profile", "email", "urn:logto:scope:organizations"),
+        tenant_claim="organization_id",
+    )
+    state_store = MemoryExternalAuthStateStore(ttl_seconds=300)
+    state = state_store.issue(
+        provider="logto",
+        tenant_id="tenant-a",
+        redirect_after="/console",
+        now=now,
+    )
+    adapter = OidcProviderAdapter(config)
+
+    authorization_url = adapter.authorization_url(state)
+    parsed = urlparse(authorization_url)
+    query = parse_qs(parsed.query)
+
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "auth.example.com"
+    assert parsed.path == "/oidc/auth"
+    assert query["response_type"] == ["code"]
+    assert query["client_id"] == ["web-app"]
+    assert query["redirect_uri"] == [config.redirect_uri]
+    assert query["scope"] == ["openid profile email urn:logto:scope:organizations"]
+    assert query["state"] == [state.state]
+    assert query["nonce"] == [state.nonce]
+
+    token = _signed_oidc_token(
+        {
+            "iss": config.issuer,
+            "aud": config.client_id,
+            "sub": "logto-user-1",
+            "email": "User@Example.com",
+            "name": "Logto User",
+            "nonce": state.nonce,
+            "organization_id": "tenant-a",
+            "exp": int((now + timedelta(minutes=5)).timestamp()),
+        },
+        secret="oidc-secret",
+    )
+    identity = await adapter.handle_callback(
+        ExternalAuthCallback(code="auth-code", state=state.state),
+        state=state_store.consume(provider="logto", state=state.state, now=now),
+        client=_FakeOidcClient(token),
+        verifier=HmacOidcIdTokenVerifier("oidc-secret"),
+        now=now,
+    )
+
+    assert identity.provider == "logto"
+    assert identity.subject == "logto-user-1"
+    assert identity.email == "user@example.com"
+    assert identity.display_name == "Logto User"
+    assert identity.tenant_id == "tenant-a"
+    assert identity.token_set.access_token == "external-access-token"
+
+
+def test_oidc_provider_callback_rejects_state_nonce_or_signature_mismatch() -> None:
+    now = datetime(2026, 5, 29, 10, 0, tzinfo=UTC)
+    config = OidcProviderConfig(
+        provider="keycloak",
+        issuer="https://sso.internal.example/realms/main",
+        client_id="api",
+        client_secret="oidc-secret",
+        redirect_uri="https://api.internal.example/api/v1/auth/external/keycloak/callback",
+        authorization_endpoint="https://sso.internal.example/realms/main/protocol/openid-connect/auth",
+        token_endpoint="https://sso.internal.example/realms/main/protocol/openid-connect/token",
+    )
+    state_store = MemoryExternalAuthStateStore(ttl_seconds=300)
+    state = state_store.issue(provider="keycloak", now=now)
+    token = _signed_oidc_token(
+        {
+            "iss": config.issuer,
+            "aud": config.client_id,
+            "sub": "keycloak-user-1",
+            "email": "user@example.com",
+            "nonce": "wrong-nonce",
+            "exp": int((now + timedelta(minutes=5)).timestamp()),
+        },
+        secret="oidc-secret",
+    )
+
+    with pytest.raises(AppError) as wrong_state:
+        state_store.consume(provider="keycloak", state="wrong-state", now=now)
+    with pytest.raises(AppError) as wrong_nonce:
+        HmacOidcIdTokenVerifier("oidc-secret").verify(
+            config,
+            token,
+            expected_nonce=state.nonce,
+            now=now,
+        )
+    with pytest.raises(AppError) as wrong_signature:
+        HmacOidcIdTokenVerifier("different-secret").verify(
+            config,
+            token,
+            expected_nonce="wrong-nonce",
+            now=now,
+        )
+
+    assert wrong_state.value.details == {"reason": "external_auth_state_not_found"}
+    assert wrong_nonce.value.details == {"reason": "nonce_mismatch"}
+    assert wrong_signature.value.details == {"reason": "invalid_signature"}
+
+
+def test_logto_and_keycloak_oidc_provider_configs_set_provider_defaults() -> None:
+    logto = logto_oidc_provider_config(
+        issuer="https://auth.example.com/oidc",
+        client_id="logto-client",
+        client_secret="logto-secret",
+        redirect_uri="https://api.example.com/auth/external/logto/callback",
+    )
+    keycloak = keycloak_oidc_provider_config(
+        realm_url="https://sso.internal.example/realms/main",
+        client_id="keycloak-client",
+        client_secret="keycloak-secret",
+        redirect_uri="https://api.internal.example/auth/external/keycloak/callback",
+    )
+
+    assert logto.provider == "logto"
+    assert logto.authorization_endpoint == "https://auth.example.com/oidc/auth"
+    assert logto.token_endpoint == "https://auth.example.com/oidc/token"
+    assert "urn:logto:scope:organizations" in logto.scopes
+    assert logto.tenant_claim == "organization_id"
+
+    assert keycloak.provider == "keycloak"
+    assert keycloak.issuer == "https://sso.internal.example/realms/main"
+    assert keycloak.authorization_endpoint.endswith("/protocol/openid-connect/auth")
+    assert keycloak.token_endpoint.endswith("/protocol/openid-connect/token")
+
+
+class _FakeOidcClient:
+    def __init__(self, id_token: str) -> None:
+        self.id_token = id_token
+
+    async def exchange_authorization_code(
+        self,
+        config: OidcProviderConfig,
+        *,
+        code: str,
+    ) -> OidcTokenSet:
+        assert config.token_endpoint.endswith("/token")
+        assert code == "auth-code"
+        return OidcTokenSet(
+            id_token=self.id_token,
+            access_token="external-access-token",
+            token_type="Bearer",
+            expires_in=300,
+        )
+
+
+def _signed_oidc_token(payload: dict[str, object], *, secret: str) -> str:
+    header = {"alg": "HS256", "typ": "JWT"}
+    signing_input = f"{_encode_json(header)}.{_encode_json(payload)}"
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        signing_input.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return f"{signing_input}.{_base64url_encode(signature)}"
+
+
+def _encode_json(payload: dict[str, object]) -> str:
+    return _base64url_encode(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
+
+
+def _base64url_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")

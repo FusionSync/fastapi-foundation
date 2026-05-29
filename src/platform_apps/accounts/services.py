@@ -142,8 +142,24 @@ class AccountsService:
                     tenant_id=tenant_id,
                     request_id=request_id,
                     reason=_auth_failure_reason(exc),
-                )
+            )
             raise
+
+    async def authenticate_external_login(
+        self,
+        *,
+        provider: str,
+        subject: str,
+        tenant_id: str | None,
+        request_id: str | None = None,
+    ) -> UserSession:
+        user = await self._user_for_external_identity(provider=provider, subject=subject)
+        return await self.create_session(
+            user_id=user.id,
+            tenant_id=tenant_id,
+            auth_provider=provider.strip(),
+            request_id=request_id,
+        )
 
     async def create_session(
         self,
@@ -559,6 +575,31 @@ class AccountsService:
         if user is None:
             raise AppError("NOT_FOUND", f"User {user_id!r} not found", status_code=404)
         return user
+
+    async def _user_for_external_identity(self, *, provider: str, subject: str) -> User:
+        resolved_provider = provider.strip()
+        resolved_subject = subject.strip()
+        if not resolved_provider or not resolved_subject:
+            invalid_auth_token("missing_external_identity")
+
+        direct_user = await self.session.execute(
+            select(User)
+            .where(User.auth_provider == resolved_provider)
+            .where(User.external_id == resolved_subject)
+        )
+        user = direct_user.scalars().first()
+        if user is not None:
+            return user
+
+        identity_result = await self.session.execute(
+            select(ExternalIdentity)
+            .where(ExternalIdentity.provider == resolved_provider)
+            .where(ExternalIdentity.subject == resolved_subject)
+        )
+        identity = identity_result.scalars().first()
+        if identity is None:
+            invalid_auth_token("external_identity_not_bound")
+        return await self._get_user(identity.user_id)
 
     async def _active_sessions(
         self,

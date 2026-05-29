@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -6,7 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.app import create_app
-from core.auth import LocalJwtConfig, LocalJwtProvider, TokenClaims
+from core.auth import (
+    ExternalAuthState,
+    LocalJwtConfig,
+    LocalJwtProvider,
+    OidcProviderConfig,
+    OidcTokenSet,
+    TokenClaims,
+)
 from core.base.models import BaseModel
 from core.config import Settings
 from core.db import unit_of_work
@@ -166,6 +174,69 @@ def test_platform_accounts_api_manages_profile_password_identity_and_sessions(
     )
 
 
+def test_platform_accounts_api_external_provider_callback_creates_session(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'platform-accounts-oidc.db'}"
+    seeded = asyncio.run(_seed_external_login_facts(database_url))
+    app = create_app(
+        Settings(
+            database={"url": database_url},
+            security={"jwt_secret": "test-secret"},
+            installed_apps=["platform_apps.accounts.module"],
+        )
+    )
+    app.state.external_auth_providers = {
+        "logto": _FakeExternalAuthProvider(
+            provider="logto",
+            subject="logto-user-1",
+            email="user@example.com",
+            display_name="External User",
+        )
+    }
+    client = TestClient(app)
+
+    authorize_response = client.get(
+        "/api/v1/auth/external/logto/authorize",
+        params={"redirect_after": "/console"},
+    )
+
+    assert authorize_response.status_code == 200
+    authorize_payload = authorize_response.json()["data"]
+    assert authorize_payload["provider"] == "logto"
+    assert authorize_payload["authorization_url"].startswith(
+        "https://auth.example.com/authorize?"
+    )
+    assert authorize_payload["state"]
+
+    callback_response = client.post(
+        "/api/v1/auth/external/logto/callback",
+        json={"code": "valid-code", "state": authorize_payload["state"]},
+    )
+
+    assert callback_response.status_code == 200
+    login_payload = callback_response.json()["data"]
+    assert login_payload["session"]["auth_provider"] == "logto"
+    access_token = login_payload["access_token"]
+
+    me_response = client.get(
+        "/api/v1/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert me_response.status_code == 200
+    assert me_response.json()["data"]["id"] == seeded["user_id"]
+    assert me_response.json()["data"]["email"] == "user@example.com"
+
+    sessions = asyncio.run(_all(database_url, UserSession))
+    assert any(
+        session.user_id == seeded["user_id"]
+        and session.auth_provider == "logto"
+        and session.status == "active"
+        for session in sessions
+    )
+
+
 async def _seed_accounts_api_facts(database_url: str) -> dict[str, str]:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
@@ -214,6 +285,30 @@ async def _seed_accounts_api_facts(database_url: str) -> dict[str, str]:
         await engine.dispose()
 
 
+async def _seed_external_login_facts(database_url: str) -> dict[str, str]:
+    engine = create_async_engine(database_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            accounts = AccountsService(uow.session)
+            user = await accounts.create_local_user(
+                email="user@example.com",
+                display_name="External User",
+                password="OldPass123",
+            )
+            await accounts.bind_external_identity(
+                user.id,
+                provider="logto",
+                subject="logto-user-1",
+            )
+            return {"user_id": user.id}
+    finally:
+        await engine.dispose()
+
+
 def _admin_token(seeded: dict[str, str]) -> str:
     return LocalJwtProvider(LocalJwtConfig(secret="test-secret")).issue_token(
         TokenClaims(
@@ -237,3 +332,52 @@ async def _all(database_url: str, model: type):
             return rows
     finally:
         await engine.dispose()
+
+
+@dataclass(slots=True)
+class _FakeExternalAuthProvider:
+    provider: str
+    subject: str
+    email: str
+    display_name: str
+
+    @property
+    def config(self) -> OidcProviderConfig:
+        return OidcProviderConfig(
+            provider=self.provider,
+            issuer="https://auth.example.com",
+            client_id="api",
+            client_secret="secret",
+            redirect_uri=f"https://api.example.com/auth/external/{self.provider}/callback",
+            authorization_endpoint="https://auth.example.com/authorize",
+            token_endpoint="https://auth.example.com/token",
+        )
+
+    def authorization_url(self, state: ExternalAuthState) -> str:
+        return f"{self.config.authorization_endpoint}?state={state.state}&nonce={state.nonce}"
+
+    async def handle_callback(self, callback, *, state, client, verifier, now=None):
+        assert callback.code == "valid-code"
+        assert callback.state == state.state
+        return _FakeExternalAuthIdentity(
+            provider=self.provider,
+            subject=self.subject,
+            email=self.email,
+            display_name=self.display_name,
+            token_set=OidcTokenSet(
+                id_token="id-token",
+                access_token="access-token",
+                token_type="Bearer",
+                expires_in=300,
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeExternalAuthIdentity:
+    provider: str
+    subject: str
+    email: str
+    display_name: str
+    token_set: OidcTokenSet
+    tenant_id: str | None = None

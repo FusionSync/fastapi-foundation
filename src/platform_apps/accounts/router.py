@@ -3,7 +3,15 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import LocalJwtConfig, LocalJwtProvider, TokenClaims, invalid_auth_token
+from core.auth import (
+    ExternalAuthCallback,
+    LocalJwtConfig,
+    LocalJwtProvider,
+    MemoryExternalAuthStateStore,
+    OidcProviderAdapter,
+    TokenClaims,
+    invalid_auth_token,
+)
 from core.base import create_router
 from core.context import get_current_context
 from core.db import unit_of_work
@@ -14,6 +22,8 @@ from core.permissions import AuthorizationDecision, route_authorization_decision
 from core.serialization import Envelope, ListEnvelope, ok, ok_list
 from platform_apps.accounts.models import ExternalIdentity, User, UserSession
 from platform_apps.accounts.schemas import (
+    ExternalAuthAuthorizeRead,
+    ExternalAuthCallbackRequest,
     ExternalIdentityCreateRequest,
     ExternalIdentityRead,
     LoginRead,
@@ -60,6 +70,64 @@ async def login(request: Request, payload: LoginRequest) -> dict[str, object]:
             email=payload.email,
             password=payload.password,
             tenant_id=payload.tenant_id,
+            request_id=_request_id(),
+        )
+        return ok(_login_read(request, user_session))
+
+
+@auth_public_router.get(
+    "/external/{provider}/authorize",
+    response_model=Envelope[ExternalAuthAuthorizeRead],
+)
+async def external_authorize(
+    request: Request,
+    provider: str,
+    tenant_id: str | None = None,
+    redirect_after: str | None = None,
+) -> dict[str, object]:
+    adapter = _external_auth_provider(request, provider)
+    state = _external_auth_state_store(request).issue(
+        provider=provider,
+        tenant_id=tenant_id,
+        redirect_after=redirect_after,
+    )
+    return ok(
+        {
+            "provider": provider,
+            "authorization_url": adapter.authorization_url(state),
+            "state": state.state,
+            "expires_at": state.expires_at,
+            "redirect_after": redirect_after,
+        }
+    )
+
+
+@auth_public_router.post(
+    "/external/{provider}/callback",
+    response_model=Envelope[LoginRead],
+)
+async def external_callback(
+    request: Request,
+    provider: str,
+    payload: ExternalAuthCallbackRequest,
+) -> dict[str, object]:
+    adapter = _external_auth_provider(request, provider)
+    state = _external_auth_state_store(request).consume(
+        provider=provider,
+        state=payload.state,
+    )
+    identity = await adapter.handle_callback(
+        ExternalAuthCallback(code=payload.code, state=payload.state),
+        state=state,
+        client=_external_auth_client(request, provider, adapter),
+        verifier=_external_auth_verifier(request, provider, adapter),
+    )
+    async with unit_of_work(_session_factory(request)) as uow:
+        session = _active_session(uow.session)
+        user_session = await _accounts(request, session).authenticate_external_login(
+            provider=identity.provider,
+            subject=identity.subject,
+            tenant_id=identity.tenant_id,
             request_id=_request_id(),
         )
         return ok(_login_read(request, user_session))
@@ -277,6 +345,56 @@ def _event_publisher(request: Request, session: AsyncSession) -> OutboxEventPubl
     if registry is not None and not isinstance(registry, EventRegistry):
         raise AppError("SYSTEM_ERROR", "Event registry is invalid", status_code=500)
     return OutboxEventPublisher(OutboxRepository(session, registry=registry))
+
+
+def _external_auth_provider(request: Request, provider: str):
+    registry = getattr(request.app.state, "external_auth_providers", None)
+    if not isinstance(registry, dict) or provider not in registry:
+        raise AppError(
+            "NOT_FOUND",
+            "External auth provider is not configured",
+            status_code=404,
+            details={"provider": provider},
+        )
+    return registry[provider]
+
+
+def _external_auth_state_store(request: Request):
+    state_store = getattr(request.app.state, "external_auth_state_store", None)
+    if state_store is None:
+        state_store = MemoryExternalAuthStateStore()
+        request.app.state.external_auth_state_store = state_store
+    return state_store
+
+
+def _external_auth_client(request: Request, provider: str, adapter):
+    if not isinstance(adapter, OidcProviderAdapter):
+        return None
+    clients = getattr(request.app.state, "external_auth_clients", None)
+    client = clients.get(provider) if isinstance(clients, dict) else None
+    if client is None:
+        raise AppError(
+            "SYSTEM_ERROR",
+            "External auth client is not configured",
+            status_code=500,
+            details={"provider": provider},
+        )
+    return client
+
+
+def _external_auth_verifier(request: Request, provider: str, adapter):
+    if not isinstance(adapter, OidcProviderAdapter):
+        return None
+    verifiers = getattr(request.app.state, "external_auth_id_token_verifiers", None)
+    verifier = verifiers.get(provider) if isinstance(verifiers, dict) else None
+    if verifier is None:
+        raise AppError(
+            "SYSTEM_ERROR",
+            "External auth id token verifier is not configured",
+            status_code=500,
+            details={"provider": provider},
+        )
+    return verifier
 
 
 def _request_context():

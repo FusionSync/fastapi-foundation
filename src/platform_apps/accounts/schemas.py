@@ -77,6 +77,19 @@ class TokenRefreshRead(LoginRead):
     pass
 
 
+class ExternalAuthAuthorizeRead(BaseSchema):
+    provider: str
+    authorization_url: str
+    state: str
+    expires_at: datetime
+    redirect_after: str | None = None
+
+
+class ExternalAuthCallbackRequest(CreateSchema):
+    code: str
+    state: str
+
+
 class UserSessionDetailRead(UserSessionRead):
     revoke_reason: str | None = None
     revoked_at: datetime | None = None
