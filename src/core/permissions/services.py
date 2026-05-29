@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.audit import AuditRecorder
 from core.events import EventPublisher
 from core.exceptions import AppError
-from core.permissions.cache import PermissionCache
+from core.permissions.cache import PermissionCacheInvalidator, invalidate_permission_cache
 from core.permissions.decisions import AuthorizationDecision, assert_authorization_decision
 from core.permissions.models import ProjectedPolicy, RoleGrant
 from core.permissions.projector import ROLE_GRANT_CHANGED_EVENT
@@ -21,7 +21,7 @@ class RoleGrantService:
         events: EventPublisher,
         *,
         audit: AuditRecorder | None = None,
-        cache: PermissionCache | None = None,
+        cache: PermissionCacheInvalidator | None = None,
     ) -> None:
         self.session = session
         self.events = events
@@ -143,7 +143,11 @@ class RoleGrantService:
             delete(ProjectedPolicy).where(ProjectedPolicy.role_grant_id == grant.id)
         )
         if self.cache is not None:
-            self.cache.invalidate()
+            await invalidate_permission_cache(
+                self.cache,
+                tenant_id=grant.tenant_id,
+                subject=f"{grant.subject_type}:{grant.subject_id}",
+            )
         await self.session.delete(grant)
         await self.session.flush()
         return grant

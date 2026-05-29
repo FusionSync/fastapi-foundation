@@ -1,10 +1,11 @@
 from collections.abc import AsyncIterator
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.base.models import BaseModel
+from core.cache import MemoryCacheProvider
 from core.db import unit_of_work
 from core.events import EventEnvelope, EventRegistry
 from core.exceptions import AppError
@@ -13,11 +14,16 @@ from core.permissions import (
     ROLE_GRANT_CHANGED_EVENT,
     AuthorizationDecision,
     AuthorizationService,
+    CachedPolicyDecisionBackend,
+    CasbinEquivalentPolicyBackend,
+    DistributedPermissionCache,
     PermissionCache,
     PermissionRegistry,
     PermissionSpec,
     PolicyProjector,
+    PolicyRule,
     ProjectedPolicy,
+    ProjectedPolicyBackend,
     RegisteredPermission,
     RoleGrant,
     RoleGrantService,
@@ -166,6 +172,141 @@ async def test_permission_facts_projection_checkpoint_updates_authorization_resu
     assert denied.reason == "missing_projected_policy"
     assert await _policies(session_factory) == []
     assert cache.version == 2
+
+
+@pytest.mark.asyncio
+async def test_authorization_service_supports_casbin_equivalent_policy_backend(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    rule = PolicyRule(
+        tenant_id="tenant-a",
+        subject="user:user-1",
+        resource="example",
+        action="read",
+        role_grant_id="grant-equivalent",
+        policy_version=7,
+    )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        service = AuthorizationService(
+            uow.session,
+            policy_backend=CasbinEquivalentPolicyBackend([rule]),
+        )
+
+        allowed = await service.authorize(
+            user_id="user-1",
+            tenant_id="tenant-a",
+            resource="example",
+            action="read",
+        )
+        denied = await service.authorize(
+            user_id="user-1",
+            tenant_id="tenant-b",
+            resource="example",
+            action="read",
+        )
+
+    assert allowed.allowed is True
+    assert allowed.reason == "matched_casbin_equivalent_policy"
+    assert allowed.policy_version == 7
+    assert denied.allowed is False
+    assert denied.reason == "missing_projected_policy"
+
+
+@pytest.mark.asyncio
+async def test_cached_policy_backend_uses_distributed_cache_until_subject_invalidated(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    distributed_cache = DistributedPermissionCache(MemoryCacheProvider(), ttl_seconds=300)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add(
+            ProjectedPolicy(
+                id="policy-cached",
+                tenant_id="tenant-a",
+                subject="user:user-1",
+                resource="example",
+                action="read",
+                effect="allow",
+                role_grant_id="grant-cached",
+                policy_version=3,
+            )
+        )
+        await uow.session.flush()
+
+        service = AuthorizationService(
+            uow.session,
+            policy_backend=CachedPolicyDecisionBackend(
+                ProjectedPolicyBackend(uow.session),
+                cache=distributed_cache,
+            ),
+        )
+
+        first = await service.authorize(
+            user_id="user-1",
+            tenant_id="tenant-a",
+            resource="example",
+            action="read",
+        )
+        await uow.session.execute(
+            delete(ProjectedPolicy).where(ProjectedPolicy.id == "policy-cached")
+        )
+        await uow.session.flush()
+        cached = await service.authorize(
+            user_id="user-1",
+            tenant_id="tenant-a",
+            resource="example",
+            action="read",
+        )
+        await distributed_cache.invalidate(tenant_id="tenant-a", subject="user:user-1")
+        invalidated = await service.authorize(
+            user_id="user-1",
+            tenant_id="tenant-a",
+            resource="example",
+            action="read",
+        )
+
+    assert first.allowed is True
+    assert first.policy_version == 3
+    assert cached.allowed is True
+    assert cached.policy_version == 3
+    assert invalidated.allowed is False
+    assert invalidated.reason == "missing_projected_policy"
+
+
+@pytest.mark.asyncio
+async def test_policy_projector_invalidates_distributed_permission_cache(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    distributed_cache = DistributedPermissionCache(MemoryCacheProvider(), ttl_seconds=300)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        template = _viewer_template()
+        grant = RoleGrant(
+            id="grant-distributed-cache",
+            tenant_id="tenant-a",
+            subject_type="user",
+            subject_id="user-1",
+            role_template_id=template.id,
+            policy_version=1,
+        )
+        uow.session.add_all([template, grant])
+
+        before = await distributed_cache.current_version(
+            tenant_id="tenant-a",
+            subject="user:user-1",
+        )
+        await PolicyProjector(uow.session, cache=distributed_cache).project_grant(grant, template)
+        after = await distributed_cache.current_version(
+            tenant_id="tenant-a",
+            subject="user:user-1",
+        )
+
+    assert before == 0
+    assert after == 1
 
 
 @pytest.mark.asyncio

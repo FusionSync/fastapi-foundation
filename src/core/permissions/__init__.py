@@ -1,5 +1,17 @@
 from core.permissions.authorization import AuthorizationService
-from core.permissions.cache import PermissionCache
+from core.permissions.backends import (
+    CachedPolicyDecisionBackend,
+    CasbinEquivalentPolicyBackend,
+    PolicyDecisionBackend,
+    PolicyMatch,
+    ProjectedPolicyBackend,
+)
+from core.permissions.cache import (
+    DistributedPermissionCache,
+    PermissionCache,
+    PermissionCacheInvalidator,
+    invalidate_permission_cache,
+)
 from core.permissions.cross_tenant import (
     CrossTenantPermission,
     CrossTenantPermissionGate,
@@ -28,15 +40,22 @@ from core.permissions.specs import PermissionSpec
 __all__ = [
     "AuthorizationDecision",
     "AuthorizationService",
+    "CachedPolicyDecisionBackend",
+    "CasbinEquivalentPolicyBackend",
     "CrossTenantPermission",
     "CrossTenantPermissionGate",
+    "DistributedPermissionCache",
     "PLATFORM_TENANT_ID",
     "ROLE_GRANT_CHANGED_EVENT",
     "PermissionCache",
+    "PermissionCacheInvalidator",
+    "PolicyDecisionBackend",
+    "PolicyMatch",
     "PermissionRegistry",
     "PermissionSpec",
     "PolicyProjector",
     "PolicyRule",
+    "ProjectedPolicyBackend",
     "ProjectedPolicy",
     "ReconciliationResult",
     "RegisteredPermission",
@@ -46,6 +65,7 @@ __all__ = [
     "assert_cross_tenant_permission",
     "assert_authorization_decision",
     "assert_platform_decision",
+    "invalidate_permission_cache",
     "route_authorization_decision",
     "route_authorization_decisions",
 ]

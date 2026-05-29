@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection、resource instance authorization adapter、policy cache invalidation、reconciliation CLI 和 RoleGrant 事实源收敛已落地。
-- Next:
-  - [ ] 接 Casbin/等价策略后端和分布式 policy cache。
+- Done: `PermissionSpec`、scope、`RoleTemplate`、`RoleGrant`、policy projection、resource instance authorization adapter、policy cache invalidation、reconciliation CLI、RoleGrant 事实源收敛、Casbin 等价策略后端和分布式 policy cache 已落地。
+- Next: _none_
 
 ## 职责
 
@@ -160,19 +159,27 @@ PolicyProjector / reconciliation
   src/core/permissions/projector.py
 
 AuthorizationService
-  查询 ProjectedPolicy，并在拒绝时写 authorization.denied 审计
+  默认通过 ProjectedPolicyBackend 查询投影策略，可注入 CasbinEquivalentPolicyBackend 或 CachedPolicyDecisionBackend，并在拒绝时写 authorization.denied 审计
+
+PolicyDecisionBackend / DistributedPermissionCache
+  src/core/permissions/backends.py
+  src/core/permissions/cache.py
+  ProjectedPolicyBackend 是默认 SQLAlchemy 投影后端
+  CasbinEquivalentPolicyBackend 使用 subject/domain/resource/action/effect 字段执行等价策略判断
+  CachedPolicyDecisionBackend 将 allow 决策写入 CacheProvider 支撑的 DistributedPermissionCache
+  DistributedPermissionCache 通过 global/tenant/subject 版本号让跨进程缓存失效
 
 RoleGrantService
   授予时写 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   撤销时删除 RoleGrant 事实，并在同一事务写 permissions.role_grant_changed outbox event
   role grant event payload 必须包含 grant_id、subject_type 和 subject_id，供 projector 和缓存失效定位同一授权主体
   撤销时同步删除该 grant 已有 ProjectedPolicy，避免 outbox projector 消费前旧投影继续授权
-  撤销时可注入 PermissionCache，在同步删除旧投影后立即失效授权缓存
+  撤销时可注入 PermissionCache 或 DistributedPermissionCache，在同步删除旧投影后立即失效授权缓存
   授予和撤销都必须传入允许的 AuthorizationDecision，且 actor_id 必须与 decision.user_id 一致
   可注入 AuditService 写 role.granted / role.revoked 强一致审计
 ```
 
-第一版的 `ProjectedPolicy` 是 Casbin policy 的可替换投影层。后续接入真实 Casbin adapter 时，事实源仍然是 `RoleGrant`，不能让业务代码直接写 Casbin policy。
+第一版的 `ProjectedPolicy` 是 Casbin policy 的可替换投影层。当前提供 `CasbinEquivalentPolicyBackend`，用于在不引入额外运行时依赖的情况下验证 Casbin 风格执行模型；后续接入真实 Casbin adapter 时，事实源仍然是 `RoleGrant`，不能让业务代码直接写 Casbin policy。
 
 ## 审计
 

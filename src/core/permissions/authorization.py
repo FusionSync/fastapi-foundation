@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
 from core.exceptions import AppError
+from core.permissions.backends import PolicyDecisionBackend, PolicyMatch, ProjectedPolicyBackend
 from core.permissions.decisions import PLATFORM_TENANT_ID, AuthorizationDecision
-from core.permissions.models import ProjectedPolicy
 
 
 class AuthorizationService:
@@ -15,9 +14,11 @@ class AuthorizationService:
         session: AsyncSession,
         *,
         audit: AuditRecorder | None = None,
+        policy_backend: PolicyDecisionBackend | None = None,
     ) -> None:
         self.session = session
         self.audit = audit
+        self.policy_backend = policy_backend or ProjectedPolicyBackend(session)
 
     async def authorize(
         self,
@@ -49,7 +50,7 @@ class AuthorizationService:
                 user_id=user_id,
                 resource=resource,
                 action=action,
-                reason="matched_projected_policy",
+                reason=policy.reason,
                 policy_version=policy.policy_version,
             )
 
@@ -148,18 +149,13 @@ class AuthorizationService:
         subject: str,
         resource: str,
         action: str,
-    ) -> ProjectedPolicy | None:
-        result = await self.session.execute(
-            select(ProjectedPolicy)
-            .where(ProjectedPolicy.tenant_id == tenant_id)
-            .where(ProjectedPolicy.subject == subject)
-            .where(ProjectedPolicy.resource == resource)
-            .where(ProjectedPolicy.action == action)
-            .where(ProjectedPolicy.effect == "allow")
-            .order_by(ProjectedPolicy.policy_version.desc())
-            .limit(1)
+    ) -> PolicyMatch | None:
+        return await self.policy_backend.find_allowing_policy(
+            tenant_id=tenant_id,
+            subject=subject,
+            resource=resource,
+            action=action,
         )
-        return result.scalars().first()
 
     async def _record_denial(
         self,

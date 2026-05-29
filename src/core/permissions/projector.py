@@ -6,7 +6,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AppError
-from core.permissions.cache import PermissionCache
+from core.permissions.cache import (
+    PermissionCache,
+    PermissionCacheInvalidator,
+    invalidate_permission_cache,
+)
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
 from core.permissions.policies import (
     PolicyRule,
@@ -28,7 +32,7 @@ class PolicyProjector:
         self,
         session: AsyncSession,
         *,
-        cache: PermissionCache | None = None,
+        cache: PermissionCacheInvalidator | None = None,
         permission_registry: PermissionRegistry | None = None,
     ) -> None:
         self.session = session
@@ -45,7 +49,21 @@ class PolicyProjector:
             )
         grant = await self.session.get(RoleGrant, grant_id)
         if grant is None:
-            await self.remove_grant_projection(grant_id)
+            subject_type = envelope.payload.get("subject_type")
+            subject_id = envelope.payload.get("subject_id")
+            subject = (
+                f"{subject_type}:{subject_id}"
+                if isinstance(subject_type, str)
+                and subject_type.strip()
+                and isinstance(subject_id, str)
+                and subject_id.strip()
+                else None
+            )
+            await self.remove_grant_projection(
+                grant_id,
+                tenant_id=envelope.tenant_id,
+                subject=subject,
+            )
             return
         role_template = await self.session.get(RoleTemplate, grant.role_template_id)
         if role_template is None:
@@ -71,15 +89,37 @@ class PolicyProjector:
         )
         for rule in rules:
             self.session.add(projected_policy_from_rule(rule))
-        self.cache.invalidate()
+        await invalidate_permission_cache(
+            self.cache,
+            tenant_id=grant.tenant_id,
+            subject=_subject_for_grant(grant),
+        )
         await self.session.flush()
         return rules
 
-    async def remove_grant_projection(self, grant_id: str) -> None:
+    async def remove_grant_projection(
+        self,
+        grant_id: str,
+        *,
+        tenant_id: str | None = None,
+        subject: str | None = None,
+    ) -> None:
+        projected_subjects = {
+            (policy_tenant_id, policy_subject)
+            for policy_tenant_id, policy_subject in (
+                await self.session.execute(
+                    select(ProjectedPolicy.tenant_id, ProjectedPolicy.subject).where(
+                        ProjectedPolicy.role_grant_id == grant_id
+                    )
+                )
+            ).all()
+        }
+        if tenant_id is not None and subject is not None:
+            projected_subjects.add((tenant_id, subject))
         await self.session.execute(
             delete(ProjectedPolicy).where(ProjectedPolicy.role_grant_id == grant_id)
         )
-        self.cache.invalidate()
+        await self._invalidate_subjects(projected_subjects)
         await self.session.flush()
 
     async def reconcile(self, *, repair: bool = False) -> ReconciliationResult:
@@ -129,7 +169,20 @@ class PolicyProjector:
                 )
             for rule in missing:
                 self.session.add(projected_policy_from_rule(rule))
-            self.cache.invalidate()
+            await self._invalidate_subjects(
+                {(rule.tenant_id, rule.subject) for rule in (*missing, *stale)}
+            )
             await self.session.flush()
             return ReconciliationResult(repaired=True)
         return ReconciliationResult(repaired=False, missing=missing, stale=stale)
+
+    async def _invalidate_subjects(self, subjects: set[tuple[str, str]]) -> None:
+        if not subjects:
+            await invalidate_permission_cache(self.cache)
+            return
+        for tenant_id, subject in sorted(subjects):
+            await invalidate_permission_cache(self.cache, tenant_id=tenant_id, subject=subject)
+
+
+def _subject_for_grant(grant: RoleGrant) -> str:
+    return f"{grant.subject_type}:{grant.subject_id}"
