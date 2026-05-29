@@ -22,6 +22,8 @@ from core.scheduler import (
     LockedScheduleProvider,
     ManualScheduleProvider,
     ScheduleRegistry,
+    ScheduleState,
+    ScheduleStateRepository,
     ScheduleTriggerLog,
     ScheduleTriggerRepository,
     ScheduleTriggerRequest,
@@ -328,6 +330,89 @@ async def test_manual_schedule_provider_records_trigger_history_and_replays_dupl
 
 
 @pytest.mark.asyncio
+async def test_schedule_state_repository_applies_misfire_policies(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    last_planned_at = datetime(2026, 5, 28, 1, 0, tzinfo=UTC)
+    now = datetime(2026, 5, 28, 4, 30, tzinfo=UTC)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        uow.session.add_all(
+            [
+                ScheduleState(
+                    schedule_id="skip.hourly",
+                    tenant_id="tenant-a",
+                    last_planned_at=last_planned_at,
+                ),
+                ScheduleState(
+                    schedule_id="run-once.hourly",
+                    tenant_id="tenant-a",
+                    last_planned_at=last_planned_at,
+                ),
+                ScheduleState(
+                    schedule_id="catch-up.hourly",
+                    tenant_id="tenant-a",
+                    last_planned_at=last_planned_at,
+                ),
+            ]
+        )
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        repository = ScheduleStateRepository(uow.session)
+        skip_plan = await repository.plan_cron_due_slots(
+            schedule_id="skip.hourly",
+            tenant_id="tenant-a",
+            trigger_config={"minute": "0"},
+            misfire_policy="skip",
+            now=now,
+        )
+        run_once_plan = await repository.plan_cron_due_slots(
+            schedule_id="run-once.hourly",
+            tenant_id="tenant-a",
+            trigger_config={"minute": "0"},
+            misfire_policy="run_once",
+            now=now,
+        )
+        catch_up_plan = await repository.plan_cron_due_slots(
+            schedule_id="catch-up.hourly",
+            tenant_id="tenant-a",
+            trigger_config={"minute": "0", "misfire_limit": "2"},
+            misfire_policy="catch_up_limited",
+            now=now,
+        )
+
+    assert skip_plan.planned_slots == []
+    assert skip_plan.skipped_until == datetime(2026, 5, 28, 4, 0, tzinfo=UTC)
+    assert run_once_plan.planned_slots == [datetime(2026, 5, 28, 4, 0, tzinfo=UTC)]
+    assert catch_up_plan.planned_slots == [
+        datetime(2026, 5, 28, 2, 0, tzinfo=UTC),
+        datetime(2026, 5, 28, 3, 0, tzinfo=UTC),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_schedule_state_repository_marks_skipped_slots_persistent(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        repository = ScheduleStateRepository(uow.session)
+        await repository.mark_skipped_until(
+            schedule_id="skip.hourly",
+            tenant_id="tenant-a",
+            planned_at=datetime(2026, 5, 28, 4, 0, tzinfo=UTC),
+            checked_at=datetime(2026, 5, 28, 4, 30, tzinfo=UTC),
+        )
+
+    state = await _schedule_state(session_factory, "skip.hourly", "tenant-a")
+    assert state is not None
+    assert state.last_planned_at == datetime(2026, 5, 28, 4, 0)
+    assert state.last_checked_at == datetime(2026, 5, 28, 4, 30)
+
+
+@pytest.mark.asyncio
 async def test_manual_schedule_provider_preserves_tenant_lifecycle_gate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -620,3 +705,20 @@ async def _trigger_logs(
         for log in logs:
             session.expunge(log)
         return logs
+
+
+async def _schedule_state(
+    session_factory: async_sessionmaker[AsyncSession],
+    schedule_id: str,
+    tenant_id: str,
+) -> ScheduleState | None:
+    async with session_factory() as session:
+        result = await session.execute(
+            select(ScheduleState)
+            .where(ScheduleState.schedule_id == schedule_id)
+            .where(ScheduleState.tenant_id == tenant_id)
+        )
+        state = result.scalars().first()
+        if state is not None:
+            session.expunge(state)
+        return state

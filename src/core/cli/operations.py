@@ -123,8 +123,8 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--tenant-status", default="active")
             role_parser.add_argument("--instance-id")
             role_parser.add_argument("--max-iterations", type=int)
-            role_parser.add_argument("--idle-sleep-seconds", type=float, default=1.0)
-            role_parser.add_argument("--lock-ttl-seconds", type=int, default=60)
+            role_parser.add_argument("--idle-sleep-seconds", type=float)
+            role_parser.add_argument("--lock-ttl-seconds", type=int)
         if role == "outbox-dispatcher":
             role_parser.add_argument("--run", action="store_true")
             role_parser.add_argument("--database-url")
@@ -347,7 +347,7 @@ def _handle_scheduler_run_once(args: argparse.Namespace) -> int:
                 planned_at=_parse_datetime(args.planned_at),
                 payload=_parse_payload_json(args.payload_json),
                 tenant_status=args.tenant_status,
-                lock_ttl_seconds=args.lock_ttl_seconds,
+                lock_ttl_seconds=_scheduler_lock_ttl_seconds(args.lock_ttl_seconds),
             )
         )
     except Exception as exc:
@@ -390,8 +390,8 @@ def _handle_scheduler_run(args: argparse.Namespace) -> int:
                 now=_parse_datetime(args.now),
                 instance_id=args.instance_id,
                 max_iterations=args.max_iterations,
-                idle_sleep_seconds=args.idle_sleep_seconds,
-                lock_ttl_seconds=args.lock_ttl_seconds,
+                idle_sleep_seconds=_scheduler_idle_sleep_seconds(args.idle_sleep_seconds),
+                lock_ttl_seconds=_scheduler_lock_ttl_seconds(args.lock_ttl_seconds),
             )
         )
     except Exception as exc:
@@ -624,6 +624,14 @@ def _task_queue_max_attempts(value: int | None) -> int:
 
 def _task_queue_retry_backoff_seconds(value: int | None) -> int:
     return value if value is not None else get_settings().task_queue.retry_backoff_seconds
+
+
+def _scheduler_idle_sleep_seconds(value: float | None) -> float:
+    return value if value is not None else get_settings().scheduler.idle_sleep_seconds
+
+
+def _scheduler_lock_ttl_seconds(value: int | None) -> int:
+    return value if value is not None else get_settings().scheduler.lock_ttl_seconds
 
 
 def _scheduler_task_provider(

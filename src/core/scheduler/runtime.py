@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.apps import AppRegistry, ScheduleSpec, resolve_runtime_capabilities
+from core.apps import AppRegistry, resolve_runtime_capabilities
 from core.config import Settings, get_settings
 from core.db import unit_of_work
 from core.locks import MemoryLockProvider
@@ -16,8 +16,8 @@ from core.scheduler.provider import (
     ManualScheduleProvider,
     ScheduleTriggerRequest,
 )
-from core.scheduler.registry import RegisteredSchedule, ScheduleRegistry
-from core.scheduler.repository import ScheduleTriggerRepository
+from core.scheduler.registry import ScheduleRegistry
+from core.scheduler.repository import ScheduleStateRepository, ScheduleTriggerRepository
 from core.tasks import DatabaseQueueTaskProvider, SyncTaskProvider, TaskRegistry, TaskRunRepository
 
 
@@ -82,15 +82,14 @@ async def run_scheduler_loop(
     checked = 0
     triggered = 0
     failed = 0
-    seen_slots: set[tuple[str, str, datetime]] = set()
     schedule_results: list[dict[str, object]] = []
     try:
         while max_iterations is None or iterations < max_iterations:
             planned_at = _planned_at(now or datetime.now(UTC))
-            due_schedules = _due_schedules(schedule_registry, planned_at)
             async with unit_of_work(session_factory) as uow:
                 if uow.session is None:
                     raise RuntimeError("database session was not initialized")
+                state_repository = ScheduleStateRepository(uow.session)
                 provider = LockedScheduleProvider(
                     provider=ManualScheduleProvider(
                         schedule_registry=schedule_registry,
@@ -105,41 +104,60 @@ async def run_scheduler_loop(
                     lock_ttl_seconds=lock_ttl_seconds,
                 )
                 checked += len(schedule_registry.registered_schedules)
-                for registered in due_schedules:
-                    slot_key = (registered.spec.schedule_id, tenant_id, planned_at)
-                    if slot_key in seen_slots:
+                for registered in schedule_registry.registered_schedules:
+                    if registered.spec.trigger != "cron":
                         continue
-                    seen_slots.add(slot_key)
-                    try:
-                        result = await provider.trigger(
-                            ScheduleTriggerRequest(
-                                schedule_id=registered.spec.schedule_id,
-                                tenant_id=tenant_id,
-                                request_id=_request_id(
-                                    request_id_prefix=request_id_prefix,
+                    plan = await state_repository.plan_cron_due_slots(
+                        schedule_id=registered.spec.schedule_id,
+                        tenant_id=tenant_id,
+                        trigger_config=registered.spec.trigger_config,
+                        misfire_policy=registered.spec.misfire_policy,
+                        now=planned_at,
+                    )
+                    if plan.skipped_until is not None:
+                        await state_repository.mark_skipped_until(
+                            schedule_id=registered.spec.schedule_id,
+                            tenant_id=tenant_id,
+                            planned_at=plan.skipped_until,
+                            checked_at=planned_at,
+                        )
+                    for slot_planned_at in plan.planned_slots:
+                        try:
+                            result = await provider.trigger(
+                                ScheduleTriggerRequest(
                                     schedule_id=registered.spec.schedule_id,
-                                    planned_at=planned_at,
+                                    tenant_id=tenant_id,
+                                    request_id=_request_id(
+                                        request_id_prefix=request_id_prefix,
+                                        schedule_id=registered.spec.schedule_id,
+                                        planned_at=slot_planned_at,
+                                    ),
+                                    planned_at=slot_planned_at,
+                                    payload=dict(payload or {}),
                                 ),
-                                planned_at=planned_at,
-                                payload=dict(payload or {}),
-                            ),
-                            tenant_status=tenant_status,  # type: ignore[arg-type]
+                                tenant_status=tenant_status,  # type: ignore[arg-type]
+                            )
+                        except Exception as exc:
+                            failed += 1
+                            schedule_results.append(
+                                {
+                                    "ok": False,
+                                    "schedule_id": registered.spec.schedule_id,
+                                    "planned_at": slot_planned_at.isoformat(),
+                                    "error": f"{type(exc).__name__}: {exc}",
+                                }
+                            )
+                            continue
+                        triggered += 1
+                        if not result.ok:
+                            failed += 1
+                        await state_repository.mark_triggered(
+                            schedule_id=registered.spec.schedule_id,
+                            tenant_id=tenant_id,
+                            planned_at=slot_planned_at,
+                            triggered_at=planned_at,
                         )
-                    except Exception as exc:
-                        failed += 1
-                        schedule_results.append(
-                            {
-                                "ok": False,
-                                "schedule_id": registered.spec.schedule_id,
-                                "planned_at": planned_at.isoformat(),
-                                "error": f"{type(exc).__name__}: {exc}",
-                            }
-                        )
-                        continue
-                    triggered += 1
-                    if not result.ok:
-                        failed += 1
-                    schedule_results.append(result.to_dict())
+                        schedule_results.append(result.to_dict())
                 iterations += 1
                 if instance_id is not None:
                     await ProcessHeartbeatRepository(uow.session).record(
@@ -188,48 +206,6 @@ def _task_provider(
         task_repository=repository,
         max_attempts=settings.task_queue.max_attempts,
     )
-
-
-def _due_schedules(
-    schedule_registry: ScheduleRegistry,
-    planned_at: datetime,
-) -> list[RegisteredSchedule]:
-    return [
-        registered
-        for registered in schedule_registry.registered_schedules
-        if _is_due(registered.spec, planned_at)
-    ]
-
-
-def _is_due(spec: ScheduleSpec, planned_at: datetime) -> bool:
-    if spec.trigger != "cron":
-        return False
-    return _cron_matches(
-        spec.trigger_config.get("hour", "*"),
-        actual=planned_at.hour,
-        minimum=0,
-        maximum=23,
-    ) and _cron_matches(
-        spec.trigger_config.get("minute", "0"),
-        actual=planned_at.minute,
-        minimum=0,
-        maximum=59,
-    )
-
-
-def _cron_matches(value: str, *, actual: int, minimum: int, maximum: int) -> bool:
-    if value == "*":
-        return True
-    for item in value.split(","):
-        item = item.strip()
-        if not item:
-            continue
-        expected = int(item)
-        if expected < minimum or expected > maximum:
-            raise ValueError(f"cron value {expected} out of range {minimum}-{maximum}")
-        if expected == actual:
-            return True
-    return False
 
 
 def _planned_at(value: datetime) -> datetime:

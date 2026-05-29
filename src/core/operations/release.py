@@ -260,5 +260,9 @@ def _settings_from_profile_env(env: dict[str, str]) -> Settings:
             "retry_backoff_seconds": int(env["TASK_QUEUE__RETRY_BACKOFF_SECONDS"]),
             "idle_sleep_seconds": float(env["TASK_QUEUE__IDLE_SLEEP_SECONDS"]),
         },
+        scheduler={
+            "idle_sleep_seconds": float(env["SCHEDULER__IDLE_SLEEP_SECONDS"]),
+            "lock_ttl_seconds": int(env["SCHEDULER__LOCK_TTL_SECONDS"]),
+        },
         installed_apps=json.loads(env["INSTALLED_APPS"]),
     )

@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: settings、profile 校验、secret provider、HTTP client credential secret ref、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、profile security hardening 清单、配置 drift-check、运行时漂移告警输出、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
+- Done: settings、profile 校验、secret provider、HTTP client credential secret ref、脱敏诊断、启动期安全检查、local/private/cloud profile 模板输出、task queue/scheduler 运行参数、profile security hardening 清单、配置 drift-check、运行时漂移告警输出、profile 派生部署产物渲染和 release checkpoint drift gate 已落地。
 - Next: _none_
 
 ## 职责
@@ -48,7 +48,8 @@ SECURITY__TRUSTED_HOSTS='["api.example.com"]'
 SECURITY__CORS_ORIGINS='["https://console.example.com"]'
 STORAGE__PROVIDER=local
 STORAGE__LOCAL_ROOT=./data/files
-TASKS__PROVIDER=sync
+TASK_QUEUE__PROVIDER=sync
+SCHEDULER__IDLE_SLEEP_SECONDS=1.0
 ```
 
 ## 部署 profile
@@ -85,7 +86,8 @@ cloud
 - `monitoring` 给出该 profile 的 dashboard panels 和 alert rules 契约。
 - `validation_commands` 给出发布脚本可直接执行的检查命令，包括 `check-config`、`config drift-check`、`serve --run --dry-run`、`migrate run` 和 `smoke`。
 
-模板中的生产密钥通过 `SECURITY__JWT_SECRET_REF` 引用外部 secret，不输出 `SECURITY__JWT_SECRET` 明文。private/cloud 模板默认使用 PostgreSQL URL 占位符和标准 HTTP status mode。
+模板中的生产密钥通过 `SECURITY__JWT_SECRET_REF` 引用外部 secret，不输出 `SECURITY__JWT_SECRET` 明文。private/cloud 模板默认使用 PostgreSQL URL 占位符、database task queue provider 和标准 HTTP status mode。
+worker 通过 `TASK_QUEUE__PROVIDER`、`TASK_QUEUE__MAX_ATTEMPTS`、`TASK_QUEUE__RETRY_BACKOFF_SECONDS`、`TASK_QUEUE__IDLE_SLEEP_SECONDS` 参数化；scheduler 通过 `SCHEDULER__IDLE_SLEEP_SECONDS` 和 `SCHEDULER__LOCK_TTL_SECONDS` 参数化。
 private/cloud 模板的 hardening 清单默认要求生产 ingress 或反向代理启用 CSP、Secure/HttpOnly/SameSite cookie、HSTS 和安全响应头；cloud profile 的 HSTS evidence 额外包含 `preload`。
 `check-config` 会接受生产 profile 的外部 secret reference，但启动期 `create_app()` 仍必须通过 secret provider 解析到真实密钥后才能通过 `validate_startup_settings()`。
 

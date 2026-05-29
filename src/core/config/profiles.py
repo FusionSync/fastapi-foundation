@@ -132,6 +132,8 @@ def _local_template() -> ProfileTemplate:
             "TASK_QUEUE__MAX_ATTEMPTS": "3",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
+            "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
+            "SCHEDULER__LOCK_TTL_SECONDS": "60",
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -154,6 +156,8 @@ def _local_template() -> ProfileTemplate:
             "scheduler": ProcessTemplate(
                 command=(
                     "core scheduler --run --tenant-id ${TENANT_ID} "
+                    "--idle-sleep-seconds ${SCHEDULER__IDLE_SLEEP_SECONDS} "
+                    "--lock-ttl-seconds ${SCHEDULER__LOCK_TTL_SECONDS} "
                     "--instance-id ${INSTANCE_ID}"
                 ),
                 replicas=1,
@@ -201,6 +205,8 @@ def _private_template() -> ProfileTemplate:
             "TASK_QUEUE__MAX_ATTEMPTS": "3",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
+            "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
+            "SCHEDULER__LOCK_TTL_SECONDS": "60",
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -224,6 +230,8 @@ def _private_template() -> ProfileTemplate:
             "scheduler": ProcessTemplate(
                 command=(
                     "core scheduler --run --tenant-id ${TENANT_ID} "
+                    "--idle-sleep-seconds ${SCHEDULER__IDLE_SLEEP_SECONDS} "
+                    "--lock-ttl-seconds ${SCHEDULER__LOCK_TTL_SECONDS} "
                     "--instance-id ${INSTANCE_ID}"
                 ),
                 replicas=1,
@@ -273,6 +281,8 @@ def _cloud_template() -> ProfileTemplate:
             "TASK_QUEUE__MAX_ATTEMPTS": "3",
             "TASK_QUEUE__RETRY_BACKOFF_SECONDS": "30",
             "TASK_QUEUE__IDLE_SLEEP_SECONDS": "1.0",
+            "SCHEDULER__IDLE_SLEEP_SECONDS": "1.0",
+            "SCHEDULER__LOCK_TTL_SECONDS": "60",
             "OUTBOX_DISPATCHER__BATCH_SIZE": "20",
             "OUTBOX_DISPATCHER__IDLE_SLEEP_SECONDS": "1.0",
             "INSTALLED_APPS": "[]",
@@ -295,6 +305,8 @@ def _cloud_template() -> ProfileTemplate:
             "scheduler": ProcessTemplate(
                 command=(
                     "core scheduler --run --tenant-id ${TENANT_ID} "
+                    "--idle-sleep-seconds ${SCHEDULER__IDLE_SLEEP_SECONDS} "
+                    "--lock-ttl-seconds ${SCHEDULER__LOCK_TTL_SECONDS} "
                     "--instance-id ${INSTANCE_ID}"
                 ),
                 replicas=1,

@@ -48,6 +48,11 @@ class TaskQueueSettings(BaseModel):
     idle_sleep_seconds: float = 1.0
 
 
+class SchedulerSettings(BaseModel):
+    idle_sleep_seconds: float = 1.0
+    lock_ttl_seconds: int = 60
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
@@ -61,6 +66,7 @@ class Settings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     task_queue: TaskQueueSettings = Field(default_factory=TaskQueueSettings)
+    scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
     installed_apps: list[str] = Field(default_factory=list)
 
 

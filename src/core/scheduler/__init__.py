@@ -1,4 +1,4 @@
-from core.scheduler.models import ScheduleTriggerLog
+from core.scheduler.models import ScheduleState, ScheduleTriggerLog
 from core.scheduler.provider import (
     LockedScheduleProvider,
     ManualScheduleProvider,
@@ -9,6 +9,8 @@ from core.scheduler.provider import (
 )
 from core.scheduler.registry import RegisteredSchedule, ScheduleRegistry
 from core.scheduler.repository import (
+    ScheduleDuePlan,
+    ScheduleStateRepository,
     ScheduleTriggerHistoryOutcome,
     ScheduleTriggerHistoryResult,
     ScheduleTriggerRepository,
@@ -19,7 +21,10 @@ __all__ = [
     "ManualScheduleProvider",
     "RegisteredSchedule",
     "SchedulerRunResult",
+    "ScheduleDuePlan",
     "ScheduleRegistry",
+    "ScheduleState",
+    "ScheduleStateRepository",
     "ScheduleTriggerHistoryOutcome",
     "ScheduleTriggerHistoryResult",
     "ScheduleTriggerLog",
