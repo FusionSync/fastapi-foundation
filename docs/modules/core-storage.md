@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `partial`
-- Done: storage provider、local backend、key path 规则和 platform files permission/quota 接入点已落地。
+- Done: storage provider、local backend、S3/MinIO-compatible backend、key path 规则和 platform files permission/quota 接入点已落地。
 - Next:
-  - [ ] 接 MinIO/S3 provider。
   - [ ] 将 tenant lifecycle、permission、virus scan gate 串进文件访问链路。
 
 ## 职责
@@ -81,7 +80,9 @@ cloud:
 
 - `StorageProvider` 定义 `put_file`、`get_file`、`delete_file`、`exists`、`generate_download_url`。
 - `LocalStorageProvider` 用于 local/profile 和测试环境，写入本地目录。
+- `S3StorageProvider` 通过注入的 async S3-compatible client 工作，可用于 MinIO/S3；core 不直接强绑定对象存储 SDK。
 - local provider 会校验 object key，拒绝绝对路径和 `..` 路径穿越。
+- S3 provider 复用同样 object key 校验，并通过 client 生成私有对象的临时下载 URL。
 - `file_object_key()` 固定上传原始文件 key：`tenants/{tenant_id}/files/{file_id}/original.bin`。
 - `resource_object_key()` 固定资源关联文件 key：`tenants/{tenant_id}/resources/{resource_type}/{resource_id}/{file_id}.bin`。
 - platform files 上传链路已在写 storage 前接入 permission、upload security 和 quota gate。

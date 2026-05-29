@@ -3,9 +3,9 @@
 ## Progress
 
 - Status: `partial`
-- Done: file metadata、local storage provider、owner/authorization gate、upload quota gate、upload/download/delete 权限和基础 storage tests 已落地。
+- Done: file metadata、local/S3 storage provider、owner/authorization gate、upload quota gate、upload/download/delete 权限和基础 storage tests 已落地。
 - Next:
-  - [ ] 接 MinIO/S3、virus scan 和 retention。
+  - [ ] 接 virus scan 和 retention。
   - [ ] 将业务资源级文件权限替换 owner-only 最小门禁。
 
 ## 职责
