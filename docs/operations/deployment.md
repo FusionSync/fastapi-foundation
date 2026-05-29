@@ -84,7 +84,7 @@ Cloud Load Balancer / WAF / TLS
 
 - 默认启用标准 HTTP status，不启用 always-200 兼容模式。
 - 生产 JWT/local auth 只能用于 break-glass 或显式配置，不作为默认公网认证。
-- 建议启用 repository guard + PostgreSQL RLS 兜底。
+- cloud profile 必须启用 repository guard + PostgreSQL session variable 兜底；`check-config` 会验证 `DATABASE__TENANT_FALLBACK_MODE=session_variable` 并输出 RLS/advisory 策略报告。
 
 ## Health Checks
 

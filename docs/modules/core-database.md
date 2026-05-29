@@ -70,6 +70,7 @@ async with unit_of_work() as uow:
 - `mode="session_variable"` 在 PostgreSQL session 中执行 `set_config(setting_name, tenant_id, true)`，默认 setting name 为 `app.tenant_id`，供 RLS policy 或 trigger 读取。
 - 非 PostgreSQL dialect 不执行 session variable SQL，但仍记录 `session.info["tenant_id"]`，保证 local/SQLite 测试可验证同一契约。
 - 缺失 tenant_id 会返回 `VALIDATION_ERROR`，避免静默打开无租户兜底的写事务。
+- `verify_database_tenant_guard(settings, tenant_tables=[...])` 输出 cloud profile 的数据库级兜底验证报告：检查 PostgreSQL dialect、`session_variable` fallback、RLS policy plan 和事务级 advisory lock plan。`check-config` 会把该报告放入 `details.database_tenant_guard`，cloud profile 缺少兜底配置时返回失败。
 
 ## 基础模型约定
 

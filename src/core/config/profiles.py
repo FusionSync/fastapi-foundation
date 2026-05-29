@@ -278,6 +278,8 @@ def _cloud_template() -> ProfileTemplate:
             "DATABASE__URL": (
                 "postgresql+asyncpg://app:${DATABASE_PASSWORD}@db.example.com:5432/wps_bid"
             ),
+            "DATABASE__TENANT_FALLBACK_MODE": "session_variable",
+            "DATABASE__TENANT_FALLBACK_SETTING_NAME": "app.tenant_id",
             "API__ERROR_HTTP_STATUS_MODE": "standard",
             "SECURITY__JWT_SECRET_REF": "APP_JWT_SECRET",
             "SECURITY__TRUSTED_HOSTS": '["api.example.com"]',

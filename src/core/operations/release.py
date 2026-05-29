@@ -248,10 +248,17 @@ def _settings_from_profile_env(env: dict[str, str]) -> Settings:
         security["trusted_hosts"] = json.loads(env["SECURITY__TRUSTED_HOSTS"])
     if "SECURITY__CORS_ORIGINS" in env:
         security["cors_origins"] = json.loads(env["SECURITY__CORS_ORIGINS"])
+    database: dict[str, object] = {"url": env["DATABASE__URL"]}
+    if "DATABASE__TENANT_FALLBACK_MODE" in env:
+        database["tenant_fallback_mode"] = env["DATABASE__TENANT_FALLBACK_MODE"]
+    if "DATABASE__TENANT_FALLBACK_SETTING_NAME" in env:
+        database["tenant_fallback_setting_name"] = env[
+            "DATABASE__TENANT_FALLBACK_SETTING_NAME"
+        ]
     return Settings(
         app={"env": env["APP__ENV"]},
         api={"error_http_status_mode": env["API__ERROR_HTTP_STATUS_MODE"]},
-        database={"url": env["DATABASE__URL"]},
+        database=database,
         security=security,
         observability={"service_role": env["OBSERVABILITY__SERVICE_ROLE"]},
         task_queue={

@@ -116,6 +116,8 @@ def test_cloud_profile_template_uses_standard_http_and_external_secret_ref(capsy
     assert payload["ok"] is True
     assert payload["env"]["APP__ENV"] == "cloud"
     assert payload["env"]["API__ERROR_HTTP_STATUS_MODE"] == "standard"
+    assert payload["env"]["DATABASE__TENANT_FALLBACK_MODE"] == "session_variable"
+    assert payload["env"]["DATABASE__TENANT_FALLBACK_SETTING_NAME"] == "app.tenant_id"
     assert payload["env"]["SECURITY__JWT_SECRET_REF"] == "APP_JWT_SECRET"
     assert payload["env"]["SECURITY__TRUSTED_HOSTS"] == '["api.example.com"]'
     assert payload["env"]["SECURITY__CORS_ORIGINS"] == '["https://console.example.com"]'

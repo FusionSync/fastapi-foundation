@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: tenant-scoped repository/query、raw SQL guard、跨租户 reason gate、业务唯一约束检查、app model/repository conformance 和 service/router 静态查询 lint 已落地。
-- Next:
-  - [ ] 补数据库级 RLS/advisory 策略验证，作为 cloud profile 兜底。
+- Done: tenant-scoped repository/query、raw SQL guard、跨租户 reason gate、业务唯一约束检查、app model/repository conformance、service/router 静态查询 lint 和 cloud profile 数据库级 RLS/advisory 策略验证已落地。
+- Next: _none_
 
 ## 职责
 
@@ -123,11 +122,27 @@ core testing 必须提供租户隔离契约测试：
 
 ## 数据库级兜底
 
-第一版不强制 PostgreSQL RLS，以降低本地和私有化部署复杂度。但公网 SaaS profile 应预留 RLS 开关：
+第一版不强制 PostgreSQL RLS，以降低本地和私有化部署复杂度。但公网 SaaS profile 必须启用 PostgreSQL session variable 兜底，并由 `check-config` 输出可审计的 RLS/advisory 策略验证：
 
 ```text
-TENANCY__DATABASE_GUARD=repository
-TENANCY__DATABASE_GUARD=repository_plus_rls
+DATABASE__TENANT_FALLBACK_MODE=session_variable
+DATABASE__TENANT_FALLBACK_SETTING_NAME=app.tenant_id
+```
+
+`core.db.verify_database_tenant_guard()` 会验证 cloud profile 使用 PostgreSQL、启用 `session_variable` fallback，并生成每张租户表的 RLS policy plan：
+
+```sql
+ALTER TABLE bid_records ENABLE ROW LEVEL SECURITY
+ALTER TABLE bid_records FORCE ROW LEVEL SECURITY
+CREATE POLICY bid_records_tenant_isolation ON bid_records
+  USING (tenant_id = current_setting('app.tenant_id', true))
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
+```
+
+同一报告还输出事务级 advisory lock 策略：
+
+```sql
+SELECT pg_advisory_xact_lock(hashtext(current_setting('app.tenant_id', true)))
 ```
 
 即使启用 RLS，也不能移除 repository/query guard；RLS 是生产兜底，不是业务层权限模型。
