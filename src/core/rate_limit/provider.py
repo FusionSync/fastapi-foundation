@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from core.audit import AuditRecorder
 from core.cache import CacheProvider
@@ -158,3 +161,75 @@ class CacheRateLimiter:
                 "retry_after": decision.retry_after,
             },
         )
+
+
+class SlidingWindowRateLimiter(CacheRateLimiter):
+    def __init__(
+        self,
+        cache: CacheProvider,
+        *,
+        audit: AuditRecorder | None = None,
+        metrics: MetricsRegistry | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        super().__init__(cache, audit=audit, metrics=metrics)
+        self._clock = clock or (lambda: datetime.now(UTC))
+
+    async def check(
+        self,
+        rule: RateLimitRule,
+        identity: RateLimitIdentity,
+        *,
+        amount: int = 1,
+    ) -> RateLimitDecision:
+        if amount <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "Rate limit amount must be greater than zero",
+                status_code=400,
+            )
+        key = rule.key_for(identity)
+        now_ts = self._now().timestamp()
+        window = rule.window_seconds
+        current_bucket = int(now_ts // window)
+        elapsed = now_ts - (current_bucket * window)
+        previous_weight = max((window - elapsed) / window, 0)
+        current_key = f"{key}:sliding:{current_bucket}"
+        previous_key = f"{key}:sliding:{current_bucket - 1}"
+        try:
+            previous_count = self._coerce_count(await self.cache.get(previous_key))
+            current_count = await self.cache.incr(
+                current_key,
+                amount=amount,
+                ttl_seconds=window * 2,
+            )
+        except Exception:
+            return await self._cache_failure_decision(rule, identity, key)
+
+        weighted_previous = math.ceil(previous_count * previous_weight)
+        effective_current = current_count + weighted_previous
+        allowed = effective_current <= rule.limit
+        decision = RateLimitDecision(
+            allowed=allowed,
+            rule_name=rule.name,
+            key=key,
+            limit=rule.limit,
+            current=effective_current,
+            remaining=max(rule.limit - effective_current, 0),
+            retry_after=0 if allowed else max(1, math.ceil(window - elapsed)),
+            reason="allowed" if allowed else "limit_exceeded",
+        )
+        if not allowed:
+            await self._record_hit(decision, identity)
+        return decision
+
+    def _now(self) -> datetime:
+        value = self._clock()
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def _coerce_count(self, value: object | None) -> int:
+        if value is None:
+            return 0
+        return int(value)

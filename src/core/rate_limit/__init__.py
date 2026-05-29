@@ -1,5 +1,9 @@
 from core.rate_limit.middleware import RateLimitMiddleware
-from core.rate_limit.provider import CacheRateLimiter, RateLimitDecision
+from core.rate_limit.provider import (
+    CacheRateLimiter,
+    RateLimitDecision,
+    SlidingWindowRateLimiter,
+)
 from core.rate_limit.rules import RateLimitIdentity, RateLimitRegistry, RateLimitRule
 
 __all__ = [
@@ -9,4 +13,5 @@ __all__ = [
     "RateLimitMiddleware",
     "RateLimitRegistry",
     "RateLimitRule",
+    "SlidingWindowRateLimiter",
 ]

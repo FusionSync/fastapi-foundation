@@ -14,6 +14,7 @@ from core.rate_limit import (
     RateLimitMiddleware,
     RateLimitRegistry,
     RateLimitRule,
+    SlidingWindowRateLimiter,
 )
 from core.serialization import ok
 
@@ -119,6 +120,32 @@ async def test_cache_rate_limiter_resets_after_window_expires() -> None:
     reset = await limiter.check(rule, identity)
     assert reset.allowed is True
     assert reset.current == 1
+
+
+@pytest.mark.asyncio
+async def test_sliding_window_rate_limiter_counts_previous_window_weight() -> None:
+    clock = Clock()
+    cache = MemoryCacheProvider(clock=lambda: clock.now)
+    limiter = SlidingWindowRateLimiter(cache, clock=lambda: clock.now)
+    rule = RateLimitRule(
+        name="auth.login",
+        limit=2,
+        window_seconds=10,
+        dimensions=("ip_address", "route"),
+    )
+    identity = RateLimitIdentity(ip_address="127.0.0.1", route="POST /auth/login")
+
+    assert (await limiter.check(rule, identity)).allowed is True
+    assert (await limiter.check(rule, identity)).allowed is True
+    clock.advance(11)
+
+    decision = await limiter.check(rule, identity)
+
+    assert decision.allowed is False
+    assert decision.current == 3
+    assert decision.remaining == 0
+    assert decision.retry_after == 9
+    assert decision.reason == "limit_exceeded"
 
 
 @pytest.mark.asyncio
