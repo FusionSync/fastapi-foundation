@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: app exception、错误码 catalog、owner/deprecation/details schema metadata gate、业务 app 错误码 conformance 注册、统一 handler 和 response envelope 已接入。
+- Done: app exception、错误码 catalog、owner/deprecation/details schema metadata gate、业务 app 错误码 conformance 注册、tenant deletion step failure code、统一 handler 和 response envelope 已接入。
 - Next: _none_
 
 ## 职责

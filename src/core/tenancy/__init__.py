@@ -20,14 +20,23 @@ from core.tenancy.lifecycle import (
     is_tenant_operation_allowed,
     validate_tenant_transition,
 )
-from core.tenancy.models import Tenant, TenantInvitation, TenantMember
+from core.tenancy.models import (
+    Tenant,
+    TenantInvitation,
+    TenantLifecycleStepRecord,
+    TenantMember,
+)
 from core.tenancy.resolver import (
     CurrentUser,
     TenantMembership,
     TenantRecord,
     resolve_current_tenant,
 )
-from core.tenancy.services import TenantLifecycleService
+from core.tenancy.services import (
+    TenantDeletionOrchestrator,
+    TenantDeletionResult,
+    TenantLifecycleService,
+)
 
 __all__ = [
     "CurrentUser",
@@ -44,7 +53,10 @@ __all__ = [
     "TenantLifecyclePolicy",
     "TenantLifecycleService",
     "Tenant",
+    "TenantDeletionOrchestrator",
+    "TenantDeletionResult",
     "TenantInvitation",
+    "TenantLifecycleStepRecord",
     "TenantMember",
     "TenantMembership",
     "TenantOperation",

@@ -12,7 +12,7 @@ from core.tasks.registry import TaskEnvelope, TaskRegistry
 from core.tasks.repository import TaskRunRepository
 from core.tenancy import TenantStatus, assert_tenant_operation_allowed
 
-TaskStatus = Literal["pending", "running", "succeeded", "failed", "dead_letter"]
+TaskStatus = Literal["pending", "running", "succeeded", "failed", "dead_letter", "cancelled"]
 TaskHandler = Callable[[TaskEnvelope], Awaitable[dict[str, Any] | None] | dict[str, Any] | None]
 
 
@@ -259,7 +259,7 @@ class DatabaseQueueTaskProvider:
         registered = self.task_registry.get(task_run.task_type)
         if task_run.status == "pending":
             await self.task_repository.start_pending(task_run, now=now)
-        elif task_run.status in {"succeeded", "dead_letter"}:
+        elif task_run.status in {"succeeded", "dead_letter", "cancelled"}:
             return _task_result_from_run(
                 task_run,
                 queue=registered.spec.queue,
@@ -346,6 +346,6 @@ def _task_result_from_run(
 
 
 def _task_status(status: str) -> TaskStatus:
-    if status in {"pending", "running", "succeeded", "failed", "dead_letter"}:
+    if status in {"pending", "running", "succeeded", "failed", "dead_letter", "cancelled"}:
         return status  # type: ignore[return-value]
     raise ValueError(f"Unknown task run status: {status!r}")

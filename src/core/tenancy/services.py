@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, Literal, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import AuditRecorder
 from core.events import EventPublisher
+from core.exceptions import AppError
 from core.permissions import (
     PLATFORM_TENANT_ID,
     AuthorizationDecision,
@@ -21,7 +27,49 @@ from core.tenancy.events import (
     publish_tenant_lifecycle_event,
 )
 from core.tenancy.lifecycle import SessionRevocationHook, TenantStatus, validate_tenant_transition
-from core.tenancy.models import Tenant, TenantMember
+from core.tenancy.models import Tenant, TenantLifecycleStepRecord, TenantMember
+
+TenantDeletionTarget = Literal["archived", "deleted"]
+TenantDeletionStep = Literal[
+    "mark_deleting",
+    "cancel_tasks",
+    "cleanup_business_data",
+    "cleanup_files",
+    "finish",
+]
+TenantCleanupHook = Callable[
+    [str, str],
+    Awaitable[Mapping[str, Any] | int | None] | Mapping[str, Any] | int | None,
+]
+
+
+class TenantTaskCancellationRepository(Protocol):
+    async def cancel_for_tenant(
+        self,
+        *,
+        tenant_id: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> Sequence[object]:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class TenantDeletionResult:
+    tenant_id: str
+    status: TenantStatus
+    steps: tuple[TenantLifecycleStepRecord, ...]
+
+
+_DELETE_WORKFLOW = "delete"
+_DELETE_STEPS: tuple[TenantDeletionStep, ...] = (
+    "mark_deleting",
+    "cancel_tasks",
+    "cleanup_business_data",
+    "cleanup_files",
+    "finish",
+)
+_DELETE_STEP_ORDER = {step: index for index, step in enumerate(_DELETE_STEPS, start=1)}
 
 
 class TenantLifecycleService:
@@ -248,8 +296,324 @@ class TenantLifecycleService:
             await result
 
 
+class TenantDeletionOrchestrator:
+    def __init__(
+        self,
+        session: AsyncSession,
+        events: EventPublisher,
+        *,
+        task_repository: TenantTaskCancellationRepository | None = None,
+        session_revocation_hook: SessionRevocationHook | None = None,
+        business_cleanup_hook: TenantCleanupHook | None = None,
+        file_cleanup_hook: TenantCleanupHook | None = None,
+        audit: AuditRecorder | None = None,
+    ) -> None:
+        self.session = session
+        self.events = events
+        self.task_repository = task_repository
+        self.session_revocation_hook = session_revocation_hook
+        self.business_cleanup_hook = business_cleanup_hook
+        self.file_cleanup_hook = file_cleanup_hook
+        self.audit = audit
+
+    async def run(
+        self,
+        tenant: Tenant,
+        *,
+        target: TenantDeletionTarget,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+        authorization_decision: AuthorizationDecision | None = None,
+    ) -> TenantDeletionResult:
+        if target not in {"archived", "deleted"}:
+            raise ValueError("tenant deletion target must be archived or deleted")
+        _assert_tenant_mutation_authorized(
+            authorization_decision=authorization_decision,
+            actor_id=actor_id,
+            mutation="delete",
+        )
+        completed: list[TenantLifecycleStepRecord] = []
+        for step in _DELETE_STEPS:
+            record = await self._step_record(tenant.id, step)
+            if record.status == "succeeded":
+                completed.append(record)
+                continue
+            try:
+                result_payload = await self._execute_step(
+                    step,
+                    tenant,
+                    target=target,
+                    actor_id=actor_id,
+                    request_id=request_id,
+                    reason=reason,
+                    authorization_decision=authorization_decision,
+                )
+            except Exception as exc:
+                await self._mark_step_failed(
+                    record,
+                    error=exc,
+                    actor_id=actor_id,
+                    request_id=request_id,
+                    reason=reason,
+                )
+                raise AppError(
+                    "TENANT_DELETE_STEP_FAILED",
+                    "Tenant deletion step failed",
+                    status_code=409,
+                    details={
+                        "tenant_id": tenant.id,
+                        "step": step,
+                        "attempt_count": record.attempt_count,
+                        "forward_fix_required": True,
+                    },
+                ) from exc
+            await self._mark_step_succeeded(
+                record,
+                result_payload=result_payload,
+                actor_id=actor_id,
+                request_id=request_id,
+                reason=reason,
+            )
+            completed.append(record)
+        return TenantDeletionResult(
+            tenant_id=tenant.id,
+            status=_status(tenant),
+            steps=tuple(completed),
+        )
+
+    async def _execute_step(
+        self,
+        step: TenantDeletionStep,
+        tenant: Tenant,
+        *,
+        target: TenantDeletionTarget,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+        authorization_decision: AuthorizationDecision | None,
+    ) -> dict[str, Any]:
+        if step == "mark_deleting":
+            return await self._mark_deleting(
+                tenant,
+                actor_id=actor_id,
+                request_id=request_id,
+                reason=reason,
+                authorization_decision=authorization_decision,
+            )
+        if step == "cancel_tasks":
+            return await self._cancel_tasks(tenant.id, reason=reason)
+        if step == "cleanup_business_data":
+            return await self._invoke_cleanup_hook(self.business_cleanup_hook, tenant.id, reason)
+        if step == "cleanup_files":
+            return await self._invoke_cleanup_hook(self.file_cleanup_hook, tenant.id, reason)
+        return await self._finish(
+            tenant,
+            target=target,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            authorization_decision=authorization_decision,
+        )
+
+    async def _mark_deleting(
+        self,
+        tenant: Tenant,
+        *,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+        authorization_decision: AuthorizationDecision | None,
+    ) -> dict[str, Any]:
+        if tenant.status == "deleting":
+            return {"status": "already_deleting"}
+        previous_status = tenant.status
+        await TenantLifecycleService(
+            self.session,
+            self.events,
+            session_revocation_hook=self.session_revocation_hook,
+            audit=self.audit,
+        ).begin_delete_tenant(
+            tenant,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            authorization_decision=authorization_decision,
+        )
+        return {"from_status": previous_status, "to_status": "deleting"}
+
+    async def _cancel_tasks(self, tenant_id: str, *, reason: str) -> dict[str, int]:
+        if self.task_repository is None:
+            return {"cancelled_task_count": 0}
+        cancelled = await self.task_repository.cancel_for_tenant(
+            tenant_id=tenant_id,
+            reason=reason,
+        )
+        return {"cancelled_task_count": len(cancelled)}
+
+    async def _invoke_cleanup_hook(
+        self,
+        hook: TenantCleanupHook | None,
+        tenant_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        if hook is None:
+            return {}
+        result = hook(tenant_id, reason)
+        if inspect.isawaitable(result):
+            result = await result
+        return _cleanup_result_payload(result)
+
+    async def _finish(
+        self,
+        tenant: Tenant,
+        *,
+        target: TenantDeletionTarget,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+        authorization_decision: AuthorizationDecision | None,
+    ) -> dict[str, str]:
+        if tenant.status == target:
+            return {"status": f"already_{target}"}
+        previous_status = tenant.status
+        await TenantLifecycleService(
+            self.session,
+            self.events,
+            audit=self.audit,
+        ).finish_delete_tenant(
+            tenant,
+            target=target,
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+            authorization_decision=authorization_decision,
+        )
+        return {"from_status": previous_status, "to_status": target}
+
+    async def _step_record(
+        self,
+        tenant_id: str,
+        step: TenantDeletionStep,
+    ) -> TenantLifecycleStepRecord:
+        result = await self.session.execute(
+            select(TenantLifecycleStepRecord)
+            .where(TenantLifecycleStepRecord.tenant_id == tenant_id)
+            .where(TenantLifecycleStepRecord.workflow == _DELETE_WORKFLOW)
+            .where(TenantLifecycleStepRecord.step == step)
+        )
+        record = result.scalars().first()
+        if record is not None:
+            return record
+        record = TenantLifecycleStepRecord(
+            id=_step_record_id(tenant_id, step),
+            tenant_id=tenant_id,
+            workflow=_DELETE_WORKFLOW,
+            step=step,
+            status="pending",
+            attempt_count=0,
+            forward_fix_required=False,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return record
+
+    async def _mark_step_succeeded(
+        self,
+        record: TenantLifecycleStepRecord,
+        *,
+        result_payload: dict[str, Any],
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> None:
+        resolved_now = datetime.now(UTC)
+        record.status = "succeeded"
+        record.attempt_count += 1
+        record.forward_fix_required = False
+        record.result_payload = result_payload
+        record.last_error = None
+        record.started_at = resolved_now
+        record.finished_at = resolved_now
+        await self.session.flush()
+        await self._audit_step(
+            record,
+            result="success",
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+        )
+
+    async def _mark_step_failed(
+        self,
+        record: TenantLifecycleStepRecord,
+        *,
+        error: Exception,
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> None:
+        resolved_now = datetime.now(UTC)
+        record.status = "failed"
+        record.attempt_count += 1
+        record.forward_fix_required = True
+        record.result_payload = None
+        record.last_error = f"{type(error).__name__}: {error}"
+        record.started_at = resolved_now
+        record.finished_at = resolved_now
+        await self.session.flush()
+        await self._audit_step(
+            record,
+            result="failure",
+            actor_id=actor_id,
+            request_id=request_id,
+            reason=reason,
+        )
+
+    async def _audit_step(
+        self,
+        record: TenantLifecycleStepRecord,
+        *,
+        result: Literal["success", "failure"],
+        actor_id: str,
+        request_id: str,
+        reason: str,
+    ) -> None:
+        if self.audit is None:
+            return
+        await self.audit.record(
+            action=f"tenant.deletion_step.{record.status}",
+            resource_type="tenant_lifecycle_step",
+            resource_id=record.id,
+            result=result,
+            tenant_id=record.tenant_id,
+            actor_id=actor_id,
+            reason=reason,
+            request_id=request_id,
+            payload={
+                "workflow": record.workflow,
+                "step": record.step,
+                "attempt_count": record.attempt_count,
+                "forward_fix_required": record.forward_fix_required,
+                "last_error": record.last_error,
+            },
+        )
+
+
 def _status(tenant: Tenant) -> TenantStatus:
     return tenant.status  # type: ignore[return-value]
+
+
+def _step_record_id(tenant_id: str, step: TenantDeletionStep) -> str:
+    return f"{tenant_id}:delete:{_DELETE_STEP_ORDER[step]:02d}_{step}"
+
+
+def _cleanup_result_payload(result: Mapping[str, Any] | int | None) -> dict[str, Any]:
+    if result is None:
+        return {}
+    if isinstance(result, int):
+        return {"count": result}
+    return dict(result)
 
 
 def _assert_tenant_mutation_authorized(

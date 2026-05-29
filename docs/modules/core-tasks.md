@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、SQLAlchemy database queue provider、TaskRun 持久状态、repository、stale recovery、ack/retry/backoff/dead-letter、task CLI、scheduler 提交链路、worker 本地/数据库队列执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint、quota submit wrapper、队列部署 profile 参数和 worker heartbeat 已落地。
+- Done: task registry、sync provider、SQLAlchemy database queue provider、TaskRun 持久状态、repository、tenant 删除取消未完成任务、stale recovery、ack/retry/backoff/dead-letter、task CLI、scheduler 提交链路、worker 本地/数据库队列执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint、quota submit wrapper、队列部署 profile 参数和 worker heartbeat 已落地。
 - Next: _none_
 
 ## 职责
@@ -86,6 +86,7 @@ finished_at
 - sync provider 任务失败先进入 `failed`，重试达到 `max_attempts` 后进入 `dead_letter`，并提供 CLI 重试。
 - database queue provider 任务失败会 ack 当前尝试并按 `retry_backoff_seconds` 写回 `pending + next_retry_at`，达到 `max_attempts` 后进入 `dead_letter`。
 - worker 崩溃留下的长期 `running` 任务必须有恢复入口；恢复时未达重试上限的任务进入 `failed`，已达上限的任务进入 `dead_letter`。
+- tenant 进入删除/归档编排时，未完成任务必须可被标记为 `cancelled`，不再被 worker 领取或人工 retry。
 - outbox dispatcher 和 task worker 是不同进程角色；可靠任务提交优先通过 outbox 触发。
 
 ## 当前实现
@@ -110,6 +111,7 @@ finished_at
 - `SyncTaskProvider.run_task_run()` 可执行已持久化的 `pending/running/failed/dead_letter` 任务记录，复用 `TaskEnvelope`、注册 handler、tenant lifecycle gate 和结果落库逻辑。
 - `core tasks failed list` 输出 `failed/dead_letter` 任务；`core tasks failed retry --task-id <id> --yes` 显式重试注册过的任务处理器。
 - `TaskRunRepository.recover_stale_running()` 可把超过阈值的 `running` 任务恢复为 `failed/dead_letter`，避免 worker 崩溃后幂等键永久被占用。
+- `TaskRunRepository.cancel_for_tenant()` 可把 tenant 下 `pending/running/failed` 任务标记为 `cancelled`，供租户删除/归档编排停止未完成后台任务。
 - `core tasks running recover --older-than-seconds <n> --yes` 执行恢复，输出被恢复的任务列表。
 - scheduler 通过 `TaskEnvelope` 提交任务，不绕过配置选中的 Tasks provider；local 默认 `sync`，private/cloud profile 默认 `database`，因此计划触发、API 提交和 outbox 触发共享同一套租户 gate 和执行契约。
 - 需要配额控制的任务提交链路可用 `QuotaTaskSubmitter` 包装 `SyncTaskProvider` 或 `DatabaseQueueTaskProvider`；包装器在调用 provider 前 reserve，quota 不足时不提交任务，provider 抛错时释放 reservation。

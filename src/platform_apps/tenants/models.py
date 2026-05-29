@@ -1,3 +1,3 @@
-from core.tenancy import Tenant, TenantInvitation, TenantMember
+from core.tenancy import Tenant, TenantInvitation, TenantLifecycleStepRecord, TenantMember
 
-__all__ = ["Tenant", "TenantInvitation", "TenantMember"]
+__all__ = ["Tenant", "TenantInvitation", "TenantLifecycleStepRecord", "TenantMember"]

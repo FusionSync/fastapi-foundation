@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: tenant model、member model、invitation model、resolver、lifecycle service、membership 校验、租户上下文、outbox-backed lifecycle/invitation/member events、membership/cache invalidation 与权限投影联动、route/task/file download/background cleanup lifecycle gate 已落地。
+- Done: tenant model、member model、invitation model、resolver、lifecycle service、deletion orchestration step record、membership 校验、租户上下文、outbox-backed lifecycle/invitation/member events、membership/cache invalidation 与权限投影联动、route/task/file download/background cleanup lifecycle gate 已落地。
 - Next: _none_
 
 ## 职责
@@ -96,3 +96,4 @@ tenant = get_current_tenant()
 - 后台管理跨租户接口必须走 platform admin 权限。
 - 审计日志必须记录 tenant_id。
 - 租户生命周期状态必须在 route dependency、repository、task、file download 和 background cleanup gate 中统一执行。
+- 删除/归档必须通过 `TenantLifecycleStepRecord` 记录每个编排步骤的尝试次数、结果和 forward-fix 状态，避免失败后靠人工猜测恢复点。

@@ -20,6 +20,8 @@ from core.permissions.models import RoleTemplate
 from core.tenancy import (
     TENANT_MEMBER_ACTIVATED_EVENT,
     Tenant,
+    TenantDeletionOrchestrator,
+    TenantDeletionResult,
     TenantInvitation,
     TenantLifecycleService,
     TenantMember,
@@ -671,6 +673,8 @@ __all__ = [
     "TENANT_INVITATION_ACCEPTED_EVENT",
     "TENANT_INVITATION_ISSUED_EVENT",
     "TENANT_INVITATION_REVOKED_EVENT",
+    "TenantDeletionOrchestrator",
+    "TenantDeletionResult",
     "TenantInvitationIssue",
     "TenantInvitationService",
     "TenantLifecycleService",

@@ -53,6 +53,18 @@ _ERROR_CODES: dict[str, ErrorCodeSpec] = {
         403,
         "当前租户状态不允许该操作",
     ),
+    "TENANT_DELETE_STEP_FAILED": _core_error_code(
+        "TENANT_DELETE_STEP_FAILED",
+        409,
+        "租户删除步骤失败",
+        owner_module="core.tenancy",
+        details_schema={
+            "tenant_id": "str",
+            "step": "str",
+            "attempt_count": "int",
+            "forward_fix_required": "bool",
+        },
+    ),
     "UPLOAD_REJECTED": _core_error_code("UPLOAD_REJECTED", 400, "文件上传被拒绝"),
     "HOST_NOT_ALLOWED": _core_error_code("HOST_NOT_ALLOWED", 400, "请求 Host 不被允许"),
     "REQUEST_TOO_LARGE": _core_error_code("REQUEST_TOO_LARGE", 413, "请求体过大"),

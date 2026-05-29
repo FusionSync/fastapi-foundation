@@ -239,6 +239,30 @@ class TaskRunRepository:
         await self.session.flush()
         return task_runs
 
+    async def cancel_for_tenant(
+        self,
+        *,
+        tenant_id: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> list[TaskRun]:
+        resolved_now = now or datetime.now(UTC)
+        result = await self.session.execute(
+            select(TaskRun)
+            .where(TaskRun.tenant_id == tenant_id)
+            .where(TaskRun.status.in_(["pending", "running", "failed"]))
+            .order_by(TaskRun.created_at.asc(), TaskRun.id.asc())
+        )
+        task_runs = list(result.scalars().all())
+        for task_run in task_runs:
+            task_run.status = "cancelled"
+            task_run.progress = 0
+            task_run.error_message = reason
+            task_run.next_retry_at = None
+            task_run.finished_at = resolved_now
+        await self.session.flush()
+        return task_runs
+
     async def start_retry(
         self,
         task_run: TaskRun,
