@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: `check-app`、`list-apps`、config template/drift-check/artifacts、release checkpoint、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
+- Done: `check-app`、`list-apps`、config template/drift-check/artifacts、release checkpoint、permissions、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run、scheduler run-once/run、worker run-once/run、tasks、idempotency expire/diagnose、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
 - Next:
   - [ ] 将 checkpoint suite 扩展到真实队列/Redis/外部依赖 profile 的探活。
 
@@ -50,6 +50,8 @@ outbox dead-letter list
 outbox dead-letter replay
 tasks failed list
 tasks failed retry
+idempotency expire
+idempotency diagnose
 migrate run
 ```
 
@@ -67,6 +69,7 @@ migrate run
 `worker --run-once` 通过 `--installed-app` 加载 task handler，按 `--queue` 领取一个 pending `TaskRun` 并执行，输出 claimed 和 task_result；它是 local/CI 有限轮验证入口，不是后台常驻 worker loop。
 `worker --run` 使用同一执行契约循环领取 pending `TaskRun`；`--max-iterations` 用于 CI/运维有限轮验证，不传则持续运行，空队列时按 `--idle-sleep-seconds` 休眠；传 `--instance-id` 时写入进程 heartbeat。
 `tasks failed retry` 必须传 `--yes`，并通过 `--installed-app` 或 settings 加载 AppModule 后执行已注册任务处理器。
+`idempotency expire` 必须传 `--yes`，把超过 `expires_at` 的幂等记录标记为 `expired`；`idempotency diagnose` 按 tenant/user/route/key/request_hash 输出 replay、冲突、处理中、失败重试和过期可复用诊断。
 `smoke --profile <profile> --json` 必须输出 config 检查和所有运行角色的 `role_health` 明细，便于 CI/CD 在发布后判断 server、worker、scheduler、outbox-dispatcher、migrate 是否满足当前 profile 的运行门禁。
 
 失败命令在 `--json` 模式下必须输出稳定 envelope，便于发布脚本只解析 stdout：

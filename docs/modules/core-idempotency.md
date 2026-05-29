@@ -3,10 +3,9 @@
 ## Progress
 
 - Status: `connected`
-- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim、状态流转 store 和 outbox handler 执行幂等复用已落地。
+- Done: 持久 `IdempotencyRecord`、key builder、原子 insert-and-claim、状态流转 store、response replay/cache 语义、过期清理命令、冲突诊断命令和 outbox handler 执行幂等复用已落地。
 - Next:
-  - [ ] 补 response replay/cache 语义。
-  - [ ] 增加过期清理策略和冲突诊断命令。
+  - [ ] 将高风险写 route 的可复用 idempotency dependency 接到 accounts/files/tasks mutation。
 
 ## 职责
 
@@ -98,8 +97,11 @@ processing
 - 相同 key、相同请求仍在处理中时返回 `IDEMPOTENCY_IN_PROGRESS`。
 - 相同 key、不同请求指纹返回 `IDEMPOTENCY_KEY_CONFLICT`。
 - 成功请求通过 `mark_succeeded()` 保存 `response_code` 和 `response_body`，后续重复请求返回原响应。
+- `diagnose()` 可按 tenant/user/route/key/request_hash 判断记录是 missing、replayable、request_hash_conflict、in_progress、failed 需显式重试，还是 expired 后可复用。
 - 可通过 `outbox_event_id` 或 `task_id` 绑定异步副作用，避免客户端重试重复提交。
 - outbox dispatcher 复用 `IdempotencyStore` 保护 handler 执行，范围为 `tenant_id + actor_id + outbox route + event_id`，其中 route 包含 `event_type`、`event_version` 和 `handler_key`。
 - `locked_until` 过期后允许重新领取；`expires_at` 过期后允许复用同一 key。
+- `core idempotency expire --yes --json` 会把过期记录标记为 `expired` 并清理 `locked_until`。
+- `core idempotency diagnose --tenant-id ... --user-id ... --route ... --idempotency-key ... --request-hash ... --json` 输出稳定诊断 JSON；`replayable` 结果会包含可直接返回的 `response_code`、`response_body`、`task_id` 和 `outbox_event_id`。
 
 第一版没有直接做 HTTP middleware。推荐先由高风险写接口在 service/route 入口显式调用 store，等账户、文件、任务等大功能全部连通后，再抽象成可复用 dependency。

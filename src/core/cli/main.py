@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from core.cli.apps import register_app_commands
 from core.cli.common import CLI_RUNTIME_ERROR, CLI_USAGE_ERROR, error_payload, print_payload
 from core.cli.config import register_config_commands
+from core.cli.idempotency import register_idempotency_commands
 from core.cli.migrations import register_migration_commands
 from core.cli.operations import register_operation_commands
 from core.cli.outbox import register_outbox_commands
@@ -60,6 +61,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     register_app_commands(subparsers)
     register_config_commands(subparsers)
+    register_idempotency_commands(subparsers)
     register_migration_commands(subparsers)
     register_operation_commands(subparsers)
     register_outbox_commands(subparsers)

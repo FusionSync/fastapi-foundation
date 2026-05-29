@@ -12,12 +12,29 @@ from core.exceptions import AppError
 from core.idempotency.models import IdempotencyRecord
 
 IdempotencyOutcome = Literal["started", "replayed"]
+IdempotencyDiagnosisStatus = Literal[
+    "missing",
+    "expired_reusable",
+    "request_hash_conflict",
+    "replayable",
+    "in_progress",
+    "failed_requires_retry_opt_in",
+    "retryable_failed",
+]
 
 
 @dataclass(frozen=True, slots=True)
 class IdempotencyClaim:
     outcome: IdempotencyOutcome
     record: IdempotencyRecord
+
+
+@dataclass(frozen=True, slots=True)
+class IdempotencyDiagnosis:
+    status: IdempotencyDiagnosisStatus
+    record: IdempotencyRecord | None
+    requested_request_hash: str | None = None
+    retry_after_seconds: int | None = None
 
 
 class IdempotencyStore:
@@ -117,6 +134,71 @@ class IdempotencyStore:
             record.locked_until = None
         await self.session.flush()
         return len(records)
+
+    async def diagnose(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        route: str,
+        idempotency_key: str,
+        request_hash: str | None = None,
+        now: datetime | None = None,
+        retry_failed: bool = False,
+    ) -> IdempotencyDiagnosis:
+        resolved_now = _coerce_utc(now or datetime.now(UTC))
+        self._validate_lookup_scope(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            route=route,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+        record = await self._get_record(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            route=route,
+            idempotency_key=idempotency_key,
+        )
+        if record is None:
+            return IdempotencyDiagnosis(status="missing", record=None)
+
+        expires_at = _coerce_utc(record.expires_at)
+        if expires_at <= resolved_now or record.status == "expired":
+            return IdempotencyDiagnosis(
+                status="expired_reusable",
+                record=record,
+                requested_request_hash=request_hash,
+            )
+
+        if request_hash is not None and record.request_hash != request_hash:
+            return IdempotencyDiagnosis(
+                status="request_hash_conflict",
+                record=record,
+                requested_request_hash=request_hash,
+            )
+
+        if record.status == "succeeded":
+            return IdempotencyDiagnosis(
+                status="replayable",
+                record=record,
+                requested_request_hash=request_hash,
+            )
+
+        if record.status == "processing":
+            locked_until = _coerce_utc(record.locked_until)
+            return IdempotencyDiagnosis(
+                status="in_progress",
+                record=record,
+                requested_request_hash=request_hash,
+                retry_after_seconds=_retry_after_seconds(locked_until, resolved_now),
+            )
+
+        return IdempotencyDiagnosis(
+            status="retryable_failed" if retry_failed else "failed_requires_retry_opt_in",
+            record=record,
+            requested_request_hash=request_hash,
+        )
 
     async def _insert_processing_record(
         self,
@@ -246,6 +328,31 @@ class IdempotencyStore:
             "idempotency_key": idempotency_key,
             "request_hash": request_hash,
         }
+        empty = [name for name, value in values.items() if not value.strip()]
+        if empty:
+            raise AppError(
+                "VALIDATION_ERROR",
+                f"Idempotency fields must be non-empty: {empty}",
+                status_code=400,
+            )
+
+    def _validate_lookup_scope(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        route: str,
+        idempotency_key: str,
+        request_hash: str | None,
+    ) -> None:
+        values = {
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "route": route,
+            "idempotency_key": idempotency_key,
+        }
+        if request_hash is not None:
+            values["request_hash"] = request_hash
         empty = [name for name, value in values.items() if not value.strip()]
         if empty:
             raise AppError(
