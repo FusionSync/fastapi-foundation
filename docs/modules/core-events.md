@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: event handler spec、event schema spec、schema/version 兼容校验、handler 错误分类、`EventRegistry`、`EventPublisher` 协议、outbox-backed publisher、outbox `dispatch-once` CLI、outbox-dispatcher run loop 和 handler 幂等分发已能从 app registry 汇总 handler 并投递 outbox event。
-- Next:
-  - [ ] 补充跨模块事件契约示例和 handler 外部 side-effect 指南。
+- Done: event handler spec、event schema spec、schema/version 兼容校验、handler 错误分类、`EventRegistry`、`EventPublisher` 协议、outbox-backed publisher、outbox `dispatch-once` CLI、outbox-dispatcher run loop、handler 幂等分发、handler 外部 side-effect 幂等辅助 API 和跨模块事件契约示例已能从 app registry 汇总 handler 并投递 outbox event。
+- Next: _none_
 
 ## 职责
 
@@ -67,7 +66,22 @@ src/core/events/
 - `OutboxEventPublisher` 通过 `OutboxRepository.add()` 写入 outbox，并使用同一个 registry 校验 event_type/event_version 是否已注册。
 - `core outbox dispatch-once` 和 `core outbox-dispatcher --run` 会按 `--installed-app` 或 settings 加载 `EventRegistry`，领取 outbox event 并调用已注册 handler。
 - outbox dispatcher 会向 `EventRegistry.dispatch()` 传入 `IdempotencyStore`，以 `event_id + handler_key` 跳过已成功 handler，并允许失败 handler 后续重试。
+- outbox handler 内部可用 `run_event_side_effect(effect_key, effect, request_payload=...)` 包裹外部 HTTP、消息、邮件或第三方 API 调用；该 helper 使用当前 dispatcher 的 `IdempotencyStore`，以 `event_id + handler_key + effect_key` 记录已完成 side effect。
 - outbox handler 执行期间会从 `EventEnvelope` 注入冻结背景上下文，包含 payload 中的 `request_id/actor_id`、tenant_id 和 `outbox:{event_type}:v{event_version}` route，执行后 reset。
 - `core.cache.register_cache_invalidation_handlers()` 可把权限事实、租户生命周期和租户成员关系缓存失效 handler 注册进同一 `EventRegistry`，由 outbox dispatcher 可靠触发。
 
 需要可靠投递的事件仍然通过 outbox 写入和 dispatcher 投递；`EventRegistry` 只负责运行时 handler 解析和分发，不承担消息队列职责。
+
+## Cross-module Contract Example
+
+跨模块事件必须把生产者 schema 和消费者 handler 都写入 `AppModule`，示例见：
+
+- `docs/contracts/events/cross-module-side-effect.md`
+
+关键约束：
+
+- producer app 声明 `EventSchemaSpec`，明确 event type、version、必填 payload 和字段类型。
+- consumer app 声明 `EventHandlerSpec`，handler path 必须可导入且签名只接受一个 `EventEnvelope`。
+- payload 必须包含 `tenant_id`、`actor_id` 和 `request_id`，有 trace 时带 `trace_id`。
+- handler 对外部系统的每一次副作用都必须有稳定 `effect_key`，并通过 `run_event_side_effect()` 执行。
+- `run_event_side_effect()` 只能在 outbox dispatcher 调用的 handler 内使用；进程内临时事件没有持久 idempotency context，不允许承载外部关键副作用。

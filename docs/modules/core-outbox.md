@@ -3,9 +3,8 @@
 ## Progress
 
 - Status: `connected`
-- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、shutdown signal、profile batch/sleep 参数、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff、handler schema/version 校验、handler 幂等执行保护和可选跨进程 dispatcher lock 已落地。
-- Next:
-  - [ ] 补充 handler 外部 side-effect 幂等指南。
+- Done: outbox model、repository、outbox-backed publisher、同事务写入、条件领取、一次性 dispatcher CLI、outbox-dispatcher run loop、shutdown signal、profile batch/sleep 参数、process heartbeat、有限重试、dead-letter replay、lease 完成校验、handler trace_id handoff、handler schema/version 校验、handler 幂等执行保护、handler 外部 side-effect 幂等辅助 API 和可选跨进程 dispatcher lock 已落地。
+- Next: _none_
 
 ## 为什么需要 Outbox
 
@@ -146,6 +145,7 @@ await service.run_in_transaction(
 - event payload 必须包含 `tenant_id`、`actor_id`、`request_id`；存在 `trace_id` 时 dispatcher 必须透传给 handler 背景上下文。
 - event_type 和 event_version 必须注册；如果 registry 中存在 `EventSchemaSpec`，写入时还会校验 schema 必填字段、字段类型和 tenant_id 一致性。
 - handler 必须以 `event_id` 做幂等；复杂业务可以额外使用业务唯一键。
+- handler 内部调用外部系统时必须用 `run_event_side_effect()` 或外部系统自己的幂等键保护每一次副作用。
 - 不要求第一版支持复杂事件溯源、全局顺序或跨服务 exactly-once。
 
 ## 投递规则
@@ -171,8 +171,37 @@ dispatcher 需要：
 
 - dispatcher 崩溃后，`locked_until` 到期的 `publishing` 事件可重新领取。
 - 如果 handler 已成功但事件未标记 `published`，dispatcher replay 会通过 handler 幂等记录跳过已成功 handler。
-- 如果外部副作用已经执行但 handler 未能写入成功记录，handler 仍必须通过 `event_id` 或业务唯一约束兜底，避免重复副作用。
+- 如果某个外部副作用已成功但 handler 后续失败，`run_event_side_effect()` 的记录会让下一次 retry 跳过该副作用并复用已记录 response。
+- 如果外部副作用已经执行但进程在 helper 标记成功前崩溃，handler 仍必须把 `event_id` 传给外部系统作为幂等键，或依赖业务唯一约束兜底，避免重复副作用。
 - 第一版不追求 exactly-once；目标是 at-least-once delivery + idempotent handler。
+
+## Handler External Side Effects
+
+标准写法：
+
+```python
+from core.events import EventEnvelope, run_event_side_effect
+
+
+async def notify_vendor(envelope: EventEnvelope) -> None:
+    await run_event_side_effect(
+        "vendor.notify",
+        lambda: vendor_client.send(
+            idempotency_key=envelope.event_id,
+            tenant_id=envelope.tenant_id,
+            aggregate_id=envelope.aggregate_id,
+        ),
+        request_payload={"aggregate_id": envelope.aggregate_id},
+    )
+```
+
+运行规则：
+
+- `effect_key` 必须在同一个 handler 内稳定且唯一，例如 `crm.tenant.upsert`、`email.welcome.send`。
+- helper 使用当前 dispatcher 注入的 `IdempotencyStore`，记录维度为 tenant、actor、event、handler 和 effect。
+- side effect 成功后即写入 succeeded 记录；如果 handler 后续失败，下一次 outbox retry 会 replay 该记录，不再调用外部系统。
+- side effect 函数抛错时记录 failed，并随 handler 失败走 outbox retry 或 dead-letter。
+- helper 不替代外部系统幂等键。对 HTTP、消息队列、邮件、支付、CRM 等外部系统，仍应把 `event_id` 或业务唯一键传过去。
 
 ## Outbox CLI
 

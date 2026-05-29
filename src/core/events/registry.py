@@ -14,6 +14,7 @@ from core.idempotency import IdempotencyStore, hash_request_payload
 if TYPE_CHECKING:
     from core.apps.module import EventHandlerSpec, EventSchemaSpec
     from core.apps.registry import AppRegistry
+    from core.events.side_effects import EventSideEffectContext
 
 EventHandler = Callable[["EventEnvelope"], Awaitable[None] | None]
 _CORE_REQUIRED_PAYLOAD_FIELDS = ("tenant_id", "actor_id", "request_id")
@@ -221,7 +222,15 @@ class EventRegistry:
             if claim.outcome == "replayed":
                 continue
             try:
-                await _call_handler(entry.handler, envelope)
+                await _call_handler(
+                    entry.handler,
+                    envelope,
+                    side_effect_context=_side_effect_context(
+                        envelope=envelope,
+                        handler_key=entry.handler_key,
+                        idempotency_store=idempotency_store,
+                    ),
+                )
             except Exception as exc:
                 await idempotency_store.mark_failed(
                     claim.record,
@@ -340,7 +349,14 @@ def _matches_field_type(value: object, expected_type: str) -> bool:
     return False
 
 
-async def _call_handler(handler: EventHandler, envelope: EventEnvelope) -> None:
+async def _call_handler(
+    handler: EventHandler,
+    envelope: EventEnvelope,
+    *,
+    side_effect_context: EventSideEffectContext | None = None,
+) -> None:
+    from core.events.side_effects import use_event_side_effect_context
+
     with use_background_context(
         outbox_background_context(
             event_id=envelope.event_id,
@@ -349,10 +365,25 @@ async def _call_handler(handler: EventHandler, envelope: EventEnvelope) -> None:
             tenant_id=envelope.tenant_id,
             payload=envelope.payload,
         )
-    ):
+    ), use_event_side_effect_context(side_effect_context):
         result = handler(envelope)
         if inspect.isawaitable(result):
             await result
+
+
+def _side_effect_context(
+    *,
+    envelope: EventEnvelope,
+    handler_key: str,
+    idempotency_store: IdempotencyStore,
+) -> EventSideEffectContext:
+    from core.events.side_effects import EventSideEffectContext
+
+    return EventSideEffectContext(
+        envelope=envelope,
+        handler_key=handler_key,
+        idempotency_store=idempotency_store,
+    )
 
 
 def _handler_key(handler: EventHandler) -> str:

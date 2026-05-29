@@ -16,7 +16,12 @@ from core.context import (
     set_current_context,
 )
 from core.db import unit_of_work
-from core.events import EventEnvelope, EventHandlerPermanentError, EventRegistry
+from core.events import (
+    EventEnvelope,
+    EventHandlerPermanentError,
+    EventRegistry,
+    run_event_side_effect,
+)
 from core.exceptions import AppError
 from core.idempotency import IdempotencyStore, hash_request_payload
 from core.locks import MemoryLockProvider
@@ -279,6 +284,62 @@ async def test_dispatcher_skips_handler_when_event_handler_already_succeeded(
     assert stats.published == 1
     assert delivered == []
     assert event.status == "published"
+
+
+@pytest.mark.asyncio
+async def test_handler_external_side_effect_is_idempotent_across_retry(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    external_calls: list[str] = []
+    attempts = 0
+
+    async def notify_crm(envelope: EventEnvelope) -> None:
+        nonlocal attempts
+        attempts += 1
+        await run_event_side_effect(
+            "crm.notify",
+            lambda: external_calls.append(envelope.event_id)
+            or {"crm_delivery_id": f"crm-{envelope.event_id}"},
+            request_payload={"aggregate_id": envelope.aggregate_id},
+        )
+        if attempts == 1:
+            raise RuntimeError("handler failed after external side effect")
+
+    registry = EventRegistry()
+    registry.register(
+        "business.created",
+        1,
+        notify_crm,
+        handler_key="apps.crm.events.notify_crm",
+    )
+    await _add_event(session_factory, registry, max_attempts=2)
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        first_stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+            retry_delay_seconds=0,
+        ).dispatch_once()
+
+    assert first_stats.failed == 1
+    assert external_calls == [(await _first_event(session_factory)).id]
+
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        second_stats = await OutboxDispatcher(
+            OutboxRepository(uow.session, registry=registry),
+            registry,
+            dispatcher_id="dispatcher-1",
+            retry_delay_seconds=0,
+        ).dispatch_once()
+
+    event = await _first_event(session_factory)
+    assert second_stats.published == 1
+    assert event.status == "published"
+    assert attempts == 2
+    assert external_calls == [event.id]
 
 
 @pytest.mark.asyncio
