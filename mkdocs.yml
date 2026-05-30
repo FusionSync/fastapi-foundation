@@ -4,20 +4,28 @@ docs_dir: documents
 site_dir: site
 
 nav:
-  - 首页: index.md
-  - 快速开始: quickstart.md
-  - 架构: architecture.md
-  - 指南:
-      - 快速上手清单: guides/quickstart-checklist.md
-      - APP 开发: guides/app-development.md
-  - API 约定:
-      - 平台环境: api/api-environment.md
-      - App 注册: api/app-registry.md
-      - 租户隔离: api/tenant-isolation.md
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Architecture: architecture.md
+  - Guides:
+      - Developer Workbook: guides/new-developer-workbook.md
+      - Documentation Checklist: guides/documentation-todolist.md
+      - APP Development: guides/app-development.md
+      - Authentication: guides/authentication.md
+      - Data Relationships: guides/data-relationships.md
+      - Authorization & Roles: guides/authorization-and-roles.md
+      - CLI: guides/cli-guide.md
+      - Quickstart Checklist: guides/quickstart-checklist.md
+      - Troubleshooting: guides/troubleshooting.md
+      - Advanced Architecture: guides/advanced-architecture.md
+  - API Contracts:
+      - Environment: api/api-environment.md
+      - App Registry: api/app-registry.md
+      - Tenant Isolation: api/tenant-isolation.md
 
 theme:
   name: material
-  language: zh
+  language: en
 
 plugins:
   - search
@@ -26,3 +34,5 @@ markdown_extensions:
   - admonition
   - pymdownx.superfences
   - pymdownx.inlinehilite
+  - pymdownx.tabbed
+  - attr_list
