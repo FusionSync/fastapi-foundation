@@ -1,0 +1,1970 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="External documentation site for fastapi-foundation">
+      
+      
+      
+      
+        <link rel="prev" href="../authorization-and-roles/">
+      
+      
+        <link rel="next" href="../quickstart-checklist/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>CLI - fastapi-foundation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cli-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="fastapi-foundation" class="md-header__button md-logo" aria-label="fastapi-foundation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            fastapi-foundation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CLI
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="fastapi-foundation" class="md-nav__button md-logo" aria-label="fastapi-foundation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    fastapi-foundation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../new-developer-workbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Workbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../documentation-todolist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../app-development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    APP Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data-relationships/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Relationships
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authorization-and-roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1）通用约定
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2）应用命令（app）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2）应用命令（app）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-bootstrap-app-label" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core bootstrap-app &lt;label&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-check-app-module_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core check-app [module_path]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-list-apps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core list-apps
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3）配置类命令（config）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3）配置类命令（config）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-config-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core config template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-config-drift-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core config drift-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-config-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core config artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        其他运行配置命令
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4）进程与运行时命令（operations）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4）进程与运行时命令（operations）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        平台运维命令
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        发布检查点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        服务进程
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="服务进程">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-serve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core serve
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core worker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-scheduler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core scheduler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-outbox-dispatcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core outbox-dispatcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5）权限命令
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5）权限命令">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-permissions-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core permissions catalog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-permissions-reconcile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core permissions reconcile
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6）迁移命令
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6）迁移命令">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-plan-preflight-dry-run-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate plan | preflight | dry-run | status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate apply
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-drift-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate drift-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7）幂等、任务、死信队列
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7）幂等、任务、死信队列">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#idempotency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        idempotency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        outbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8）给新手的日常“自检脚本”建议
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Contracts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Contracts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/api-environment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/app-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    App Registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tenant-isolation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tenant Isolation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1）通用约定
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2）应用命令（app）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2）应用命令（app）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-bootstrap-app-label" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core bootstrap-app &lt;label&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-check-app-module_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core check-app [module_path]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-list-apps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core list-apps
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3）配置类命令（config）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3）配置类命令（config）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-config-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core config template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-config-drift-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core config drift-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-config-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core config artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        其他运行配置命令
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4）进程与运行时命令（operations）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4）进程与运行时命令（operations）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        平台运维命令
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        发布检查点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        服务进程
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="服务进程">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-serve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core serve
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core worker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-scheduler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core scheduler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-outbox-dispatcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core outbox-dispatcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5）权限命令
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5）权限命令">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-permissions-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core permissions catalog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-permissions-reconcile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core permissions reconcile
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6）迁移命令
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6）迁移命令">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-plan-preflight-dry-run-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate plan | preflight | dry-run | status
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate apply
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-migrate-drift-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        core migrate drift-check
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7）幂等、任务、死信队列
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7）幂等、任务、死信队列">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#idempotency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        idempotency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        outbox
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8）给新手的日常“自检脚本”建议
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="cli-guide">CLI Guide（本地与运维命令说明）</h1>
+<p>本页面向“第一次使用者”，所有参数都按可复制命令给出。
+建议默认加 <code>--json</code>，方便脚本判读。</p>
+<h2 id="1">1）通用约定</h2>
+<ul>
+<li><code>core</code> 命令返回码：</li>
+<li><code>0</code>：成功</li>
+<li><code>1</code>：运行时失败</li>
+<li><code>2</code>：参数/使用错误</li>
+<li>带 <code>--json</code> 时，常见字段：</li>
+<li><code>ok</code>：布尔</li>
+<li><code>command</code>：命令路径</li>
+<li><code>error.code</code>：错误码（失败时）</li>
+<li><code>error.message</code>：错误详情</li>
+</ul>
+<h2 id="2app">2）应用命令（app）</h2>
+<h3 id="core-bootstrap-app-label"><code>core bootstrap-app &lt;label&gt;</code></h3>
+<p>参数：
+- <code>label</code>（必填）：模块名，如 <code>books</code>
+- <code>--target-root</code>（默认 <code>src</code>）
+- <code>--package</code>（默认 <code>apps</code>）
+- <code>--json</code></p>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>bootstrap-app<span class="w"> </span>books<span class="w"> </span>--target-root<span class="w"> </span>src<span class="w"> </span>--package<span class="w"> </span>platform_apps<span class="w"> </span>--json
+</code></pre></div>
+<h3 id="core-check-app-module_path"><code>core check-app [module_path]</code></h3>
+<p>参数：
+- <code>--all</code>：检查所有已安装模块
+- <code>--installed-app</code>：覆盖安装模块列表，可重复
+- <code>--json</code></p>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>check-app<span class="w"> </span>platform_apps.notes.module<span class="w"> </span>--json
+core<span class="w"> </span>check-app<span class="w"> </span>--all<span class="w"> </span>--json
+core<span class="w"> </span>check-app<span class="w"> </span>--installed-app<span class="w"> </span>platform_apps.platform_accounts.module<span class="w"> </span>--json
+</code></pre></div>
+<h3 id="core-list-apps"><code>core list-apps</code></h3>
+<p>参数：
+- <code>--installed-app</code>：覆盖安装模块列表，可重复
+- <code>--json</code></p>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>list-apps<span class="w"> </span>--json
+core<span class="w"> </span>list-apps<span class="w"> </span>--installed-app<span class="w"> </span>platform_apps.platform_accounts.platform_tenants.module<span class="w"> </span>--json
+</code></pre></div>
+<h2 id="3config">3）配置类命令（config）</h2>
+<h3 id="core-config-template"><code>core config template</code></h3>
+<ul>
+<li><code>--profile {local|private|cloud}</code></li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="core-config-drift-check"><code>core config drift-check</code></h3>
+<ul>
+<li><code>--profile {local|private|cloud}</code>（必填）</li>
+<li><code>--role</code>（可选，值为 <code>server|worker|scheduler|outbox-dispatcher|migrate</code>）</li>
+<li><code>--actual KEY=VALUE</code>（可重复）</li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="core-config-artifacts"><code>core config artifacts</code></h3>
+<ul>
+<li><code>--profile {local|private|cloud}</code>（必填）</li>
+<li><code>--target {docker-compose|systemd|helm-values}</code>（必填）</li>
+<li><code>--role</code></li>
+<li><code>--actual KEY=VALUE</code>（可重复）</li>
+<li><code>--json</code></li>
+</ul>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>config<span class="w"> </span>template<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+core<span class="w"> </span>config<span class="w"> </span>drift-check<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+core<span class="w"> </span>config<span class="w"> </span>artifacts<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--target<span class="w"> </span>docker-compose<span class="w"> </span>--json
+</code></pre></div>
+<h3 id="_1">其他运行配置命令</h3>
+<ul>
+<li><code>core check-config --profile local --json</code></li>
+<li><code>core smoke --profile local --json</code></li>
+<li><code>core backup-check --profile local --json</code></li>
+</ul>
+<h2 id="4operations">4）进程与运行时命令（operations）</h2>
+<h3 id="_2">平台运维命令</h3>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>check-config<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+core<span class="w"> </span>smoke<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+core<span class="w"> </span>backup-check<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--latest-backup-at<span class="w"> </span><span class="s2">&quot;2026-05-30T00:00:00Z&quot;</span><span class="w"> </span>--max-age-hours<span class="w"> </span><span class="m">24</span><span class="w"> </span>--json
+</code></pre></div>
+<h3 id="_3">发布检查点</h3>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>release<span class="w"> </span>checkpoint<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--artifact-target<span class="w"> </span>docker-compose<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--installed-app<span class="w"> </span>platform_apps.platform_accounts<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--probe-dependencies<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--json
+</code></pre></div>
+<p>参数（<code>core release checkpoint</code>）：
+- <code>--profile</code>
+- <code>--artifact-target {docker-compose|systemd|helm-values}</code>
+- <code>--actual KEY=VALUE</code>（可重复）
+- <code>--role-actual ROLE:KEY=VALUE</code>（可重复，ROLE 见 <code>server|worker|scheduler|outbox-dispatcher|migrate</code>）
+- <code>--latest-backup-at</code>
+- <code>--max-age-hours</code>
+- <code>--installed-app</code>（可重复）
+- <code>--probe-dependencies</code></p>
+<h3 id="_4">服务进程</h3>
+<h4 id="core-serve"><code>core serve</code></h4>
+<ul>
+<li><code>--dry-run</code>：仅预检</li>
+<li><code>--run</code>：实际启动</li>
+<li><code>--host</code>（默认 <code>0.0.0.0</code>）</li>
+<li><code>--port</code>（默认 <code>8000</code>）</li>
+<li><code>--reload</code>（开发模式）</li>
+<li><code>--workers</code>（默认 <code>1</code>）</li>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--database-url</code></li>
+<li><code>--json</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>serve<span class="w"> </span>--dry-run<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span><span class="w"> </span>--json
+core<span class="w"> </span>serve<span class="w"> </span>--run<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span><span class="w"> </span>--reload<span class="w"> </span>--json
+</code></pre></div>
+<h4 id="core-worker"><code>core worker</code></h4>
+<ul>
+<li><code>--run</code> / <code>--run-once</code></li>
+<li><code>--database-url</code></li>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--queue</code>（默认 <code>default</code>）</li>
+<li><code>--provider</code>：<code>sync</code> / <code>database</code></li>
+<li><code>--max-attempts</code></li>
+<li><code>--retry-backoff-seconds</code></li>
+<li><code>--tenant-status</code>（默认 <code>active</code>）</li>
+<li><code>--instance-id</code></li>
+<li><code>--max-iterations</code></li>
+<li><code>--idle-sleep-seconds</code>（默认 <code>1.0</code>）</li>
+<li><code>--json</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>worker<span class="w"> </span>--run-once<span class="w"> </span>--provider<span class="w"> </span>database<span class="w"> </span>--database-url<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DATABASE__URL</span><span class="s2">&quot;</span><span class="w"> </span>--json
+core<span class="w"> </span>worker<span class="w"> </span>--run<span class="w"> </span>--queue<span class="w"> </span>default<span class="w"> </span>--tenant-status<span class="w"> </span>active<span class="w"> </span>--json
+</code></pre></div>
+<h4 id="core-scheduler"><code>core scheduler</code></h4>
+<ul>
+<li><code>--run</code> / <code>--run-once</code></li>
+<li><code>--tenant-id</code>（<code>--run-once</code> 和 <code>--run</code> 都建议带）</li>
+<li><code>--schedule-id</code>（<code>--run-once</code> 下必填）</li>
+<li><code>--database-url</code></li>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--provider</code>：<code>local</code> / <code>apscheduler</code> / <code>celery_beat</code></li>
+<li><code>--tenant-status</code>（默认 <code>active</code>）</li>
+<li><code>--planned-at</code>（ISO 时间）</li>
+<li><code>--now</code>（ISO 时间）</li>
+<li><code>--payload-json</code>（默认 <code>{}</code>）</li>
+<li><code>--request-id</code>（默认 <code>scheduler-run-once</code>）</li>
+<li><code>--request-id-prefix</code>（默认 <code>scheduler-run</code>）</li>
+<li><code>--instance-id</code></li>
+<li><code>--max-iterations</code></li>
+<li><code>--idle-sleep-seconds</code></li>
+<li><code>--lock-ttl-seconds</code></li>
+<li><code>--json</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>scheduler<span class="w"> </span>--run-once<span class="w"> </span>--tenant-id<span class="w"> </span>tenant_demo<span class="w"> </span>--schedule-id<span class="w"> </span>daily-summary<span class="w"> </span>--json
+core<span class="w"> </span>scheduler<span class="w"> </span>--run<span class="w"> </span>--tenant-id<span class="w"> </span>tenant_demo<span class="w"> </span>--provider<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+</code></pre></div>
+<h4 id="core-outbox-dispatcher"><code>core outbox-dispatcher</code></h4>
+<ul>
+<li><code>--run</code></li>
+<li><code>--database-url</code></li>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--dispatcher-id</code>（默认 <code>outbox-dispatcher</code>）</li>
+<li><code>--instance-id</code></li>
+<li><code>--batch-size</code>（默认 <code>20</code>）</li>
+<li><code>--max-iterations</code></li>
+<li><code>--idle-sleep-seconds</code></li>
+<li><code>--json</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>outbox-dispatcher<span class="w"> </span>--run<span class="w"> </span>--database-url<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DATABASE__URL</span><span class="s2">&quot;</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">50</span><span class="w"> </span>--json
+</code></pre></div>
+<h2 id="5">5）权限命令</h2>
+<h3 id="core-permissions-catalog"><code>core permissions catalog</code></h3>
+<ul>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="core-permissions-reconcile"><code>core permissions reconcile</code></h3>
+<ul>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--database-url</code>（不传则仅读元数据）</li>
+<li><code>--repair</code>（启用持久化）</li>
+<li><code>--json</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>permissions<span class="w"> </span>catalog<span class="w"> </span>--installed-app<span class="w"> </span>platform_apps.platform_tenants.module<span class="w"> </span>--json
+core<span class="w"> </span>permissions<span class="w"> </span>reconcile<span class="w"> </span>--installed-app<span class="w"> </span>platform_apps.platform_tenants.module<span class="w"> </span>--database-url<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DATABASE__URL</span><span class="s2">&quot;</span><span class="w"> </span>--repair<span class="w"> </span>--json
+</code></pre></div>
+<h2 id="6">6）迁移命令</h2>
+<h3 id="core-migrate-plan-preflight-dry-run-status"><code>core migrate plan | preflight | dry-run | status</code></h3>
+<ul>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--phase {expand|backfill|contract|maintenance}</code>（非 status）</li>
+<li><code>--backup-ready</code>（preflight/dry-run）</li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="core-migrate-apply"><code>core migrate apply</code></h3>
+<ul>
+<li><code>--installed-app</code></li>
+<li><code>--phase</code></li>
+<li><code>--backup-ready</code></li>
+<li><code>--yes</code>（<strong>必需</strong>，否则拒绝执行）</li>
+<li><code>--alembic-config</code></li>
+<li><code>--database-url</code></li>
+<li><code>--script-location</code></li>
+<li><code>--lock-owner</code></li>
+<li><code>--lock-ttl-seconds</code>（默认 <code>300</code>）</li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="core-migrate-run"><code>core migrate run</code></h3>
+<ul>
+<li><code>--apply</code>（是否在 <code>dry-run</code> 之外执行）</li>
+<li><code>--yes</code>（搭配 <code>--apply</code> 更安全）</li>
+<li><code>--installed-app</code></li>
+<li><code>--phase</code></li>
+<li><code>--backup-ready</code></li>
+<li><code>--alembic-config</code></li>
+<li><code>--database-url</code></li>
+<li><code>--script-location</code></li>
+<li><code>--lock-owner</code></li>
+<li><code>--lock-ttl-seconds</code></li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="core-migrate-drift-check"><code>core migrate drift-check</code></h3>
+<ul>
+<li><code>--expected app=head</code>（可重复）</li>
+<li><code>--actual app=head</code>（可重复）</li>
+<li><code>--json</code></li>
+</ul>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>migrate<span class="w"> </span>plan<span class="w"> </span>--phase<span class="w"> </span>expand<span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>preflight<span class="w"> </span>--phase<span class="w"> </span>expand<span class="w"> </span>--backup-ready<span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>dry-run<span class="w"> </span>--phase<span class="w"> </span>contract<span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>status<span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>run<span class="w"> </span>--phase<span class="w"> </span>expand<span class="w"> </span>--apply<span class="w"> </span>--yes<span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>apply<span class="w"> </span>--phase<span class="w"> </span>maintenance<span class="w"> </span>--yes<span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>drift-check<span class="w"> </span>--expected<span class="w"> </span><span class="nv">users</span><span class="o">=</span>abc123<span class="w"> </span>--actual<span class="w"> </span><span class="nv">users</span><span class="o">=</span>def456<span class="w"> </span>--json
+</code></pre></div>
+<h2 id="7">7）幂等、任务、死信队列</h2>
+<h3 id="idempotency">idempotency</h3>
+<ul>
+<li><code>core idempotency diagnose</code></li>
+<li><code>--database-url</code></li>
+<li><code>--tenant-id</code>（必填）</li>
+<li><code>--user-id</code>（必填）</li>
+<li><code>--route</code>（必填）</li>
+<li><code>--idempotency-key</code>（必填）</li>
+<li><code>--request-hash</code></li>
+<li><code>--now</code></li>
+<li><code>--retry-failed</code></li>
+<li><code>--json</code></li>
+<li><code>core idempotency expire</code></li>
+<li><code>--database-url</code></li>
+<li><code>--now</code></li>
+<li><code>--yes</code>（必需）</li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="tasks">tasks</h3>
+<ul>
+<li><code>core tasks failed list</code></li>
+<li><code>--database-url</code></li>
+<li><code>--limit</code></li>
+<li><code>--json</code></li>
+<li><code>core tasks failed retry</code></li>
+<li><code>--database-url</code></li>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--task-id</code>（必填）</li>
+<li><code>--yes</code>（必需）</li>
+<li><code>--json</code></li>
+<li><code>core tasks running recover</code></li>
+<li><code>--database-url</code></li>
+<li><code>--older-than-seconds</code>（必填）</li>
+<li><code>--limit</code></li>
+<li><code>--yes</code>（必需）</li>
+<li><code>--json</code></li>
+</ul>
+<h3 id="outbox">outbox</h3>
+<ul>
+<li><code>core outbox dispatch-once</code></li>
+<li><code>--database-url</code></li>
+<li><code>--installed-app</code>（可重复）</li>
+<li><code>--dispatcher-id</code>（默认 <code>outbox-dispatcher</code>）</li>
+<li><code>--batch-size</code></li>
+<li><code>--json</code></li>
+<li><code>core outbox dead-letter list</code></li>
+<li><code>--database-url</code></li>
+<li><code>--limit</code></li>
+<li><code>--json</code></li>
+<li><code>core outbox dead-letter replay</code></li>
+<li><code>--database-url</code></li>
+<li><code>--event-id</code>（必填）</li>
+<li><code>--yes</code>（必需）</li>
+<li><code>--json</code></li>
+</ul>
+<p>示例：</p>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>idempotency<span class="w"> </span>diagnose<span class="w"> </span>--tenant-id<span class="w"> </span>tenant_demo<span class="w"> </span>--user-id<span class="w"> </span>user_1<span class="w"> </span>--route<span class="w"> </span>/api/v1/books<span class="w"> </span>--idempotency-key<span class="w"> </span>req-001<span class="w"> </span>--json
+core<span class="w"> </span>idempotency<span class="w"> </span>expire<span class="w"> </span>--yes<span class="w"> </span>--json
+core<span class="w"> </span>tasks<span class="w"> </span>failed<span class="w"> </span>list<span class="w"> </span>--limit<span class="w"> </span><span class="m">20</span><span class="w"> </span>--json
+core<span class="w"> </span>tasks<span class="w"> </span>failed<span class="w"> </span>retry<span class="w"> </span>--task-id<span class="w"> </span>task_123<span class="w"> </span>--yes<span class="w"> </span>--json
+core<span class="w"> </span>outbox<span class="w"> </span>dead-letter<span class="w"> </span>list<span class="w"> </span>--limit<span class="w"> </span><span class="m">20</span><span class="w"> </span>--json
+core<span class="w"> </span>outbox<span class="w"> </span>dead-letter<span class="w"> </span>replay<span class="w"> </span>--event-id<span class="w"> </span>evt_001<span class="w"> </span>--yes<span class="w"> </span>--json
+</code></pre></div>
+<h2 id="8">8）给新手的日常“自检脚本”建议</h2>
+<div class="highlight"><pre><span></span><code>core<span class="w"> </span>config<span class="w"> </span>drift-check<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+core<span class="w"> </span>check-config<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+core<span class="w"> </span>check-app<span class="w"> </span>--all<span class="w"> </span>--json
+core<span class="w"> </span>permissions<span class="w"> </span>catalog<span class="w"> </span>--json
+core<span class="w"> </span>permissions<span class="w"> </span>reconcile<span class="w"> </span>--database-url<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DATABASE__URL</span><span class="s2">&quot;</span><span class="w"> </span>--json
+core<span class="w"> </span>migrate<span class="w"> </span>plan<span class="w"> </span>--json
+core<span class="w"> </span>serve<span class="w"> </span>--dry-run<span class="w"> </span>--json
+core<span class="w"> </span>smoke<span class="w"> </span>--profile<span class="w"> </span><span class="nb">local</span><span class="w"> </span>--json
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

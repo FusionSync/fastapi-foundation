@@ -11,10 +11,10 @@
       
       
       
-        <link rel="prev" href="../cli-guide/">
+        <link rel="prev" href="../authentication/">
       
       
-        <link rel="next" href="../troubleshooting/">
+        <link rel="next" href="../authorization-and-roles/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Quickstart Checklist - fastapi-foundation</title>
+        <title>Data Relationships - fastapi-foundation</title>
       
     
     
@@ -66,7 +66,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quickstart-checklist" class="md-skip">
+        <a href="#data-relationships" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quickstart Checklist
+              Data Relationships
             
           </span>
         </div>
@@ -437,10 +437,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../data-relationships/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Relationships
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -456,6 +483,92 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1）租户模型边界（先做对）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2）Repository 是你的唯一入口（强推荐）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3listqueryschema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3）分页与过滤参数（ListQuerySchema）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4）实体关系（示例）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5crosstenantrepository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5）跨租户查询（CrossTenantRepository）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6）新手常见踩坑
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -521,37 +634,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quickstart Checklist
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../quickstart-checklist/" class="md-nav__link">
         
   
   
@@ -567,92 +653,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#a" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        A. 环境与配置
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#b" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        B. 模块与路由
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#c" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        C. 权限模型
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#d" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        D. 运行与健康
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#e" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        E. 认证/租户链路
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#f" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        F. 迁移与任务（发布前可选）
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -886,10 +886,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#a" class="md-nav__link">
+  <a href="#1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A. 环境与配置
+        1）租户模型边界（先做对）
       
     </span>
   </a>
@@ -897,10 +897,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#b" class="md-nav__link">
+  <a href="#2repository" class="md-nav__link">
     <span class="md-ellipsis">
       
-        B. 模块与路由
+        2）Repository 是你的唯一入口（强推荐）
       
     </span>
   </a>
@@ -908,10 +908,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#c" class="md-nav__link">
+  <a href="#3listqueryschema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        C. 权限模型
+        3）分页与过滤参数（ListQuerySchema）
       
     </span>
   </a>
@@ -919,10 +919,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#d" class="md-nav__link">
+  <a href="#4" class="md-nav__link">
     <span class="md-ellipsis">
       
-        D. 运行与健康
+        4）实体关系（示例）
       
     </span>
   </a>
@@ -930,10 +930,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#e" class="md-nav__link">
+  <a href="#5crosstenantrepository" class="md-nav__link">
     <span class="md-ellipsis">
       
-        E. 认证/租户链路
+        5）跨租户查询（CrossTenantRepository）
       
     </span>
   </a>
@@ -941,10 +941,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#f" class="md-nav__link">
+  <a href="#6" class="md-nav__link">
     <span class="md-ellipsis">
       
-        F. 迁移与任务（发布前可选）
+        6）新手常见踩坑
       
     </span>
   </a>
@@ -968,59 +968,113 @@
 
 
 
-<h1 id="quickstart-checklist">Quickstart Checklist（上线前必跑）</h1>
-<p>将下面命令按顺序执行，并在每步确认返回值。</p>
-<h2 id="a">A. 环境与配置</h2>
+<h1 id="data-relationships">Data Relationships（表关系与查询边界）</h1>
+<p>目标：让新手第一次写模型时就避开“跨租户污染”“在路由直接写 SQL”的坑。</p>
+<h2 id="1">1）租户模型边界（先做对）</h2>
+<p>在本框架中，<strong>业务表一般都应是租户隔离模型</strong>（除非是平台级共用表）：</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BookRecord</span><span class="p">(</span><span class="n">IdMixin</span><span class="p">,</span> <span class="n">TimestampMixin</span><span class="p">,</span> <span class="n">TenantScopedModel</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;books&quot;</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">isbn</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+</code></pre></div>
+<p>关键要求：
+- <code>tenant_id</code> 由 <code>TenantScopedModel</code> 注入，不要在路由手工传递
+- <code>update/delete/read</code> 统一走带租户过滤的仓储层
+- 唯一约束应尽量带租户维度，避免不同租户出现同键冲突</p>
+<h2 id="2repository">2）Repository 是你的唯一入口（强推荐）</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">core.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">TenantScopedRepository</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">BookRepository</span><span class="p">(</span><span class="n">TenantScopedRepository</span><span class="p">):</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Book</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">by_isbn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">isbn</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scoped_query</span><span class="p">()</span><span class="o">.</span><span class="n">select</span><span class="p">()</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Book</span><span class="o">.</span><span class="n">isbn</span> <span class="o">==</span> <span class="n">isbn</span><span class="p">)</span>
+</code></pre></div>
+<p>规则：</p>
 <ul>
-<li>[ ] <code>.env</code> 已包含：</li>
-<li><code>APP__ENV</code></li>
-<li><code>APP__NAME</code></li>
-<li><code>DATABASE__URL</code></li>
-<li><code>SECURITY__JWT_SECRET</code></li>
-<li><code>INSTALLED_APPS</code></li>
-<li>[ ] <code>core config template --profile local --json</code> 与本地 <code>DATABASE__URL</code>、<code>APP__NAME</code> 一致</li>
-<li>[ ] <code>core config drift-check --profile local --json</code> 无关键漂移</li>
-<li>[ ] <code>core check-config --profile local --json</code> 返回 <code>ok=true</code></li>
+<li><code>create/update/delete/list/get</code> 使用 <code>TenantScopedRepository</code> 可自动注入/校验 tenant</li>
+<li>直接在 <code>router</code> 里 <code>select/update</code>，会绕过统一检查，容易导致越权风险</li>
 </ul>
-<h2 id="b">B. 模块与路由</h2>
+<h2 id="3listqueryschema">3）分页与过滤参数（<code>ListQuerySchema</code>）</h2>
+<p>几乎所有列表查询建议继承 <code>ListQuerySchema</code>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>必选</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>page</code></td>
+<td>否</td>
+<td>页码，默认 <code>1</code>，最小 <code>1</code></td>
+<td><code>?page=2</code></td>
+</tr>
+<tr>
+<td><code>page_size</code></td>
+<td>否</td>
+<td>每页数量，默认 <code>20</code>，最大 <code>200</code></td>
+<td><code>?page_size=50</code></td>
+</tr>
+<tr>
+<td><code>sort</code></td>
+<td>否</td>
+<td>排序字段，支持 <code>created_at</code> / <code>-created_at</code> / <code>name</code></td>
+<td><code>?sort=-created_at</code></td>
+</tr>
+<tr>
+<td><code>keyword</code></td>
+<td>否</td>
+<td>关键字过滤（默认去前后空格）</td>
+<td><code>?keyword=abc</code></td>
+</tr>
+</tbody>
+</table>
+<p>在仓储层要把字段映射到列，不能乱写字段名：</p>
+<div class="highlight"><pre><span></span><code><span class="n">statement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_list_query</span><span class="p">(</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">scoped_query</span><span class="p">()</span><span class="o">.</span><span class="n">select</span><span class="p">(),</span>
+    <span class="n">query</span><span class="p">,</span>
+    <span class="n">sort_columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;created_at&quot;</span><span class="p">:</span> <span class="n">Book</span><span class="o">.</span><span class="n">created_at</span><span class="p">,</span> <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">Book</span><span class="o">.</span><span class="n">title</span><span class="p">},</span>
+    <span class="n">filter_columns</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">Book</span><span class="o">.</span><span class="n">title</span><span class="p">,</span>
+        <span class="s2">&quot;keyword&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">st</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">st</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">Book</span><span class="o">.</span><span class="n">title</span><span class="o">.</span><span class="n">ilike</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;%</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+            <span class="o">|</span> <span class="n">Book</span><span class="o">.</span><span class="n">isbn</span><span class="o">.</span><span class="n">ilike</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;%</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="4">4）实体关系（示例）</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForeignKey</span><span class="p">,</span> <span class="n">String</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapped</span><span class="p">,</span> <span class="n">mapped_column</span><span class="p">,</span> <span class="n">relationship</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Author</span><span class="p">(</span><span class="n">TenantScopedModel</span><span class="p">,</span> <span class="n">IdMixin</span><span class="p">,</span> <span class="n">TimestampMixin</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;authors&quot;</span>
+    <span class="n">name</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">books</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Book&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span><span class="n">back_populates</span><span class="o">=</span><span class="s2">&quot;author&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Book</span><span class="p">(</span><span class="n">TenantScopedModel</span><span class="p">,</span> <span class="n">IdMixin</span><span class="p">,</span> <span class="n">TimestampMixin</span><span class="p">):</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s2">&quot;books&quot;</span>
+    <span class="n">tenant_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">author_id</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapped_column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">36</span><span class="p">),</span> <span class="n">ForeignKey</span><span class="p">(</span><span class="s2">&quot;authors.id&quot;</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">author</span><span class="p">:</span> <span class="n">Mapped</span><span class="p">[</span><span class="n">Author</span><span class="p">]</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span><span class="n">back_populates</span><span class="o">=</span><span class="s2">&quot;books&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>注意：<code>TenantScopedRepository</code> 负责租户隔离；外键关系只负责业务完整性，两者都要做。</p>
+<h2 id="5crosstenantrepository">5）跨租户查询（CrossTenantRepository）</h2>
+<p>默认业务应该避免跨租户；只有需要管理员视图时才用 <code>CrossTenantRepository</code>，并强制传入：
+- <code>platform_decision</code> 或 <code>platform_access</code>
+- <code>reason</code></p>
+<p>否则会在构造时失败并抛出 <code>PERMISSION_DENIED</code>。</p>
+<h2 id="6">6）新手常见踩坑</h2>
 <ul>
-<li>[ ] <code>core bootstrap-app &lt;label&gt; --target-root src --package platform_apps --json</code> 成功</li>
-<li>[ ] <code>core check-app &lt;module&gt;.module --json</code> 返回 <code>ok=true</code></li>
-<li>[ ] <code>core check-app --all</code> 无阻塞错误</li>
-<li>[ ] <code>core list-apps --json</code> 显示模块名、版本、权限、路由数</li>
-</ul>
-<h2 id="c">C. 权限模型</h2>
-<ul>
-<li>[ ] <code>PermissionSpec</code> 中 <code>resource:action</code> 与路由权限字符串一致</li>
-<li>[ ] <code>route_authorization_decision</code> 已用于写接口</li>
-<li>[ ] <code>core permissions catalog --installed-app ... --json</code> 返回预期权限</li>
-<li>[ ] <code>core permissions reconcile --installed-app ... --database-url "$DATABASE__URL" --repair --json</code> 通过</li>
-</ul>
-<h2 id="d">D. 运行与健康</h2>
-<ul>
-<li>[ ] <code>core migrate plan --json</code> 能生成计划</li>
-<li>[ ] <code>core serve --dry-run --json</code> 成功</li>
-<li>[ ] <code>core serve --run --dry-run --json</code> 可再次验证不改动状态</li>
-<li>[ ] 运行服务后：</li>
-<li>[ ] <code>/healthz</code> 可达</li>
-<li>[ ] <code>/readyz</code> 可达</li>
-<li>[ ] <code>/version</code> 有版本元数据</li>
-</ul>
-<h2 id="e">E. 认证/租户链路</h2>
-<ul>
-<li>[ ] 可成功登录：<code>POST /api/v1/auth/login</code>（拿到 token）</li>
-<li>[ ] <code>GET /api/v1/me</code> 使用 token 成功</li>
-<li>[ ] <code>TENANT_CONTEXT_CONFLICT</code> / <code>TENANT_ACCESS_DENIED</code> 已按预期理解</li>
-<li>[ ] 有权限用户可访问受保护业务路由</li>
-</ul>
-<h2 id="f">F. 迁移与任务（发布前可选）</h2>
-<ul>
-<li>[ ] <code>core smoke --profile local --json</code>（或目标环境 <code>--profile</code>）通过</li>
-<li>[ ] <code>core backup-check --profile local --json</code> 检查通过或给出修复路径</li>
-<li>[ ] 出现任务退避/死信时运行：</li>
-<li><code>core outbox dead-letter list --json</code></li>
-<li><code>core tasks failed list --json</code></li>
-<li><code>core idempotency diagnose --tenant-id ... --user-id ... --route ... --idempotency-key ... --json</code></li>
+<li>把 <code>tenant_id</code> 的过滤放在 service 而不放仓储（后面容易漏）</li>
+<li>唯一索引未带 <code>tenant_id</code></li>
+<li><code>filter_columns</code> 没覆盖自定义 <code>keyword</code>，导致运行时 <code>missing filter column</code></li>
+<li>查询时用裸 <code>select</code>，导致未自动注入 tenant 条件</li>
 </ul>
 
 

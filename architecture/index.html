@@ -1,6 +1,6 @@
 
 <!doctype html>
-<html lang="zh" class="no-js">
+<html lang="en" class="no-js">
   <head>
     
       <meta charset="utf-8">
@@ -14,7 +14,7 @@
         <link rel="prev" href="../quickstart/">
       
       
-        <link rel="next" href="../guides/quickstart-checklist/">
+        <link rel="next" href="../guides/new-developer-workbook/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>架构 - fastapi-foundation</title>
+        <title>Architecture - fastapi-foundation</title>
       
     
     
@@ -66,8 +66,8 @@
     <div data-md-component="skip">
       
         
-        <a href="#_1" class="md-skip">
-          跳转至
+        <a href="#architecture-for-operators-and-app-developers" class="md-skip">
+          Skip to content
         </a>
       
     </div>
@@ -81,7 +81,7 @@
   
 
 <header class="md-header md-header--shadow" data-md-component="header">
-  <nav class="md-header__inner md-grid" aria-label="页眉">
+  <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="fastapi-foundation" class="md-header__button md-logo" aria-label="fastapi-foundation" data-md-component="logo">
       
   
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              架构
+              Architecture
             
           </span>
         </div>
@@ -124,16 +124,16 @@
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
-      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
         
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
       </label>
-      <nav class="md-search__options" aria-label="查找">
+      <nav class="md-search__options" aria-label="Search">
         
-        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
@@ -144,7 +144,7 @@
       <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
-            正在初始化搜索引擎
+            Initializing search
           </div>
           <ol class="md-search-result__list" role="presentation"></ol>
         </div>
@@ -178,7 +178,7 @@
 
 
 
-<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="fastapi-foundation" class="md-nav__button md-logo" aria-label="fastapi-foundation" data-md-component="logo">
       
@@ -205,7 +205,7 @@
   <span class="md-ellipsis">
     
   
-    首页
+    Home
   
 
     
@@ -232,7 +232,7 @@
   <span class="md-ellipsis">
     
   
-    快速开始
+    Quickstart
   
 
     
@@ -268,7 +268,7 @@
   <span class="md-ellipsis">
     
   
-    架构
+    Architecture
   
 
     
@@ -286,7 +286,7 @@
   <span class="md-ellipsis">
     
   
-    架构
+    Architecture
   
 
     
@@ -298,7 +298,7 @@
       
         
 
-<nav class="md-nav md-nav--secondary" aria-label="目录">
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
   
@@ -307,15 +307,43 @@
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
-      目录
+      Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#_2" class="md-nav__link">
+  <a href="#runtime-architecture" class="md-nav__link">
     <span class="md-ellipsis">
       
-        概览
+        Runtime architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Runtime architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#process-role-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Process role behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#app-module-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        APP module contract
       
     </span>
   </a>
@@ -323,10 +351,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_3" class="md-nav__link">
+  <a href="#what-check-app-enforces" class="md-nav__link">
     <span class="md-ellipsis">
       
-        适合新手的关键点
+        What check-app enforces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#request-flow-in-practice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request flow in practice
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tenant-and-permission-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tenant and permission baseline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extension-boundary-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extension boundary recommendation
       
     </span>
   </a>
@@ -366,7 +427,7 @@
   <span class="md-ellipsis">
     
   
-    指南
+    Guides
   
 
     
@@ -382,7 +443,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    指南
+    Guides
   
 
           </label>
@@ -395,14 +456,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/quickstart-checklist/" class="md-nav__link">
+      <a href="../guides/new-developer-workbook/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    快速上手清单
+    Developer Workbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/documentation-todolist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation Checklist
   
 
     
@@ -430,7 +519,203 @@
   <span class="md-ellipsis">
     
   
-    APP 开发
+    APP Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/data-relationships/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Relationships
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/authorization-and-roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/cli-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/quickstart-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/advanced-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Architecture
   
 
     
@@ -476,7 +761,7 @@
   <span class="md-ellipsis">
     
   
-    API 约定
+    API Contracts
   
 
     
@@ -492,7 +777,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API 约定
+    API Contracts
   
 
           </label>
@@ -512,7 +797,7 @@
   <span class="md-ellipsis">
     
   
-    平台环境
+    Environment
   
 
     
@@ -540,7 +825,7 @@
   <span class="md-ellipsis">
     
   
-    App 注册
+    App Registry
   
 
     
@@ -568,7 +853,7 @@
   <span class="md-ellipsis">
     
   
-    租户隔离
+    Tenant Isolation
   
 
     
@@ -602,7 +887,7 @@
                   <div class="md-sidebar__inner">
                     
 
-<nav class="md-nav md-nav--secondary" aria-label="目录">
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
   
@@ -611,15 +896,43 @@
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
-      目录
+      Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#_2" class="md-nav__link">
+  <a href="#runtime-architecture" class="md-nav__link">
     <span class="md-ellipsis">
       
-        概览
+        Runtime architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Runtime architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#process-role-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Process role behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#app-module-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        APP module contract
       
     </span>
   </a>
@@ -627,10 +940,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_3" class="md-nav__link">
+  <a href="#what-check-app-enforces" class="md-nav__link">
     <span class="md-ellipsis">
       
-        适合新手的关键点
+        What check-app enforces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#request-flow-in-practice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request flow in practice
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tenant-and-permission-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tenant and permission baseline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extension-boundary-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extension boundary recommendation
       
     </span>
   </a>
@@ -654,18 +1000,100 @@
 
 
 
-<h1 id="_1">架构说明（对外版）</h1>
-<h2 id="_2">概览</h2>
-<p>本项目遵循可扩展的 <code>APP</code> 插件化架构：
-- 核心框架负责生命周期、路由注册、通用中间件
-- 业务能力通过独立 APP 模块挂载
-- 工具/服务层复用公共基础设施（数据库、缓存、鉴权等）</p>
-<h2 id="_3">适合新手的关键点</h2>
+<h1 id="architecture-for-operators-and-app-developers">Architecture for operators and app developers</h1>
+<p>This framework uses a strict runtime core plus pluggable APP modules.
+Business teams extend the platform with APP modules, while runtime concerns stay in core.</p>
+<h2 id="runtime-architecture">Runtime architecture</h2>
+<ol>
+<li><code>core.config.get_settings()</code> loads configuration from environment variables.</li>
+<li><code>AppRegistry</code> loads <code>installed_apps</code> and validates module dependencies and compatibility.</li>
+<li><code>core.app.factory.create_app</code> assembles middleware, system routes, and app runtime registries.</li>
+<li>Request security pipeline resolves token session and tenant context.</li>
+<li>Permissions are checked against route policy and role projection.</li>
+<li>Process role starts selected runtime loops (<code>server</code>, <code>worker</code>, <code>scheduler</code>, <code>outbox-dispatcher</code>, <code>migrate</code>).</li>
+</ol>
+<h3 id="process-role-behavior">Process role behavior</h3>
 <ul>
-<li>先看启动入口，理解应用如何加载 APP 列表</li>
-<li>再看一个已存在的 APP 作为示例，跟着创建最小接口</li>
-<li>最后补齐文档：输入输出契约、错误码和权限说明</li>
+<li><code>server</code>: API traffic entrypoint; exposes <code>/healthz</code>, <code>/readyz</code>, <code>/version</code>, <code>/docs</code>, <code>/metrics</code>.</li>
+<li><code>worker</code>: consumes async task queue and executes jobs.</li>
+<li><code>scheduler</code>: triggers scheduled jobs.</li>
+<li><code>outbox-dispatcher</code>: drains event outbox in batches.</li>
+<li><code>migrate</code>: runs staged migration planning and execution workflows.</li>
 </ul>
+<h2 id="app-module-contract">APP module contract</h2>
+<p>Every APP module must export <code>module</code> as <code>AppModule</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">core.apps</span><span class="w"> </span><span class="kn">import</span> <span class="n">AppModule</span><span class="p">,</span> <span class="n">MigrationSpec</span>
+
+<span class="n">module</span> <span class="o">=</span> <span class="n">AppModule</span><span class="p">(</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;books&quot;</span><span class="p">,</span>
+    <span class="n">version</span><span class="o">=</span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+    <span class="n">routers</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
+    <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;platform_apps.books.models&quot;</span><span class="p">],</span>
+    <span class="n">migrations</span><span class="o">=</span><span class="n">MigrationSpec</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;platform_apps.books.migrations&quot;</span><span class="p">),</span>
+    <span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Mandatory structure:</p>
+<ul>
+<li><code>label</code> must be valid snake_case.</li>
+<li><code>version</code> must be declared.</li>
+<li><code>routers</code>, <code>models</code>, <code>permissions</code> must be valid values.</li>
+<li><code>migrations</code> must be importable and point to a <code>manifest</code>.</li>
+</ul>
+<p>Optional fields enable extension:</p>
+<ul>
+<li><code>dependencies</code></li>
+<li><code>required_capabilities</code>, <code>provided_capabilities</code>, <code>min_core_version</code></li>
+<li><code>error_codes</code>, <code>message_catalogs</code></li>
+<li><code>task_handlers</code>, <code>schedules</code>, <code>event_handlers</code></li>
+<li><code>lifecycle_hooks</code></li>
+<li><code>admin_models</code>, <code>admin_routes</code>, <code>dashboard_widgets</code></li>
+<li><code>auth_session_store</code></li>
+<li><code>public_api</code></li>
+</ul>
+<h2 id="what-check-app-enforces">What <code>check-app</code> enforces</h2>
+<ul>
+<li>module path is importable</li>
+<li>all required files exist</li>
+<li>migration metadata exists and validates</li>
+<li>no tenant-model contract violations</li>
+<li>all tenant-scoped repository classes are safe (<code>TenantScopedRepository</code>/<code>CrossTenantRepository</code>)</li>
+<li>router created with <code>create_router</code></li>
+<li>route permissions are declared in <code>AppModule.permissions</code></li>
+<li>all routed responses use <code>Envelope</code> / <code>ListEnvelope</code></li>
+</ul>
+<h2 id="request-flow-in-practice">Request flow in practice</h2>
+<ol>
+<li>Route policy from <code>create_router</code> runs request security middleware.</li>
+<li>Authentication and tenant resolution run (token, optional <code>X-Tenant-ID</code>).</li>
+<li>Permission resolution returns decision.</li>
+<li>Router handler executes service logic.</li>
+<li>Handler returns envelope responses.</li>
+</ol>
+<h2 id="tenant-and-permission-baseline">Tenant and permission baseline</h2>
+<ul>
+<li>Tenant isolation is enforced by <code>TenantScopedModel</code> and <code>TenantScopedRepository</code>.</li>
+<li>Token tenant comes from JWT claim <code>tid</code>.</li>
+<li>Header tenant uses <code>X-Tenant-ID</code>.</li>
+<li>If both are present, they must match.</li>
+<li>Route-level permissions are written as <code>resource:action</code> and checked by <code>PermissionSpec</code>.</li>
+</ul>
+<h2 id="extension-boundary-recommendation">Extension boundary recommendation</h2>
+<p>Use APP modules for:</p>
+<ul>
+<li>domain models and repositories</li>
+<li>domain routers and permissions</li>
+<li>domain tasks and schedules</li>
+<li>module configuration metadata</li>
+</ul>
+<p>Use core for:</p>
+<ul>
+<li>middleware and security policy changes</li>
+<li>permission backend selection</li>
+<li>migration planner and CLI workflow</li>
+<li>shared platform services</li>
+</ul>
+<p>Advanced framework customization belongs to <code>guides/advanced-architecture.md</code>.</p>
 
 
 
@@ -715,7 +1143,7 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>

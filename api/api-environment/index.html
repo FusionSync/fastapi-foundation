@@ -1,6 +1,6 @@
 
 <!doctype html>
-<html lang="zh" class="no-js">
+<html lang="en" class="no-js">
   <head>
     
       <meta charset="utf-8">
@@ -11,7 +11,7 @@
       
       
       
-        <link rel="prev" href="../../guides/app-development/">
+        <link rel="prev" href="../../guides/advanced-architecture/">
       
       
         <link rel="next" href="../app-registry/">
@@ -25,7 +25,7 @@
     
     
       
-        <title>平台环境 - fastapi-foundation</title>
+        <title>Environment - fastapi-foundation</title>
       
     
     
@@ -66,8 +66,8 @@
     <div data-md-component="skip">
       
         
-        <a href="#api-envelope-error-contract" class="md-skip">
-          跳转至
+        <a href="#api-environment-contract" class="md-skip">
+          Skip to content
         </a>
       
     </div>
@@ -81,7 +81,7 @@
   
 
 <header class="md-header md-header--shadow" data-md-component="header">
-  <nav class="md-header__inner md-grid" aria-label="页眉">
+  <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="fastapi-foundation" class="md-header__button md-logo" aria-label="fastapi-foundation" data-md-component="logo">
       
   
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              平台环境
+              Environment
             
           </span>
         </div>
@@ -124,16 +124,16 @@
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
-      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
       <label class="md-search__icon md-icon" for="__search">
         
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
         
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
       </label>
-      <nav class="md-search__options" aria-label="查找">
+      <nav class="md-search__options" aria-label="Search">
         
-        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
           
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
@@ -144,7 +144,7 @@
       <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
-            正在初始化搜索引擎
+            Initializing search
           </div>
           <ol class="md-search-result__list" role="presentation"></ol>
         </div>
@@ -178,7 +178,7 @@
 
 
 
-<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="fastapi-foundation" class="md-nav__button md-logo" aria-label="fastapi-foundation" data-md-component="logo">
       
@@ -205,7 +205,7 @@
   <span class="md-ellipsis">
     
   
-    首页
+    Home
   
 
     
@@ -232,7 +232,7 @@
   <span class="md-ellipsis">
     
   
-    快速开始
+    Quickstart
   
 
     
@@ -259,7 +259,7 @@
   <span class="md-ellipsis">
     
   
-    架构
+    Architecture
   
 
     
@@ -297,7 +297,7 @@
   <span class="md-ellipsis">
     
   
-    指南
+    Guides
   
 
     
@@ -313,7 +313,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    指南
+    Guides
   
 
           </label>
@@ -326,14 +326,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/quickstart-checklist/" class="md-nav__link">
+      <a href="../../guides/new-developer-workbook/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    快速上手清单
+    Developer Workbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/documentation-todolist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation Checklist
   
 
     
@@ -361,7 +389,203 @@
   <span class="md-ellipsis">
     
   
-    APP 开发
+    APP Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/data-relationships/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Relationships
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/authorization-and-roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/cli-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/quickstart-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart Checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/advanced-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Architecture
   
 
     
@@ -409,7 +633,7 @@
   <span class="md-ellipsis">
     
   
-    API 约定
+    API Contracts
   
 
     
@@ -425,7 +649,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API 约定
+    API Contracts
   
 
           </label>
@@ -447,6 +671,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environment
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -454,7 +696,7 @@
   <span class="md-ellipsis">
     
   
-    平台环境
+    Environment
   
 
     
@@ -463,6 +705,69 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#settings-schema-high-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings schema (high level)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#profiles-and-recommended-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profiles and recommended values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variable-quick-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment variable quick map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#response-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Response format
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -483,7 +788,7 @@
   <span class="md-ellipsis">
     
   
-    App 注册
+    App Registry
   
 
     
@@ -511,7 +816,7 @@
   <span class="md-ellipsis">
     
   
-    租户隔离
+    Tenant Isolation
   
 
     
@@ -545,12 +850,64 @@
                   <div class="md-sidebar__inner">
                     
 
-<nav class="md-nav md-nav--secondary" aria-label="目录">
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
   
     
   
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#settings-schema-high-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings schema (high level)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#profiles-and-recommended-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profiles and recommended values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variable-quick-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment variable quick map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#response-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Response format
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -567,12 +924,58 @@
 
 
 
-<h1 id="api-envelope-error-contract">API Envelope &amp; Error Contract</h1>
-<p>所有 JSON 响应采用统一 Envelope（<code>code/message/data/list/pagination/details/request_id</code>）。</p>
+<h1 id="api-environment-contract">API Environment Contract</h1>
+<p><code>core check-config</code> validates runtime configuration; <code>core config template/drift-check</code> standardize profiles.</p>
+<h2 id="settings-schema-high-level">Settings schema (high level)</h2>
 <ul>
-<li>200/4xx/5xx 错误都以稳定 <code>code</code> 形式返回。</li>
-<li>建议直接复用 <code>core.serialization.ok</code> / <code>fail</code>。</li>
+<li><code>app</code>: name/version/env/debug</li>
+<li><code>api</code>: prefix, error status mode</li>
+<li><code>security</code>: jwt secret, cors, trusted hosts, max request size</li>
+<li><code>database</code>: url/read_url/pool settings/tenant fallback</li>
+<li><code>observability</code>: service role and metrics</li>
+<li><code>task_queue</code>: provider, attempts, backoff</li>
+<li><code>scheduler</code>: provider and lock settings</li>
+<li><code>tenant_lifecycle</code>: tenant state controls</li>
+<li><code>dependencies</code>: redis/object storage/oidc URLs</li>
+<li><code>installed_apps</code>: list of module paths</li>
 </ul>
+<p>Env parsing uses nested delimiter with <code>__</code> (example: <code>APP__ENV</code>).</p>
+<h2 id="profiles-and-recommended-values">Profiles and recommended values</h2>
+<ul>
+<li><code>local</code>: <code>core config template --profile local --json</code></li>
+<li><code>private</code>: <code>core config template --profile private --json</code></li>
+<li><code>cloud</code>: <code>core config template --profile cloud --json</code></li>
+</ul>
+<p><code>core config drift-check --profile &lt;profile&gt; --json</code> compares actual env to profile and returns:</p>
+<ul>
+<li><code>has_drift</code>: boolean</li>
+<li><code>checked</code>: key list</li>
+<li><code>missing</code>: missing required entries</li>
+<li><code>mismatched</code>: values that do not match expectation</li>
+</ul>
+<h2 id="environment-variable-quick-map">Environment variable quick map</h2>
+<p>Examples used by templates:</p>
+<ul>
+<li><code>APP__ENV</code> (local/private/cloud)</li>
+<li><code>DATABASE__URL</code></li>
+<li><code>API__ERROR_HTTP_STATUS_MODE</code>: usually <code>standard</code></li>
+<li><code>SECURITY__JWT_SECRET</code> (local dev) or <code>SECURITY__JWT_SECRET_REF</code> (private/cloud)</li>
+<li><code>SECURITY__TRUSTED_HOSTS</code></li>
+<li><code>SECURITY__CORS_ORIGINS</code></li>
+<li><code>TASK_QUEUE__PROVIDER</code> (<code>sync</code> | <code>database</code>)</li>
+<li><code>SCHEDULER__PROVIDER</code> (<code>local</code> | <code>apscheduler</code> | <code>celery_beat</code>)</li>
+<li><code>OBSERVABILITY__SERVICE_ROLE</code></li>
+<li><code>INSTALLED_APPS</code> (JSON array string)</li>
+</ul>
+<h2 id="response-format">Response format</h2>
+<p>Most JSON mode CLI responses use:</p>
+<ul>
+<li><code>ok</code>: bool</li>
+<li><code>command</code>: command path (string)</li>
+<li><code>error</code>: error object for failure modes</li>
+<li>command-specific payload fields (drift/app checks/results)</li>
+</ul>
+<p>Use <code>--json</code> for all operations used in scripts and CI.</p>
 
 
 
@@ -622,7 +1025,7 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>

@@ -11,10 +11,10 @@
       
       
       
-        <link rel="prev" href="../cli-guide/">
+        <link rel="prev" href="../data-relationships/">
       
       
-        <link rel="next" href="../troubleshooting/">
+        <link rel="next" href="../cli-guide/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Quickstart Checklist - fastapi-foundation</title>
+        <title>Authorization & Roles - fastapi-foundation</title>
       
     
     
@@ -66,7 +66,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quickstart-checklist" class="md-skip">
+        <a href="#authorization-roles" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quickstart Checklist
+              Authorization & Roles
             
           </span>
         </div>
@@ -465,10 +465,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../authorization-and-roles/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & Roles
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -484,6 +511,159 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1）框架权限层级（先背下来）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2permissionspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2）PermissionSpec 的真实字段与约束
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2）PermissionSpec 的真实字段与约束">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create_router" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_router 与权限的关系（最容易错）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3）路由权限怎么对齐（实操）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4authorizationdecision-route_authorization_decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4）AuthorizationDecision 与 route_authorization_decision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5roletemplate-rolegrant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5）角色配置（RoleTemplate + RoleGrant + 投影）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5）角色配置（RoleTemplate + RoleGrant + 投影）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        推荐流程：先发放模板，再触发投影
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rolegrant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        角色最常见路径（无需直接操作 RoleGrant）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        直接 SQL 的角色排障（高级场景）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        角色变更后为什么会“看不到生效”
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6）日常排障
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -521,37 +701,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Quickstart Checklist
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../quickstart-checklist/" class="md-nav__link">
         
   
   
@@ -567,92 +720,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#a" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        A. 环境与配置
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#b" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        B. 模块与路由
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#c" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        C. 权限模型
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#d" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        D. 运行与健康
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#e" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        E. 认证/租户链路
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#f" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        F. 迁移与任务（发布前可选）
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -886,10 +953,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#a" class="md-nav__link">
+  <a href="#1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A. 环境与配置
+        1）框架权限层级（先背下来）
       
     </span>
   </a>
@@ -897,10 +964,38 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#b" class="md-nav__link">
+  <a href="#2permissionspec" class="md-nav__link">
     <span class="md-ellipsis">
       
-        B. 模块与路由
+        2）PermissionSpec 的真实字段与约束
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2）PermissionSpec 的真实字段与约束">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create_router" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_router 与权限的关系（最容易错）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3）路由权限怎么对齐（实操）
       
     </span>
   </a>
@@ -908,10 +1003,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#c" class="md-nav__link">
+  <a href="#4authorizationdecision-route_authorization_decision" class="md-nav__link">
     <span class="md-ellipsis">
       
-        C. 权限模型
+        4）AuthorizationDecision 与 route_authorization_decision
       
     </span>
   </a>
@@ -919,32 +1014,71 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#d" class="md-nav__link">
+  <a href="#5roletemplate-rolegrant" class="md-nav__link">
     <span class="md-ellipsis">
       
-        D. 运行与健康
+        5）角色配置（RoleTemplate + RoleGrant + 投影）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5）角色配置（RoleTemplate + RoleGrant + 投影）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        推荐流程：先发放模板，再触发投影
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#e" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#rolegrant" class="md-nav__link">
     <span class="md-ellipsis">
       
-        E. 认证/租户链路
+        角色最常见路径（无需直接操作 RoleGrant）
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#f" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#sql" class="md-nav__link">
     <span class="md-ellipsis">
       
-        F. 迁移与任务（发布前可选）
+        直接 SQL 的角色排障（高级场景）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        角色变更后为什么会“看不到生效”
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6）日常排障
       
     </span>
   </a>
@@ -968,59 +1102,112 @@
 
 
 
-<h1 id="quickstart-checklist">Quickstart Checklist（上线前必跑）</h1>
-<p>将下面命令按顺序执行，并在每步确认返回值。</p>
-<h2 id="a">A. 环境与配置</h2>
+<h1 id="authorization-roles">Authorization &amp; Roles（权限与角色）</h1>
+<p>这份说明用于新手快速判断：“为什么 403、为什么要写 <code>PermissionSpec</code>、角色怎么生效”。</p>
+<h2 id="1">1）框架权限层级（先背下来）</h2>
+<p><code>route permission</code>（路由声明） -&gt; <code>PermissionSpec</code>（模块声明） -&gt; <code>RoleGrant</code>（主体授权） -&gt; <code>ProjectedPolicy</code>（运行时投影）</p>
+<p>路由里出现的每个字符串都必须是 <code>resource:action</code>，例如：
+- <code>tenant:manage</code>
+- <code>book:write</code>
+- <code>role_grant:grant</code></p>
+<h2 id="2permissionspec">2）<code>PermissionSpec</code> 的真实字段与约束</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">core.permissions</span><span class="w"> </span><span class="kn">import</span> <span class="n">PermissionSpec</span>
+
+<span class="n">PermissionSpec</span><span class="p">(</span>
+    <span class="n">resource</span><span class="o">=</span><span class="s2">&quot;book&quot;</span><span class="p">,</span>
+    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;write&quot;</span><span class="p">,</span>
+    <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;tenant&quot;</span><span class="p">,</span>                <span class="c1"># tenant / own / resource / platform</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Create/update books&quot;</span><span class="p">,</span>
+    <span class="n">risk_level</span><span class="o">=</span><span class="s2">&quot;high&quot;</span><span class="p">,</span>             <span class="c1"># low/normal/high/critical</span>
+<span class="p">)</span>
+</code></pre></div>
 <ul>
-<li>[ ] <code>.env</code> 已包含：</li>
-<li><code>APP__ENV</code></li>
-<li><code>APP__NAME</code></li>
-<li><code>DATABASE__URL</code></li>
-<li><code>SECURITY__JWT_SECRET</code></li>
-<li><code>INSTALLED_APPS</code></li>
-<li>[ ] <code>core config template --profile local --json</code> 与本地 <code>DATABASE__URL</code>、<code>APP__NAME</code> 一致</li>
-<li>[ ] <code>core config drift-check --profile local --json</code> 无关键漂移</li>
-<li>[ ] <code>core check-config --profile local --json</code> 返回 <code>ok=true</code></li>
+<li><code>scope</code> 合法值：<code>tenant</code>、<code>own</code>、<code>resource</code>、<code>platform</code></li>
+<li><code>create_router</code> 的 <code>permission_scope</code> 仅支持 <code>tenant</code> 或 <code>platform</code></li>
+<li><code>create_router</code> 不允许 <code>public=True</code> 同时声明权限</li>
 </ul>
-<h2 id="b">B. 模块与路由</h2>
+<h3 id="create_router">create_router 与权限的关系（最容易错）</h3>
 <ul>
-<li>[ ] <code>core bootstrap-app &lt;label&gt; --target-root src --package platform_apps --json</code> 成功</li>
-<li>[ ] <code>core check-app &lt;module&gt;.module --json</code> 返回 <code>ok=true</code></li>
-<li>[ ] <code>core check-app --all</code> 无阻塞错误</li>
-<li>[ ] <code>core list-apps --json</code> 显示模块名、版本、权限、路由数</li>
+<li>有 <code>permissions</code> 时，如果不写 <code>permission_scope</code>，默认就是 <code>tenant</code></li>
+<li>非 <code>public</code> 且 <code>permissions</code> 为空时，不会进行细粒度权限校验</li>
+<li>公开路由只能是：</li>
+<li><code>create_router(..., public=True)</code>  </li>
+<li>且不能带 <code>permissions</code> 或 <code>permission_scope</code></li>
 </ul>
-<h2 id="c">C. 权限模型</h2>
+<h2 id="3">3）路由权限怎么对齐（实操）</h2>
+<p>在路由文件：</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">core.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_router</span>
+
+<span class="n">book_read_router</span> <span class="o">=</span> <span class="n">create_router</span><span class="p">(</span>
+    <span class="s2">&quot;/books&quot;</span><span class="p">,</span>
+    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;books&quot;</span><span class="p">],</span>
+    <span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;book:read&quot;</span><span class="p">],</span>
+    <span class="n">permission_scope</span><span class="o">=</span><span class="s2">&quot;tenant&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>在模块文件：</p>
+<div class="highlight"><pre><span></span><code><span class="n">PERMISSIONS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">PermissionSpec</span><span class="p">(</span><span class="n">resource</span><span class="o">=</span><span class="s2">&quot;book&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;read&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;tenant&quot;</span><span class="p">),</span>
+    <span class="n">PermissionSpec</span><span class="p">(</span><span class="n">resource</span><span class="o">=</span><span class="s2">&quot;book&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;write&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="o">=</span><span class="s2">&quot;tenant&quot;</span><span class="p">,</span> <span class="n">risk_level</span><span class="o">=</span><span class="s2">&quot;high&quot;</span><span class="p">),</span>
+<span class="p">]</span>
+</code></pre></div>
+<p>常见不一致导致 <code>PERMISSION_DENIED</code>：
+- 路由声明了 <code>book:write</code> 但 <code>PermissionSpec</code> 没有写入
+- <code>scope</code> 写成 <code>platform</code> 而路由实际是 tenant 数据
+- 路由 <code>permission_scope</code> 与 <code>PermissionSpec</code> 的资源域不匹配</p>
+<h2 id="4authorizationdecision-route_authorization_decision">4）<code>AuthorizationDecision</code> 与 <code>route_authorization_decision</code></h2>
+<p>任何有写行为的接口建议加入：</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">Depends</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">core.permissions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AuthorizationDecision</span><span class="p">,</span> <span class="n">route_authorization_decision</span>
+
+<span class="n">decision</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">AuthorizationDecision</span><span class="p">,</span> <span class="n">Depends</span><span class="p">(</span><span class="n">route_authorization_decision</span><span class="p">)]</span>
+</code></pre></div>
+<p><code>decision</code> 里可用于日志/审计输出，确认该次请求实际命中的：
+- <code>tenant_id</code>
+- <code>user_id</code>
+- <code>resource</code>
+- <code>action</code>
+- <code>policy_version</code></p>
+<h2 id="5roletemplate-rolegrant">5）角色配置（RoleTemplate + RoleGrant + 投影）</h2>
+<p>角色和权限在数据库层由 3 张表承载（实际字段见源码模型）：
+- <code>role_templates</code>：角色定义（<code>scope + name + version + permissions</code>）
+- <code>role_grants</code>：给某个主体发放的角色
+- <code>projected_policies</code>：投影结果（运行时生效视图）</p>
+<h3 id="_1">推荐流程：先发放模板，再触发投影</h3>
+<ol>
+<li>确认角色模板和权限声明已存在（通常在部署/种子步骤维护）</li>
+<li>执行角色指派</li>
+<li>执行权限投影同步：<br />
+<code>core permissions reconcile --installed-app ... --database-url "$DATABASE__URL" --repair --json</code></li>
+</ol>
+<h3 id="rolegrant">角色最常见路径（无需直接操作 <code>RoleGrant</code>）</h3>
 <ul>
-<li>[ ] <code>PermissionSpec</code> 中 <code>resource:action</code> 与路由权限字符串一致</li>
-<li>[ ] <code>route_authorization_decision</code> 已用于写接口</li>
-<li>[ ] <code>core permissions catalog --installed-app ... --json</code> 返回预期权限</li>
-<li>[ ] <code>core permissions reconcile --installed-app ... --database-url "$DATABASE__URL" --repair --json</code> 通过</li>
+<li><code>POST /api/v1/platform/tenants/{tenant_id}/invitations</code> payload 有 <code>role_template_id</code></li>
+<li>用户完成邀请后系统会在 <code>TENANT_MEMBER</code> 激活时尝试自动授予角色</li>
 </ul>
-<h2 id="d">D. 运行与健康</h2>
+<h3 id="sql">直接 SQL 的角色排障（高级场景）</h3>
+<p>如果你是 DBA/运维，且必须离线修复角色，可以按 DB 结构做最小排查：</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- 查已有角色模板</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="k">scope</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="k">version</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">role_templates</span><span class="w"> </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="k">scope</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">;</span>
+
+<span class="c1">-- 查某租户角色映射</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="n">tenant_id</span><span class="p">,</span><span class="w"> </span><span class="n">subject_type</span><span class="p">,</span><span class="w"> </span><span class="n">subject_id</span><span class="p">,</span><span class="w"> </span><span class="n">role_template_id</span>
+<span class="k">FROM</span><span class="w"> </span><span class="n">role_grants</span>
+<span class="k">WHERE</span><span class="w"> </span><span class="n">tenant_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;tenant_demo&#39;</span><span class="p">;</span>
+</code></pre></div>
+<h3 id="_2">角色变更后为什么会“看不到生效”</h3>
+<ol>
+<li>没执行 <code>core permissions reconcile</code></li>
+<li>reconcile 未加 <code>--repair</code>（只读模式不会写入投影）</li>
+<li>缓存未清（有缓存层时重跑流程并确认 <code>policy_version</code>）</li>
+</ol>
+<h2 id="6">6）日常排障</h2>
 <ul>
-<li>[ ] <code>core migrate plan --json</code> 能生成计划</li>
-<li>[ ] <code>core serve --dry-run --json</code> 成功</li>
-<li>[ ] <code>core serve --run --dry-run --json</code> 可再次验证不改动状态</li>
-<li>[ ] 运行服务后：</li>
-<li>[ ] <code>/healthz</code> 可达</li>
-<li>[ ] <code>/readyz</code> 可达</li>
-<li>[ ] <code>/version</code> 有版本元数据</li>
-</ul>
-<h2 id="e">E. 认证/租户链路</h2>
-<ul>
-<li>[ ] 可成功登录：<code>POST /api/v1/auth/login</code>（拿到 token）</li>
-<li>[ ] <code>GET /api/v1/me</code> 使用 token 成功</li>
-<li>[ ] <code>TENANT_CONTEXT_CONFLICT</code> / <code>TENANT_ACCESS_DENIED</code> 已按预期理解</li>
-<li>[ ] 有权限用户可访问受保护业务路由</li>
-</ul>
-<h2 id="f">F. 迁移与任务（发布前可选）</h2>
-<ul>
-<li>[ ] <code>core smoke --profile local --json</code>（或目标环境 <code>--profile</code>）通过</li>
-<li>[ ] <code>core backup-check --profile local --json</code> 检查通过或给出修复路径</li>
-<li>[ ] 出现任务退避/死信时运行：</li>
-<li><code>core outbox dead-letter list --json</code></li>
-<li><code>core tasks failed list --json</code></li>
-<li><code>core idempotency diagnose --tenant-id ... --user-id ... --route ... --idempotency-key ... --json</code></li>
+<li><code>PERMISSION_DENIED</code>：先检查路由字符串、模板、scope、<code>route_authorization_decision</code></li>
+<li><code>TENANT_CONTEXT_CONFLICT</code>：<code>tenant_id</code> 与 header 不一致</li>
+<li>新增/修改角色后必须 run <code>reconcile</code></li>
+<li>读不到角色权限时，优先看 <code>PermissionSpec</code> 是否和模块实际路由一致</li>
 </ul>
 
 
