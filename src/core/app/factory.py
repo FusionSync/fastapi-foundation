@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from swagger_ui import starlette_api_doc
 
 from core.admin import AdminRegistry, build_admin_router
 from core.app.diagnostics import build_startup_diagnostics, merge_provider_readiness
@@ -56,6 +57,8 @@ def create_app(
     app = FastAPI(
         title=resolved_settings.app.name,
         version=resolved_settings.app.version,
+        docs_url=None,
+        redoc_url=None,
         lifespan=_app_lifespan(database_runtime),
     )
     app.state.settings = resolved_settings
@@ -64,6 +67,7 @@ def create_app(
     app.state.metrics_registry = MetricsRegistry()
     app.state.readiness_database_probe = DatabaseReadinessProbe(resolved_settings.database.url)
 
+    _register_local_docs(app, resolved_settings)
     _register_security_middleware(app, resolved_settings)
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(HttpRequestLoggingMiddleware)
@@ -116,6 +120,20 @@ def _register_security_middleware(app: FastAPI, settings: Settings) -> None:
             max_body_bytes=settings.security.max_request_body_bytes,
         )
     app.add_middleware(SecurityHeadersMiddleware)
+
+
+def _register_local_docs(app: FastAPI, settings: Settings) -> None:
+    starlette_api_doc(
+        app,
+        url_prefix="/docs",
+        base_url="/docs",
+        config_rel_url=app.openapi_url or "/openapi.json",
+        title=f"{settings.app.name} - API Docs",
+    )
+
+    @app.get("/docs/openapi.json", include_in_schema=False)
+    async def swagger_ui_openapi_schema():
+        return app.openapi()
 
 
 def _register_system_routes(app: FastAPI, settings: Settings) -> None:

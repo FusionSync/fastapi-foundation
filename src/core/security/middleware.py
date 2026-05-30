@@ -22,6 +22,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         for name, value in self.headers.items():
             response.headers.setdefault(name, value)
+        if request.url.path in {"/docs", "/docs/"}:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
+            )
         return response
 
 
