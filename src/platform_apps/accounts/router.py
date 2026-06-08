@@ -449,7 +449,6 @@ def _user_read(user: User) -> dict[str, object]:
         "email": user.email,
         "display_name": user.display_name,
         "status": user.status,
-        "auth_provider": user.auth_provider,
     }
 
 

@@ -26,8 +26,6 @@ User
   email
   display_name
   status
-  auth_provider
-  external_id
   token_version
 
 UserCredential
@@ -80,8 +78,8 @@ Accounts 负责本地用户与外部 subject 的映射；外部 provider 的 OID
 
 第一版落点：
 
-- `platform_apps.accounts.models.User` 保存本地用户基础资料和 `token_version`。
-- `UserCredential` 和 `ExternalIdentity` 预留本地密码与 OIDC/Logto/Keycloak subject 映射。
+- `platform_apps.accounts.models.User` 是全局用户表，只保存本地用户基础资料、状态和 `token_version`。
+- `UserCredential` 保存本地密码凭据；`ExternalIdentity` 是唯一的外部 provider/subject 到全局 `User` 的映射。
 - `UserSession` 保存 session_id、tenant_id、auth_provider、status 和创建时的 token_version。
 - `AccountsService.create_session()` 只允许 active user 创建 session；如果 session 绑定 tenant，必须先验证 Tenant 存在、用户是 active member，并通过 tenant lifecycle 的 `login` gate。
 - `AccountsService.create_session()` 可注入 `AuditService` 写 `session.created` 强一致审计，记录 session、tenant、auth_provider、request_id 和 token_version。
@@ -89,7 +87,7 @@ Accounts 负责本地用户与外部 subject 的映射；外部 provider 的 OID
 - `AccountsService.create_local_user()` 创建 local user 并写 `UserCredential.password_hash`。
 - `AccountsService.verify_local_password()` 使用 `core.security.PasswordHasher` 校验本地密码。
 - `AccountsService.authenticate_local_login()` 串联本地密码校验和 session 创建；失败时写 `account.login_failed` 审计并发布 `account.login_failed` outbox event。
-- `AccountsService.authenticate_external_login()` 根据 provider/subject 查找 `ExternalIdentity` 或 provider-native `User.external_id`，再创建本地 `UserSession`；未绑定外部身份时返回 `AUTH_INVALID_TOKEN`。
+- `AccountsService.authenticate_external_login()` 只根据 provider/subject 查找 `ExternalIdentity`，再创建本地 `UserSession`；未绑定外部身份时返回 `AUTH_INVALID_TOKEN`。
 - `AccountsService.refresh_session_token()` 校验 `TokenClaims` 与 `UserSession/User` fact 一致后返回可重新签发本地 JWT 的 claims，并写 `session.refreshed` 审计和 `account.session_refreshed` outbox event。
 - `platform_apps.accounts.router` 提供 local login/logout/refresh、外部 provider authorize/callback、`/me` 当前用户资料、密码重置、外部身份绑定和 session 管理 API；route 层签发本地 JWT，service 层仍只维护会话事实和安全事件。
 - `AccountsService.update_profile()`、`reset_local_password()`、`bind_external_identity()`、`list_user_sessions()` 和 `revoke_own_session()` 支撑用户自助资料和 session 管理。

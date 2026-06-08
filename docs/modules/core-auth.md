@@ -47,7 +47,6 @@ core 应提供统一 `CurrentUser`：
 
 ```text
 id
-external_id
 email
 display_name
 auth_provider

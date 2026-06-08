@@ -10,7 +10,6 @@ class UserRead(BaseSchema):
     email: str
     display_name: str
     status: str
-    auth_provider: str
 
 
 class UserCreateRequest(CreateSchema):

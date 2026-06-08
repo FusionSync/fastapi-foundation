@@ -48,8 +48,6 @@ async def test_idempotency_guard_replays_account_create_without_duplicate_user(
             handler=lambda: AccountsService(uow.session).create_user(
                 email="owner@example.com",
                 display_name="Owner",
-                auth_provider="local",
-                external_id="owner@example.com",
             ),
             response_code="USER_CREATED",
             response_builder=lambda user: {"user_id": user.id, "email": user.email},

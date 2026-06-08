@@ -257,7 +257,6 @@ async def _seed_file_api_facts(database_url: str) -> None:
                     email="user@example.com",
                     display_name="User",
                     status="active",
-                    auth_provider="local",
                     token_version=1,
                 )
             )

@@ -43,7 +43,6 @@ class AuthSessionValidator:
             invalid_auth_token("tenant_mismatch")
         return CurrentUser(
             id=principal.user_id,
-            external_id=principal.external_id,
             email=principal.email,
             display_name=principal.display_name,
             auth_provider=principal.auth_provider,

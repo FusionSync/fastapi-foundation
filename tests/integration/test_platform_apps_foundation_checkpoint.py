@@ -44,8 +44,6 @@ async def test_platform_apps_checkpoint_enforces_lifecycle_gates_and_session_aud
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         user_session = await accounts.create_session(

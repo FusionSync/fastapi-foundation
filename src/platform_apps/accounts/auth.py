@@ -19,7 +19,6 @@ class AccountsAuthSessionStore:
             return None
         return SessionPrincipal(
             user_id=user.id,
-            external_id=user.external_id,
             email=user.email,
             display_name=user.display_name,
             auth_provider=user_session.auth_provider,

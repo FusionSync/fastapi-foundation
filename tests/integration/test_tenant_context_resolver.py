@@ -95,7 +95,6 @@ async def test_database_tenant_context_resolver_rejects_disallowed_tenant_state(
 def _auth_user(user_id: str, *, tenant_id: str | None) -> AuthenticatedUser:
     return AuthenticatedUser(
         id=user_id,
-        external_id=None,
         email="owner@example.com",
         display_name="Owner",
         auth_provider="local",

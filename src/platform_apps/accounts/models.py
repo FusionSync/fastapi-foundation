@@ -13,15 +13,12 @@ class User(TimestampMixin, BaseModel):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
-        UniqueConstraint("auth_provider", "external_id", name="uq_users_provider_external_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
-    auth_provider: Mapped[str] = mapped_column(String(64), nullable=False, default="local")
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

@@ -288,7 +288,6 @@ async def _seed_security_facts(database_url: str, *, include_policy: bool) -> No
                     email="owner@example.com",
                     display_name="Owner",
                     status="active",
-                    auth_provider="local",
                     token_version=1,
                 )
             )
@@ -336,7 +335,6 @@ async def _seed_auth_only_facts(
                     email="owner@example.com",
                     display_name="Owner",
                     status="active",
-                    auth_provider="local",
                     token_version=1,
                 )
             )

@@ -89,7 +89,6 @@ def create_tenant_user_fixture(
     )
     auth_user = AuthCurrentUser(
         id=user_id,
-        external_id=None,
         email=email,
         display_name=display_name,
         auth_provider=auth_provider,

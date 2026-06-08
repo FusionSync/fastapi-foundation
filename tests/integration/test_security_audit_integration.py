@@ -168,8 +168,6 @@ async def test_disable_user_writes_security_audit_and_revokes_sessions(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         uow.session.add(
             Tenant(

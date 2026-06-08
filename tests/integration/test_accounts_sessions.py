@@ -44,8 +44,6 @@ async def test_create_user_and_session_for_active_user(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         session = await accounts.create_session(
@@ -71,8 +69,6 @@ async def test_create_session_writes_security_audit_when_audit_is_configured(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         user_session = await accounts.create_session(
@@ -105,8 +101,6 @@ async def test_disabled_user_cannot_create_new_session_and_existing_sessions_are
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         active_session = await accounts.create_session(
@@ -153,8 +147,6 @@ async def test_tenant_lifecycle_can_revoke_tenant_sessions_through_hook(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         _add_tenant_member(uow.session, tenant_id="tenant-b", user_id=user.id)
@@ -301,8 +293,6 @@ async def test_token_refresh_validates_session_and_emits_security_event(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         user_session = await accounts.create_session(
@@ -349,8 +339,6 @@ async def test_auth_session_validator_rejects_revoked_session_and_disabled_user(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         user_session = await accounts.create_session(
@@ -389,8 +377,6 @@ async def test_create_session_requires_active_tenant_membership(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant(uow.session, tenant_id="tenant-a")
 
@@ -425,8 +411,6 @@ async def test_create_session_requires_tenant_login_allowed(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(
             uow.session,
@@ -456,8 +440,6 @@ async def test_disable_user_requires_authorization_decision(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
 
         with pytest.raises(AppError) as exc_info:
@@ -480,8 +462,6 @@ async def test_revoke_tenant_sessions_requires_authorization_decision(
         user = await accounts.create_user(
             email="owner@example.com",
             display_name="Owner",
-            auth_provider="local",
-            external_id="owner@example.com",
         )
         _add_tenant_member(uow.session, tenant_id="tenant-a", user_id=user.id)
         await accounts.create_session(

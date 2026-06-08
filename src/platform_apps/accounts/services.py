@@ -46,34 +46,20 @@ class AccountsService:
         *,
         email: str,
         display_name: str,
-        auth_provider: str,
-        external_id: str | None = None,
     ) -> User:
         normalized_email = email.strip().lower()
         self._validate_user_input(
             email=normalized_email,
             display_name=display_name,
-            auth_provider=auth_provider,
         )
         user = User(
             email=normalized_email,
             display_name=display_name,
             status="active",
-            auth_provider=auth_provider,
-            external_id=external_id,
             token_version=1,
         )
         self.session.add(user)
         await self.session.flush()
-        if external_id:
-            self.session.add(
-                ExternalIdentity(
-                    user_id=user.id,
-                    provider=auth_provider,
-                    subject=external_id,
-                )
-            )
-            await self.session.flush()
         return user
 
     async def create_local_user(
@@ -87,8 +73,6 @@ class AccountsService:
         user = await self.create_user(
             email=normalized_email,
             display_name=display_name,
-            auth_provider="local",
-            external_id=normalized_email,
         )
         self.session.add(
             UserCredential(
@@ -102,9 +86,7 @@ class AccountsService:
     async def verify_local_password(self, *, email: str, password: str) -> User:
         normalized_email = email.strip().lower()
         result = await self.session.execute(
-            select(User)
-            .where(User.email == normalized_email)
-            .where(User.auth_provider == "local")
+            select(User).where(User.email == normalized_email)
         )
         user = result.scalars().first()
         if user is None:
@@ -297,12 +279,6 @@ class AccountsService:
         new_password: str,
     ) -> None:
         user = await self._get_user(user_id)
-        if user.auth_provider != "local":
-            raise AppError(
-                "VALIDATION_ERROR",
-                "Only local users can reset local password",
-                status_code=400,
-            )
         credential = await self.session.get(UserCredential, user.id)
         if credential is None:
             invalid_auth_token("missing_credentials")
@@ -582,15 +558,6 @@ class AccountsService:
         if not resolved_provider or not resolved_subject:
             invalid_auth_token("missing_external_identity")
 
-        direct_user = await self.session.execute(
-            select(User)
-            .where(User.auth_provider == resolved_provider)
-            .where(User.external_id == resolved_subject)
-        )
-        user = direct_user.scalars().first()
-        if user is not None:
-            return user
-
         identity_result = await self.session.execute(
             select(ExternalIdentity)
             .where(ExternalIdentity.provider == resolved_provider)
@@ -685,14 +652,11 @@ class AccountsService:
         *,
         email: str,
         display_name: str,
-        auth_provider: str,
     ) -> None:
         if not email or "@" not in email:
             raise AppError("VALIDATION_ERROR", "valid email is required", status_code=400)
         if not display_name.strip():
             raise AppError("VALIDATION_ERROR", "display_name is required", status_code=400)
-        if not auth_provider.strip():
-            raise AppError("VALIDATION_ERROR", "auth_provider is required", status_code=400)
 
 
 def _auth_failure_reason(error: AppError) -> str:

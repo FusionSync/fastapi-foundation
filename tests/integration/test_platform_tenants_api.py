@@ -184,7 +184,6 @@ async def _seed_platform_actor(database_url: str) -> None:
                     email="owner@example.com",
                     display_name="Owner",
                     status="active",
-                    auth_provider="local",
                     token_version=1,
                 )
             )
@@ -262,7 +261,6 @@ async def _seed_invited_user(database_url: str) -> None:
                     email="new.user@example.com",
                     display_name="New User",
                     status="active",
-                    auth_provider="local",
                     token_version=1,
                 )
             )

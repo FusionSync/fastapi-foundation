@@ -72,7 +72,6 @@ async def test_local_jwt_provider_issues_verifies_and_authenticates_claims() -> 
             {
                 "sess-1": SessionPrincipal(
                     user_id="user-1",
-                    external_id=None,
                     email="owner@example.com",
                     display_name="Owner",
                     auth_provider="local",
@@ -165,7 +164,6 @@ async def test_auth_session_validator_returns_current_user_for_active_session() 
             {
                 "sess-1": SessionPrincipal(
                     user_id="user-1",
-                    external_id="ext-1",
                     email="owner@example.com",
                     display_name="Owner",
                     auth_provider="local",
@@ -191,7 +189,6 @@ async def test_auth_session_validator_returns_current_user_for_active_session() 
     )
 
     assert current_user.id == "user-1"
-    assert current_user.external_id == "ext-1"
     assert current_user.email == "owner@example.com"
     assert current_user.display_name == "Owner"
     assert current_user.auth_provider == "local"
@@ -218,7 +215,6 @@ async def test_auth_session_validator_rejects_revoked_or_stale_facts(
 ) -> None:
     principal_values = {
         "user_id": "user-1",
-        "external_id": None,
         "email": "owner@example.com",
         "display_name": "Owner",
         "auth_provider": "local",

@@ -15,7 +15,6 @@ class TokenClaims:
 @dataclass(frozen=True, slots=True)
 class CurrentUser:
     id: str
-    external_id: str | None
     email: str
     display_name: str
     auth_provider: str
@@ -27,7 +26,6 @@ class CurrentUser:
 @dataclass(frozen=True, slots=True)
 class SessionPrincipal:
     user_id: str
-    external_id: str | None
     email: str
     display_name: str
     auth_provider: str
