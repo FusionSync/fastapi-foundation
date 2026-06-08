@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
-from core.events import EventRegistry
+from core.events import EventEnvelope, EventRegistry
 from core.idempotency import IdempotencyStore
 from core.locks import LockProvider
 from core.observability import MetricsRegistry
@@ -15,6 +16,11 @@ class DispatchStats:
     published: int = 0
     failed: int = 0
     dead_lettered: int = 0
+
+
+class OutboxExternalPublisher(Protocol):
+    async def publish(self, envelope: EventEnvelope) -> None:
+        raise NotImplementedError
 
 
 class OutboxDispatcher:
@@ -31,6 +37,7 @@ class OutboxDispatcher:
         lock_provider: LockProvider | None = None,
         lock_key: str = "outbox:dispatch",
         lock_ttl_seconds: int = 60,
+        external_publisher: OutboxExternalPublisher | None = None,
     ) -> None:
         self.repository = repository
         self.registry = registry
@@ -42,6 +49,7 @@ class OutboxDispatcher:
         self.lock_provider = lock_provider
         self.lock_key = lock_key
         self.lock_ttl_seconds = lock_ttl_seconds
+        self.external_publisher = external_publisher
 
     async def dispatch_once(self) -> DispatchStats:
         lock_acquired = False
@@ -72,10 +80,14 @@ class OutboxDispatcher:
         dead_lettered = 0
         for event in events:
             try:
-                await self.registry.dispatch(
-                    self.repository.to_envelope(event),
-                    idempotency_store=self.idempotency_store,
-                )
+                envelope = self.repository.to_envelope(event)
+                if self.external_publisher is not None:
+                    await self.external_publisher.publish(envelope)
+                else:
+                    await self.registry.dispatch(
+                        envelope,
+                        idempotency_store=self.idempotency_store,
+                    )
             except Exception as exc:
                 await self.repository.mark_failed(
                     event,

@@ -41,10 +41,12 @@ from core.scheduler import (
     wrap_external_scheduler_provider,
 )
 from core.tasks import (
+    CeleryTaskProvider,
     DatabaseQueueTaskProvider,
     SyncTaskProvider,
     TaskRegistry,
     TaskRunRepository,
+    create_celery_app,
     run_task_worker_loop,
 )
 
@@ -103,7 +105,7 @@ def register_operation_commands(subparsers: argparse._SubParsersAction) -> None:
             role_parser.add_argument("--database-url")
             role_parser.add_argument("--installed-app", action="append", default=[])
             role_parser.add_argument("--queue", default="default")
-            role_parser.add_argument("--provider", choices=["sync", "database"])
+            role_parser.add_argument("--provider", choices=["sync", "database", "celery"])
             role_parser.add_argument("--max-attempts", type=int)
             role_parser.add_argument("--retry-backoff-seconds", type=int)
             role_parser.add_argument("--tenant-status", default="active")
@@ -257,7 +259,7 @@ def _handle_serve_run(args: argparse.Namespace) -> int:
     }
     if args.dry_run:
         print_payload(payload, as_json=args.as_json)
-        asyncio.run(app.state.database_engine.dispose())
+        asyncio.run(_dispose_dry_run_app(app))
         return 0 if health.ok else 1
 
     import uvicorn
@@ -265,6 +267,16 @@ def _handle_serve_run(args: argparse.Namespace) -> int:
     print_payload(payload, as_json=args.as_json)
     uvicorn.run(app, host=args.host, port=args.port, reload=args.reload, workers=args.workers)
     return 0
+
+
+async def _dispose_dry_run_app(app) -> None:
+    rabbitmq_runtime = getattr(app.state, "rabbitmq_runtime", None)
+    if rabbitmq_runtime is not None:
+        await rabbitmq_runtime.dispose()
+    redis_runtime = getattr(app.state, "redis_runtime", None)
+    if redis_runtime is not None:
+        await redis_runtime.dispose()
+    await app.state.database_engine.dispose()
 
 
 def _handle_worker_run_once(args: argparse.Namespace) -> int:
@@ -519,6 +531,10 @@ async def _run_worker_once(
                     role="worker",
             )
             repository = TaskRunRepository(uow.session)
+            if provider == "celery":
+                raise ValueError(
+                    "Celery provider is executed by a Celery worker; use core.tasks.execute"
+                )
             if provider == "database":
                 result = await DatabaseQueueTaskProvider(
                     task_registry,
@@ -658,7 +674,14 @@ def _scheduler_task_provider(
     settings: Settings,
     task_registry: TaskRegistry,
     repository: TaskRunRepository,
-) -> SyncTaskProvider | DatabaseQueueTaskProvider:
+) -> SyncTaskProvider | DatabaseQueueTaskProvider | CeleryTaskProvider:
+    if settings.task_queue.provider == "celery":
+        return CeleryTaskProvider(
+            task_registry,
+            task_repository=repository,
+            celery_app=create_celery_app(settings),
+            max_attempts=settings.task_queue.max_attempts,
+        )
     if settings.task_queue.provider == "database":
         return DatabaseQueueTaskProvider(
             task_registry,

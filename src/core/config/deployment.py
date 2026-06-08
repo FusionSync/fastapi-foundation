@@ -67,6 +67,44 @@ def render_deployment_artifacts(
     )
 
 
+def render_deployment_bundle_artifacts(
+    profile: DeploymentMode,
+    target: DeploymentArtifactTarget,
+) -> DeploymentArtifactSet:
+    artifacts = render_deployment_artifacts(profile, target)
+    if target == "docker-compose":
+        files = [
+            DeploymentArtifact(path="Dockerfile", content=_dockerfile()),
+            *artifacts.files,
+        ]
+    elif target == "helm-values":
+        values = artifacts.files[0]
+        files = [
+            DeploymentArtifact(
+                path="helm/fastapi-foundation/Chart.yaml",
+                content=_helm_chart(),
+            ),
+            DeploymentArtifact(
+                path=f"helm/fastapi-foundation/values.{profile}.yaml",
+                content=values.content,
+            ),
+            DeploymentArtifact(
+                path="helm/fastapi-foundation/templates/workload.yaml",
+                content=_helm_workload_template(),
+            ),
+        ]
+    else:
+        files = artifacts.files
+    return DeploymentArtifactSet(
+        profile=profile,
+        target=target,
+        source_template_command=artifacts.source_template_command,
+        drift_check_command=artifacts.drift_check_command,
+        validation_commands=artifacts.validation_commands,
+        files=files,
+    )
+
+
 def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
     lines = [
         f"name: fastapi-foundation-{template.profile}",
@@ -106,6 +144,32 @@ def _docker_compose_artifacts(template: ProfileTemplate) -> list[DeploymentArtif
             content="\n".join(lines) + "\n",
         )
     ]
+
+
+def _dockerfile() -> str:
+    return "\n".join(
+        [
+            "FROM python:3.12-slim",
+            "",
+            "ENV PYTHONDONTWRITEBYTECODE=1",
+            "ENV PYTHONUNBUFFERED=1",
+            "",
+            "WORKDIR /app",
+            "RUN pip install --no-cache-dir uv",
+            "",
+            "COPY pyproject.toml uv.lock ./",
+            "RUN uv sync --frozen --no-dev",
+            "",
+            "COPY src ./src",
+            "COPY run.py ./run.py",
+            "",
+            "ENV PATH=/app/.venv/bin:$PATH",
+            "ENV PYTHONPATH=/app/src",
+            "",
+            'CMD ["python", "-m", "core.cli.main", "serve", "--run"]',
+            "",
+        ]
+    )
 
 
 def _systemd_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact]:
@@ -191,6 +255,62 @@ def _helm_values_artifacts(template: ProfileTemplate) -> list[DeploymentArtifact
             content="\n".join(lines) + "\n",
         )
     ]
+
+
+def _helm_chart() -> str:
+    return "\n".join(
+        [
+            "apiVersion: v2",
+            "name: fastapi-foundation",
+            "description: FastAPI Foundation deployment chart",
+            "type: application",
+            "version: 0.1.0",
+            "appVersion: 0.1.0",
+            "",
+        ]
+    )
+
+
+def _helm_workload_template() -> str:
+    return "\n".join(
+        [
+            "{{- range $role, $workload := .Values.workloads }}",
+            "apiVersion: apps/v1",
+            "kind: Deployment",
+            "metadata:",
+            '  name: {{ printf "%s-%s" $.Chart.Name $role | trunc 63 | trimSuffix "-" }}',
+            "  labels:",
+            "    app.kubernetes.io/name: {{ $.Chart.Name }}",
+            "    app.kubernetes.io/component: {{ $role }}",
+            "spec:",
+            "  replicas: {{ default 1 $workload.replicas }}",
+            "  selector:",
+            "    matchLabels:",
+            "      app.kubernetes.io/name: {{ $.Chart.Name }}",
+            "      app.kubernetes.io/component: {{ $role }}",
+            "  template:",
+            "    metadata:",
+            "      labels:",
+            "        app.kubernetes.io/name: {{ $.Chart.Name }}",
+            "        app.kubernetes.io/component: {{ $role }}",
+            "    spec:",
+            "      containers:",
+            "        - name: {{ $role }}",
+            "          image: {{ $.Values.image.repository }}:{{ $.Values.image.tag }}",
+            "          command:",
+            "            - sh",
+            "            - -lc",
+            "            - {{ $workload.command | quote }}",
+            "          env:",
+            "            {{- range $name, $value := $workload.env }}",
+            "            - name: {{ $name }}",
+            "              value: {{ $value | quote }}",
+            "            {{- end }}",
+            "---",
+            "{{- end }}",
+            "",
+        ]
+    )
 
 
 def _env_file(

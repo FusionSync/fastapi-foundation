@@ -54,6 +54,12 @@ async def run_task_worker_loop(
     max_iterations: int | None = None,
     idle_sleep_seconds: float = 1.0,
 ) -> TaskWorkerRunResult:
+    if provider == "celery":
+        raise ValueError(
+            "Celery provider is executed by a Celery worker; use core.tasks.execute"
+        )
+    if provider not in {"sync", "database"}:
+        raise ValueError(f"Unknown task worker provider: {provider}")
     task_registry = TaskRegistry.from_app_registry(
         AppRegistry(
             module_paths,

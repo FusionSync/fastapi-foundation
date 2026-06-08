@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: storage provider、local backend、S3/MinIO-compatible backend、key path 规则和 platform files permission/resource-permission/quota/virus scan/retention cleanup 接入点已落地。
+- Done: storage provider、local backend、S3/MinIO-compatible backend、download/upload presigned URL、multipart upload 生命周期、key path 规则和 platform files permission/resource-permission/quota/virus scan/retention cleanup 接入点已落地。
 - Next: _none_
 
 ## 职责
@@ -36,10 +36,14 @@ src/core/storage/
 ```text
 put_file
 get_file
-open_read
-open_write
 delete_file
+exists
 generate_download_url
+generate_upload_url
+create_multipart_upload
+generate_multipart_part_url
+complete_multipart_upload
+abort_multipart_upload
 ```
 
 业务 app 不直接访问磁盘路径或 S3 SDK。
@@ -77,11 +81,11 @@ cloud:
 
 第一版先提供 provider 抽象和 local provider：
 
-- `StorageProvider` 定义 `put_file`、`get_file`、`delete_file`、`exists`、`generate_download_url`。
+- `StorageProvider` 定义 `put_file`、`get_file`、`delete_file`、`exists`、`generate_download_url`、`generate_upload_url`、`create_multipart_upload`、`generate_multipart_part_url`、`complete_multipart_upload` 和 `abort_multipart_upload`。
 - `LocalStorageProvider` 用于 local/profile 和测试环境，写入本地目录。
 - `S3StorageProvider` 通过注入的 async S3-compatible client 工作，可用于 MinIO/S3；core 不直接强绑定对象存储 SDK。
 - local provider 会校验 object key，拒绝绝对路径和 `..` 路径穿越。
-- S3 provider 复用同样 object key 校验，并通过 client 生成私有对象的临时下载 URL。
+- S3 provider 复用同样 object key 校验，并通过 client 生成私有对象的临时下载/上传 URL、multipart part URL，完成 multipart 时调用 S3 complete API 后返回 `StoredObject`。
 - `file_object_key()` 固定上传原始文件 key：`tenants/{tenant_id}/files/{file_id}/original.bin`。
 - `resource_object_key()` 固定资源关联文件 key：`tenants/{tenant_id}/resources/{resource_type}/{resource_id}/{file_id}.bin`。
 - platform files 上传链路已在写 storage 前接入 file permission、业务资源级 permission adapter、upload security、virus scan 和 quota gate。

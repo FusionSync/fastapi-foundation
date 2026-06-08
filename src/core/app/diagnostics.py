@@ -106,7 +106,7 @@ def _registry_diagnostics(app: FastAPI) -> dict[str, dict[str, object]]:
 def _provider_diagnostics(app: FastAPI) -> dict[str, dict[str, object]]:
     settings = getattr(app.state, "settings", None)
     database_url = getattr(getattr(settings, "database", None), "url", "")
-    return {
+    providers = {
         "database": {
             "ok": bool(database_url),
             "details": {
@@ -121,6 +121,38 @@ def _provider_diagnostics(app: FastAPI) -> dict[str, dict[str, object]]:
             },
         },
     }
+    redis_runtime = getattr(app.state, "redis_runtime", None)
+    redis_url = getattr(getattr(settings, "dependencies", None), "redis_url", None)
+    if redis_runtime is not None:
+        providers["redis"] = {
+            "ok": True,
+            "details": redis_runtime.diagnostics().to_dict(),
+        }
+    elif redis_url:
+        providers["redis"] = {
+            "ok": False,
+            "details": {
+                "configured": True,
+                "cache_provider": None,
+                "lock_provider": None,
+            },
+        }
+    rabbitmq_runtime = getattr(app.state, "rabbitmq_runtime", None)
+    rabbitmq_url = getattr(getattr(settings, "dependencies", None), "rabbitmq_url", None)
+    if rabbitmq_runtime is not None:
+        providers["rabbitmq"] = {
+            "ok": True,
+            "details": rabbitmq_runtime.diagnostics().to_dict(),
+        }
+    elif rabbitmq_url:
+        providers["rabbitmq"] = {
+            "ok": False,
+            "details": {
+                "configured": True,
+                "message_provider": None,
+            },
+        }
+    return providers
 
 
 def _registry_entry(

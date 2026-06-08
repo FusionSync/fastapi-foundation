@@ -27,6 +27,7 @@
 - Alembic
 - PostgreSQL，单机版可切 SQLite
 - Redis
+- RabbitMQ（可选 MQ broker）
 - Casbin
 - Local JWT / Logto / Keycloak 可插拔认证
 - 本地文件系统 / MinIO / S3 可插拔存储

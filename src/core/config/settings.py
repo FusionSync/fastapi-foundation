@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DeploymentMode = Literal["local", "private", "cloud"]
 ErrorHttpStatusMode = Literal["standard", "always_200"]
-TaskQueueProviderMode = Literal["sync", "database"]
+TaskQueueProviderMode = Literal["sync", "database", "celery"]
 SchedulerProviderMode = Literal["local", "apscheduler", "celery_beat"]
 DatabaseTenantFallbackMode = Literal["disabled", "session_variable"]
 
@@ -69,6 +69,7 @@ class TenantLifecycleSettings(BaseModel):
 
 class DependencySettings(BaseModel):
     redis_url: str | None = None
+    rabbitmq_url: str | None = None
     object_storage_endpoint: str | None = None
     oidc_issuer_url: str | None = None
 

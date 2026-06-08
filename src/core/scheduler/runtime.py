@@ -22,7 +22,14 @@ from core.scheduler.provider import (
 )
 from core.scheduler.registry import ScheduleRegistry
 from core.scheduler.repository import ScheduleStateRepository, ScheduleTriggerRepository
-from core.tasks import DatabaseQueueTaskProvider, SyncTaskProvider, TaskRegistry, TaskRunRepository
+from core.tasks import (
+    CeleryTaskProvider,
+    DatabaseQueueTaskProvider,
+    SyncTaskProvider,
+    TaskRegistry,
+    TaskRunRepository,
+    create_celery_app,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,7 +217,14 @@ def _task_provider(
     settings: Settings,
     task_registry: TaskRegistry,
     repository: TaskRunRepository,
-) -> SyncTaskProvider | DatabaseQueueTaskProvider:
+) -> SyncTaskProvider | DatabaseQueueTaskProvider | CeleryTaskProvider:
+    if settings.task_queue.provider == "celery":
+        return CeleryTaskProvider(
+            task_registry,
+            task_repository=repository,
+            celery_app=create_celery_app(settings),
+            max_attempts=settings.task_queue.max_attempts,
+        )
     if settings.task_queue.provider == "database":
         return DatabaseQueueTaskProvider(
             task_registry,

@@ -71,6 +71,32 @@ def test_dependency_checkpoint_actual_probe_runner_controls_status() -> None:
     assert result.errors == ["redis: connection refused"]
 
 
+def test_dependency_checkpoint_includes_configured_rabbitmq_as_optional_probe() -> None:
+    result = check_profile_dependencies(
+        "cloud",
+        _cloud_settings(
+            dependencies={
+                "redis_url": "rediss://:secret@redis.example.com:6379/0",
+                "rabbitmq_url": "amqp://ui:secret@rabbitmq.example.com:5672/%2F",
+                "object_storage_endpoint": "https://s3.example.com",
+                "oidc_issuer_url": "https://auth.example.com/oidc",
+            }
+        ),
+    )
+
+    payload = result.to_dict()
+
+    assert result.ok is True
+    assert payload["probes"]["rabbitmq"] == {
+        "ok": True,
+        "status": "configured",
+        "required": False,
+        "kind": "rabbitmq_tcp",
+        "provider": "rabbitmq",
+        "target": "amqp://ui:***@rabbitmq.example.com:5672/%2F",
+    }
+
+
 def _cloud_settings(
     *,
     task_queue: dict[str, object] | None = None,

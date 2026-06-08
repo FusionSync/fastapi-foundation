@@ -9,6 +9,7 @@ from core.cli.common import CLI_RUNTIME_ERROR, CLI_USAGE_ERROR, error_payload, p
 from core.cli.config import register_config_commands
 from core.cli.idempotency import register_idempotency_commands
 from core.cli.migrations import register_migration_commands
+from core.cli.mq import register_mq_commands
 from core.cli.operations import register_operation_commands
 from core.cli.outbox import register_outbox_commands
 from core.cli.permissions import register_permission_commands
@@ -63,6 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     register_config_commands(subparsers)
     register_idempotency_commands(subparsers)
     register_migration_commands(subparsers)
+    register_mq_commands(subparsers)
     register_operation_commands(subparsers)
     register_outbox_commands(subparsers)
     register_permission_commands(subparsers)

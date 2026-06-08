@@ -3,6 +3,7 @@ from core.config.deployment import (
     DeploymentArtifactSet,
     DeploymentArtifactTarget,
     render_deployment_artifacts,
+    render_deployment_bundle_artifacts,
 )
 from core.config.profiles import (
     ConfigDriftReport,
@@ -23,6 +24,7 @@ __all__ = [
     "check_profile_drift",
     "ConfigDriftReport",
     "get_settings",
+    "render_deployment_bundle_artifacts",
     "render_deployment_artifacts",
     "render_profile_template",
     "validate_startup_settings",

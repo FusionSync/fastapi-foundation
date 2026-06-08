@@ -28,7 +28,19 @@ from core.observability import (
 )
 from core.operations import DatabaseReadinessProbe, check_app_readiness
 from core.permissions import PermissionRegistry
+from core.rabbitmq import (
+    RabbitMqClientFactory,
+    RabbitMqReadinessProbe,
+    RabbitMqRuntime,
+    create_rabbitmq_runtime,
+)
 from core.rate_limit import RateLimitMiddleware
+from core.redis import (
+    RedisClientFactory,
+    RedisReadinessProbe,
+    RedisRuntime,
+    create_redis_runtime,
+)
 from core.scheduler import ScheduleRegistry
 from core.security import (
     RequestBodySizeLimitMiddleware,
@@ -49,23 +61,35 @@ def create_app(
     *,
     secret_provider: SecretProvider | None = None,
     request_security_pipeline: DatabaseRequestSecurityPipeline | None = None,
+    redis_client_factory: RedisClientFactory | None = None,
+    rabbitmq_client_factory: RabbitMqClientFactory | None = None,
 ) -> FastAPI:
     resolved_settings = resolve_settings_secrets(settings or get_settings(), secret_provider)
     validate_startup_settings(resolved_settings)
 
     database_runtime = create_database_runtime(resolved_settings)
+    redis_runtime = create_redis_runtime(
+        resolved_settings,
+        client_factory=redis_client_factory,
+    )
+    rabbitmq_runtime = create_rabbitmq_runtime(
+        resolved_settings,
+        client_factory=rabbitmq_client_factory,
+    )
     app = FastAPI(
         title=resolved_settings.app.name,
         version=resolved_settings.app.version,
         docs_url=None,
         redoc_url=None,
-        lifespan=_app_lifespan(database_runtime),
+        lifespan=_app_lifespan(database_runtime, redis_runtime, rabbitmq_runtime),
     )
     app.state.settings = resolved_settings
     app.state.database_engine = database_runtime.engine
     app.state.session_factory = database_runtime.session_factory
     app.state.metrics_registry = MetricsRegistry()
     app.state.readiness_database_probe = DatabaseReadinessProbe(resolved_settings.database.url)
+    _register_redis_runtime(app, redis_runtime)
+    _register_rabbitmq_runtime(app, rabbitmq_runtime)
 
     _register_local_docs(app, resolved_settings)
     _register_security_middleware(app, resolved_settings)
@@ -86,7 +110,11 @@ def create_app(
     return app
 
 
-def _app_lifespan(database_runtime: DatabaseRuntime):
+def _app_lifespan(
+    database_runtime: DatabaseRuntime,
+    redis_runtime: RedisRuntime | None,
+    rabbitmq_runtime: RabbitMqRuntime | None,
+):
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
@@ -96,9 +124,40 @@ def _app_lifespan(database_runtime: DatabaseRuntime):
             finally:
                 await run_lifecycle_hooks(app, phase="shutdown")
         finally:
+            if rabbitmq_runtime is not None:
+                await rabbitmq_runtime.dispose()
+            if redis_runtime is not None:
+                await redis_runtime.dispose()
             await database_runtime.dispose()
 
     return lifespan
+
+
+def _register_redis_runtime(app: FastAPI, redis_runtime: RedisRuntime | None) -> None:
+    if redis_runtime is None:
+        return
+    app.state.redis_runtime = redis_runtime
+    app.state.redis_client = redis_runtime.client
+    app.state.cache_provider = redis_runtime.cache_provider
+    app.state.lock_provider = redis_runtime.lock_provider
+    app.state.readiness_redis_probe = RedisReadinessProbe(
+        redis_runtime.client,
+        redis_runtime.url,
+    )
+
+
+def _register_rabbitmq_runtime(
+    app: FastAPI,
+    rabbitmq_runtime: RabbitMqRuntime | None,
+) -> None:
+    if rabbitmq_runtime is None:
+        return
+    app.state.rabbitmq_runtime = rabbitmq_runtime
+    app.state.rabbitmq_client = rabbitmq_runtime.client
+    app.state.readiness_rabbitmq_probe = RabbitMqReadinessProbe(
+        rabbitmq_runtime.client,
+        rabbitmq_runtime.url,
+    )
 
 
 def _register_security_middleware(app: FastAPI, settings: Settings) -> None:
@@ -144,9 +203,15 @@ def _register_system_routes(app: FastAPI, settings: Settings) -> None:
     @app.get("/readyz", include_in_schema=False)
     async def readyz(response: Response) -> dict[str, object]:
         database_probe = getattr(app.state, "readiness_database_probe", None)
+        redis_probe = getattr(app.state, "readiness_redis_probe", None)
+        rabbitmq_probe = getattr(app.state, "readiness_rabbitmq_probe", None)
         dependency_results = {}
         if database_probe is not None:
             dependency_results["database"] = await database_probe.check()
+        if redis_probe is not None:
+            dependency_results["redis"] = await redis_probe.check()
+        if rabbitmq_probe is not None:
+            dependency_results["rabbitmq"] = await rabbitmq_probe.check()
         readiness = check_app_readiness(
             settings=settings,
             app_registry=getattr(app.state, "app_registry", None),

@@ -58,6 +58,25 @@ def resolve_runtime_capabilities(
     if settings.observability.metrics_enabled:
         capabilities.add("observability.metrics")
 
+    if settings.dependencies.redis_url:
+        capabilities.update(
+            {
+                "cache",
+                "locks",
+                "provider.redis",
+                "provider.cache.redis",
+                "provider.lock.redis",
+            }
+        )
+    if settings.dependencies.rabbitmq_url:
+        capabilities.update(
+            {
+                "mq",
+                "provider.rabbitmq",
+                "provider.mq.rabbitmq",
+            }
+        )
+
     return capabilities
 
 

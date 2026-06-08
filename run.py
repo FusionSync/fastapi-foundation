@@ -19,10 +19,35 @@ def main() -> int:
     os.chdir(ROOT)
     (ROOT / "data").mkdir(exist_ok=True)
     sys.path.insert(0, str(SRC))
+    _configure_local_defaults()
 
     from core.cli.main import main as core_main
 
     return core_main(_default_args(sys.argv[1:]))
+
+
+def _configure_local_defaults() -> None:
+    if "DEPENDENCIES__REDIS_URL" in os.environ:
+        return
+    if _env_file_declares("DEPENDENCIES__REDIS_URL"):
+        return
+    os.environ["DEPENDENCIES__REDIS_URL"] = "redis://127.0.0.1:6379/0"
+
+
+def _env_file_declares(key: str) -> bool:
+    env_file = ROOT / ".env"
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, _value = stripped.split("=", 1)
+        if name.strip() == key:
+            return True
+    return False
 
 
 def _default_args(args: list[str]) -> list[str]:

@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `partial`
-- Done: task registry、sync provider、SQLAlchemy database queue provider、TaskRun 持久状态、repository、tenant 删除取消未完成任务、stale recovery、ack/retry/backoff/dead-letter、task CLI、scheduler 提交链路、worker 本地/数据库队列执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint、quota submit wrapper、队列部署 profile 参数和 worker heartbeat 已落地。
+- Done: task registry、sync provider、SQLAlchemy database queue provider、Celery task provider、Celery app/`core.tasks.execute` 执行入口、TaskRun 持久状态、repository、tenant 删除取消未完成任务、stale recovery、ack/retry/backoff/dead-letter、task CLI、scheduler 提交链路、worker 本地/数据库队列执行 loop、task trace_id handoff、task submit 幂等 mutation guard task_id 绑定 checkpoint、quota submit wrapper、队列部署 profile 参数和 worker heartbeat 已落地。
 - Next: _none_
 
 ## 职责
@@ -29,14 +29,11 @@ src/core/tasks/
 sync
   本地开发和单机版，直接同步执行。
 
-rq
-  简单异步队列，适合 MVP。
-
 database
   通过 SQLAlchemy `TaskRun` 表实现等价队列 provider，适合 private/cloud 早期部署和无外部 broker 的私有化交付。
 
 celery
-  复杂任务编排和生产部署。
+  入库后投递 Celery broker；Celery worker 运行 `core.tasks.execute`，再按 TaskRun 执行已注册 handler。
 ```
 
 ## 任务类型
@@ -91,7 +88,7 @@ finished_at
 
 ## 当前实现
 
-第一版先提供轻量运行时接线，不绑定 Celery：
+当前提供三类运行时接线：
 
 - `TaskRegistry.from_app_registry()` 从 `AppModule.task_handlers` 收集任务处理器。
 - `TaskHandlerSpec.handler_path` 必须能 import 到 callable。
@@ -101,6 +98,9 @@ finished_at
 - `SyncTaskProvider.submit()` 执行前调用 tenant lifecycle gate，禁止 suspended/deleting 租户执行 task。
 - `DatabaseQueueTaskProvider.submit()` 只把任务写为 `pending TaskRun`，不在 API/scheduler 提交路径直接执行业务 handler。
 - `DatabaseQueueTaskProvider.run_next()` 由 worker 领取 `pending` 且 `next_retry_at` 到期的任务，执行后标记 `succeeded`；失败时按 backoff 重新入队或转 `dead_letter`。
+- `CeleryTaskProvider.submit()` 只把任务写为 `pending TaskRun`，并向 Celery broker 投递 `core.tasks.execute(task_id=...)`；重复 idempotency 提交不会重复投递 Celery 消息。
+- `create_celery_app()` 使用 `DEPENDENCIES__RABBITMQ_URL` 创建 Celery app，可选使用 `DEPENDENCIES__REDIS_URL` 作为 result backend。
+- `run_persisted_task()` 是 Celery worker 执行入口，会按 `TaskRun` 重新构造 `TaskEnvelope` 并复用 `SyncTaskProvider.run_task_run()` 的租户 gate、handler 注册和结果落库逻辑。
 - task handler 执行期间会从 `TaskEnvelope` 注入冻结背景上下文，透传 `request_id`、`trace_id` 和 `tenant_id`，避免继承外层 HTTP/CLI ContextVar。
 - `TaskRun` 定义统一任务运行记录，保存 input、result、error、queue、request_id、trace_id、attempt_count、next_retry_at、started_at、finished_at。
 - `TaskRunRepository` 可注入 `SyncTaskProvider`；注入后同步任务会持久化 `running -> succeeded/failed/dead_letter` 状态，不注入时保持原有纯运行时模式。
@@ -118,10 +118,10 @@ finished_at
 - `core scheduler --run` 的 cron due loop 复用同一提交链路，scheduler 本身只构造 `TaskEnvelope` 并交给 task provider，触发后生成 `TaskRun` 并写入 `ScheduleTriggerLog`。
 - `core worker --run-once` 加载 app task handler，按 queue 领取一个 `pending` `TaskRun`，执行后持久化为 `succeeded/failed/dead_letter`；当前用于 local/CI 有限轮验证，不替代生产级队列 worker。
 - `core worker --run` 可按 `--max-iterations` 做有限轮验证，未设置时作为本地常驻 loop，空转时按 `--idle-sleep-seconds` 休眠。
-- `core worker --run` / `--run-once` 支持 `--provider sync|database`、`--max-attempts` 和 `--retry-backoff-seconds`，profile 模板通过 `TASK_QUEUE__*` 环境变量统一参数。
+- `core worker --run` / `--run-once` 支持 `--provider sync|database`、`--max-attempts` 和 `--retry-backoff-seconds`，profile 模板通过 `TASK_QUEUE__*` 环境变量统一参数；`provider=celery` 必须由 Celery worker 执行，core worker 会拒绝静默降级。
 - `core worker --run --instance-id <id>` 每轮写入 `process_heartbeats`，details 包含 queue、iterations 和任务统计。
 
-后续如果替换为 RQ 或 Celery，provider 必须复用 `TaskEnvelope`、`TaskRegistry`、`TaskRun` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。
+后续如果替换为其他队列 provider，仍必须复用 `TaskEnvelope`、`TaskRegistry`、`TaskRun` 和 tenant gate，不允许业务 app 直接依赖具体队列实现。
 
 ## 运行角色
 

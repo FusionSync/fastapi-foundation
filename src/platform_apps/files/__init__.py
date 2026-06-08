@@ -8,13 +8,19 @@ from platform_apps.files.services import (
     FileScanResult,
     FileService,
     FileVirusScanner,
+    MultipartFileUpload,
+    MultipartPartUpload,
     OwnerOnlyFileResourceAuthorizationAdapter,
+    PresignedFileUpload,
 )
 
 __all__ = [
     "AllowAllFileVirusScanner",
     "AuthorizationServiceFileResourceAdapter",
     "FileDownload",
+    "MultipartFileUpload",
+    "MultipartPartUpload",
+    "PresignedFileUpload",
     "FileObject",
     "FileResourceAuthorizationAdapter",
     "FileScanResult",

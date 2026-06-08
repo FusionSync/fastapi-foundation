@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from core.config import Settings
 from core.config.settings import DeploymentMode
 
-DependencyProbeKind = Literal["database", "queue", "redis_tcp", "http"]
+DependencyProbeKind = Literal["database", "queue", "redis_tcp", "rabbitmq_tcp", "http"]
 DependencyProbeStatus = Literal["configured", "missing", "passed", "failed"]
 DependencyProbeRunner = Callable[[str, str], "DependencyProbeOutcome"]
 
@@ -105,7 +105,7 @@ def _dependency_specs(
     settings: Settings,
 ) -> tuple[DependencyProbeSpec, ...]:
     production = profile in _PRODUCTION_PROFILES
-    return (
+    specs = [
         DependencyProbeSpec(
             name="database",
             kind="database",
@@ -145,7 +145,18 @@ def _dependency_specs(
             required=production,
             target=settings.dependencies.oidc_issuer_url,
         ),
-    )
+    ]
+    if settings.dependencies.rabbitmq_url:
+        specs.append(
+            DependencyProbeSpec(
+                name="rabbitmq",
+                kind="rabbitmq_tcp",
+                provider="rabbitmq",
+                required=False,
+                target=settings.dependencies.rabbitmq_url,
+            )
+        )
+    return tuple(specs)
 
 
 def _check_dependency(
@@ -187,6 +198,11 @@ def _default_probe_runner(name: str, target: str) -> DependencyProbeOutcome:
     try:
         if parsed.scheme in {"redis", "rediss"}:
             return _tcp_probe(parsed.hostname, parsed.port or 6379)
+        if parsed.scheme in {"amqp", "amqps"}:
+            return _tcp_probe(
+                parsed.hostname,
+                parsed.port or (5671 if parsed.scheme == "amqps" else 5672),
+            )
         if parsed.scheme in {"http", "https"}:
             return _http_probe(target)
     except Exception as exc:

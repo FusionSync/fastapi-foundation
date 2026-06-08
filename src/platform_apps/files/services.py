@@ -17,7 +17,12 @@ from core.security import (
     UploadValidationResult,
     validate_upload,
 )
-from core.storage import StorageProvider, file_object_key
+from core.storage import (
+    MultipartUploadPart,
+    MultipartUploadRequest,
+    StorageProvider,
+    file_object_key,
+)
 from core.tenancy import TenantLifecyclePolicy, TenantStatus, assert_tenant_operation_allowed
 from platform_apps.files.models import FileObject
 
@@ -33,6 +38,27 @@ class FileDownload:
     checksum: str
     size: int
     data: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class PresignedFileUpload:
+    file_object: FileObject
+    upload_url: str
+    expires_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class MultipartPartUpload:
+    part_number: int
+    upload_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class MultipartFileUpload:
+    file_object: FileObject
+    upload_id: str
+    parts: tuple[MultipartPartUpload, ...]
+    expires_seconds: int
 
 
 FileScanStatus = Literal["clean", "infected"]
@@ -277,6 +303,248 @@ class FileService:
             )
             raise
 
+    async def upload_batch_bytes(
+        self,
+        *,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        files: Sequence[Mapping[str, object]],
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> list[FileObject]:
+        uploaded: list[FileObject] = []
+        for file_payload in files:
+            uploaded.append(
+                await self.upload_bytes(
+                    tenant_id=tenant_id,
+                    owner_type=owner_type,
+                    owner_id=owner_id,
+                    file_name=str(file_payload["file_name"]),
+                    content_type=str(file_payload["content_type"]),
+                    data=bytes(file_payload["data"]),
+                    file_type=str(file_payload["file_type"]),
+                    expected_checksum=(
+                        str(file_payload["expected_checksum"])
+                        if file_payload.get("expected_checksum") is not None
+                        else None
+                    ),
+                    user_id=user_id,
+                    authorization=authorization,
+                    request_id=request_id,
+                )
+            )
+        return uploaded
+
+    async def create_presigned_upload(
+        self,
+        *,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        file_name: str,
+        content_type: str,
+        file_type: str,
+        expected_size: int,
+        expires_seconds: int,
+        expected_checksum: str | None = None,
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> PresignedFileUpload:
+        await self._require_file_permission(
+            action="upload",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=owner_id,
+            request_id=request_id,
+        )
+        await self._require_file_resource_access(
+            file_object=None,
+            action="upload",
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
+        normalized = self._validate_upload_metadata(
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            file_name=file_name,
+            content_type=content_type,
+            file_type=file_type,
+            expected_size=expected_size,
+            expires_seconds=expires_seconds,
+        )
+        file_object = await self._create_uploading_file(
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            file_name=normalized["file_name"],
+            content_type=normalized["content_type"],
+            file_type=file_type,
+            expected_size=expected_size,
+            expected_checksum=expected_checksum,
+        )
+        upload_url = await self.storage.generate_upload_url(
+            file_object.object_key,
+            content_type=file_object.content_type,
+            expires_seconds=expires_seconds,
+        )
+        return PresignedFileUpload(
+            file_object=file_object,
+            upload_url=upload_url,
+            expires_seconds=expires_seconds,
+        )
+
+    async def initiate_multipart_upload(
+        self,
+        *,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        file_name: str,
+        content_type: str,
+        file_type: str,
+        expected_size: int,
+        part_count: int,
+        expires_seconds: int,
+        expected_checksum: str | None = None,
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> MultipartFileUpload:
+        if part_count <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "part_count must be greater than zero",
+                status_code=400,
+            )
+        await self._require_file_permission(
+            action="upload",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=owner_id,
+            request_id=request_id,
+        )
+        await self._require_file_resource_access(
+            file_object=None,
+            action="upload",
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
+        normalized = self._validate_upload_metadata(
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            file_name=file_name,
+            content_type=content_type,
+            file_type=file_type,
+            expected_size=expected_size,
+            expires_seconds=expires_seconds,
+        )
+        file_object = await self._create_uploading_file(
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            file_name=normalized["file_name"],
+            content_type=normalized["content_type"],
+            file_type=file_type,
+            expected_size=expected_size,
+            expected_checksum=expected_checksum,
+        )
+        upload = await self.storage.create_multipart_upload(
+            file_object.object_key,
+            content_type=file_object.content_type,
+        )
+        parts = []
+        for part_number in range(1, part_count + 1):
+            parts.append(
+                MultipartPartUpload(
+                    part_number=part_number,
+                    upload_url=await self.storage.generate_multipart_part_url(
+                        object_key=upload.object_key,
+                        upload_id=upload.upload_id,
+                        part_number=part_number,
+                        expires_seconds=expires_seconds,
+                    ),
+                )
+            )
+        return MultipartFileUpload(
+            file_object=file_object,
+            upload_id=upload.upload_id,
+            parts=tuple(parts),
+            expires_seconds=expires_seconds,
+        )
+
+    async def complete_multipart_upload(
+        self,
+        *,
+        file_id: str,
+        tenant_id: str,
+        upload_id: str,
+        parts: Sequence[MultipartUploadPart],
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> FileObject:
+        if not parts:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "multipart upload completion requires at least one part",
+                status_code=400,
+            )
+        for part in parts:
+            if not part.etag.strip():
+                raise AppError(
+                    "VALIDATION_ERROR",
+                    "multipart part etag is required",
+                    status_code=400,
+                )
+        file_object = await self._load_uploading_file(file_id)
+        await self._require_file_resource_access(
+            file_object=file_object,
+            action="upload",
+            tenant_id=tenant_id,
+            owner_type=file_object.owner_type,
+            owner_id=file_object.owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
+        await self._require_file_permission(
+            action="upload",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=file_object.id,
+            request_id=request_id,
+        )
+        stored = await self.storage.complete_multipart_upload(
+            MultipartUploadRequest(
+                object_key=file_object.object_key,
+                upload_id=upload_id,
+                parts=tuple(parts),
+            )
+        )
+        file_object.bucket = stored.bucket
+        file_object.object_key = stored.object_key
+        file_object.size = stored.size
+        file_object.checksum = stored.checksum
+        file_object.status = "available"
+        await self.session.flush()
+        return file_object
+
     async def download_bytes(
         self,
         *,
@@ -397,6 +665,12 @@ class FileService:
             raise AppError("NOT_FOUND", f"FileObject {file_id!r} not found", status_code=404)
         return file_object
 
+    async def _load_uploading_file(self, file_id: str) -> FileObject:
+        file_object = await self.session.get(FileObject, file_id)
+        if file_object is None or file_object.status != "uploading":
+            raise AppError("NOT_FOUND", f"FileObject {file_id!r} not found", status_code=404)
+        return file_object
+
     async def _require_file_resource_access(
         self,
         *,
@@ -487,6 +761,95 @@ class FileService:
             expected_checksum=expected_checksum,
             policy=self.upload_policy,
         )
+
+    def _validate_upload_metadata(
+        self,
+        *,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        file_name: str,
+        content_type: str,
+        file_type: str,
+        expected_size: int,
+        expires_seconds: int,
+    ) -> dict[str, str]:
+        fields = {
+            "tenant_id": tenant_id,
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "file_name": file_name,
+            "content_type": content_type,
+            "file_type": file_type,
+        }
+        missing = [name for name, value in fields.items() if not value.strip()]
+        if missing:
+            raise AppError(
+                "VALIDATION_ERROR",
+                f"file upload missing required fields: {missing}",
+                status_code=400,
+            )
+        normalized_name = file_name.strip()
+        if (
+            "/" in normalized_name
+            or "\\" in normalized_name
+            or "\x00" in normalized_name
+            or normalized_name in {".", ".."}
+        ):
+            raise AppError(
+                "UPLOAD_REJECTED",
+                "Upload rejected by security policy",
+                status_code=400,
+                details={"reason": "invalid_file_name", "file_name": file_name},
+            )
+        if expected_size <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "expected_size must be greater than zero",
+                status_code=400,
+            )
+        if expires_seconds <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "expires_seconds must be greater than zero",
+                status_code=400,
+            )
+        return {
+            "file_name": normalized_name,
+            "content_type": content_type.strip().lower(),
+        }
+
+    async def _create_uploading_file(
+        self,
+        *,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        file_name: str,
+        content_type: str,
+        file_type: str,
+        expected_size: int,
+        expected_checksum: str | None,
+    ) -> FileObject:
+        file_id = str(uuid4())
+        object_key = file_object_key(tenant_id=tenant_id, file_id=file_id)
+        file_object = FileObject(
+            id=file_id,
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            bucket=self.storage.bucket,
+            object_key=object_key,
+            file_name=file_name,
+            content_type=content_type,
+            size=expected_size,
+            checksum=expected_checksum or "",
+            file_type=file_type,
+            status="uploading",
+        )
+        self.session.add(file_object)
+        await self.session.flush()
+        return file_object
 
     async def _scan_upload(
         self,

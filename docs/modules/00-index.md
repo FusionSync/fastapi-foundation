@@ -36,6 +36,7 @@
 - [Exceptions](core-exceptions.md)
 - [Serialization](core-serialization.md)
 - [Messages](core-messages.md)
+- [MQ](core-mq.md)
 - [Admin Registry](core-admin-registry.md)
 - [CLI](core-cli.md)
 - [Testing](core-testing.md)

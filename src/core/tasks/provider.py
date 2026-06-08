@@ -334,14 +334,22 @@ def _task_result_from_run(
     queue: str,
     idempotency: str,
     provider: str = "sync",
+    extra_metadata: dict[str, object] | None = None,
 ) -> TaskResult:
+    metadata: dict[str, object] = {
+        "provider": provider,
+        "queue": queue,
+        "idempotency": idempotency,
+    }
+    if extra_metadata:
+        metadata.update(extra_metadata)
     return TaskResult(
         task_id=task_run.id,
         task_type=task_run.task_type,
         status=_task_status(task_run.status),
         result_payload=task_run.result_payload,
         error_message=task_run.error_message,
-        metadata={"provider": provider, "queue": queue, "idempotency": idempotency},
+        metadata=metadata,
     )
 
 
@@ -349,3 +357,52 @@ def _task_status(status: str) -> TaskStatus:
     if status in {"pending", "running", "succeeded", "failed", "dead_letter", "cancelled"}:
         return status  # type: ignore[return-value]
     raise ValueError(f"Unknown task run status: {status!r}")
+
+
+class CeleryTaskProvider:
+    def __init__(
+        self,
+        task_registry: TaskRegistry,
+        *,
+        task_repository: TaskRunRepository,
+        celery_app: Any,
+        celery_task_name: str = "core.tasks.execute",
+        max_attempts: int = 3,
+    ) -> None:
+        self.task_registry = task_registry
+        self.task_repository = task_repository
+        self.celery_app = celery_app
+        self.celery_task_name = celery_task_name
+        self.max_attempts = max_attempts
+
+    async def submit(
+        self,
+        envelope: TaskEnvelope,
+        *,
+        tenant_status: TenantStatus = "active",
+    ) -> TaskResult:
+        assert_tenant_operation_allowed(
+            tenant_id=envelope.tenant_id,
+            status=tenant_status,
+            operation="task",
+        )
+        registered = self.task_registry.get(envelope.task_type)
+        enqueue_result = await self.task_repository.enqueue_once(
+            envelope,
+            queue=registered.spec.queue,
+            max_attempts=self.max_attempts,
+        )
+        if enqueue_result.outcome == "started":
+            self.celery_app.send_task(
+                self.celery_task_name,
+                kwargs={"task_id": enqueue_result.task_run.id},
+                queue=registered.spec.queue,
+                task_id=enqueue_result.task_run.id,
+            )
+        return _task_result_from_run(
+            enqueue_result.task_run,
+            queue=registered.spec.queue,
+            idempotency=enqueue_result.outcome,
+            provider="celery",
+            extra_metadata={"celery_task_name": self.celery_task_name},
+        )

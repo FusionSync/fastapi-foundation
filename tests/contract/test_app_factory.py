@@ -121,6 +121,52 @@ def test_ready_endpoint_returns_503_when_dependency_probe_fails() -> None:
     assert diagnostics["providers"]["database"]["error"] == "database down"
 
 
+def test_create_app_wires_configured_redis_runtime_into_readiness() -> None:
+    redis_client = _FakeRedisClient()
+    app = create_app(
+        Settings(
+            database={"url": "sqlite+aiosqlite:///:memory:"},
+            dependencies={"redis_url": "redis://127.0.0.1:6379/0"},
+        ),
+        redis_client_factory=lambda _url: redis_client,
+    )
+    client = TestClient(app)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["checks"]["redis_reachable"] is True
+    assert body["details"]["dependencies"]["redis"] == {
+        "ok": True,
+        "details": {
+            "service": "redis",
+            "target": "redis://127.0.0.1:6379/0",
+        },
+    }
+    assert app.state.startup_diagnostics["providers"]["redis"] == {
+        "ok": True,
+        "details": {
+            "configured": True,
+            "url": "redis://127.0.0.1:6379/0",
+            "cache_provider": "redis",
+            "lock_provider": "redis",
+        },
+    }
+    assert body["details"]["startup_diagnostics"]["providers"]["redis"] == {
+        "ok": True,
+        "details": {
+            "service": "redis",
+            "target": "redis://127.0.0.1:6379/0",
+        },
+    }
+    assert app.state.redis_client is redis_client
+    assert app.state.redis_runtime is not None
+    assert app.state.cache_provider is app.state.redis_runtime.cache_provider
+    assert app.state.lock_provider is app.state.redis_runtime.lock_provider
+    assert redis_client.ping_count == 1
+
+
 def test_missing_route_uses_error_envelope() -> None:
     app = create_app(Settings())
     client = TestClient(app)
@@ -840,6 +886,19 @@ class _FailingReadinessProbe:
             details={"service": "database"},
             error="database down",
         )
+
+
+class _FakeRedisClient:
+    def __init__(self) -> None:
+        self.ping_count = 0
+        self.closed = False
+
+    async def ping(self) -> bool:
+        self.ping_count += 1
+        return True
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class _FakeAdminSecurityPipeline:
