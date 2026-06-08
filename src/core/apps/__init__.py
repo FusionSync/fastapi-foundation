@@ -12,6 +12,7 @@ from core.apps.module import (
     LifecycleHookSpec,
     MigrationSpec,
     ScheduleSpec,
+    SettingSpec,
     TaskHandlerSpec,
     validate_app_module,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "LifecycleHookSpec",
     "MigrationSpec",
     "ScheduleSpec",
+    "SettingSpec",
     "TaskHandlerSpec",
     "bootstrap_app",
     "resolve_runtime_capabilities",

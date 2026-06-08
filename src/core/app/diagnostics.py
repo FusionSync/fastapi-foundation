@@ -42,6 +42,7 @@ def _registry_diagnostics(app: FastAPI) -> dict[str, dict[str, object]]:
     event_registry = getattr(app.state, "event_registry", None)
     task_registry = getattr(app.state, "task_registry", None)
     schedule_registry = getattr(app.state, "schedule_registry", None)
+    setting_registry = getattr(app.state, "setting_registry", None)
     metrics_registry = getattr(app.state, "metrics_registry", None)
 
     admin_payload = admin_registry.to_dict() if admin_registry is not None else {}
@@ -95,6 +96,13 @@ def _registry_diagnostics(app: FastAPI) -> dict[str, dict[str, object]]:
         "schedules": _registry_entry(
             ok=schedule_registry is not None,
             counts={"schedules": len(schedule_payload.get("schedules", []))},
+        ),
+        "settings": _registry_entry(
+            ok=setting_registry is not None and not setting_registry.errors,
+            counts={
+                "settings": len(getattr(setting_registry, "settings", [])),
+            },
+            errors=getattr(setting_registry, "errors", []),
         ),
         "metrics": _registry_entry(
             ok=metrics_registry is not None,

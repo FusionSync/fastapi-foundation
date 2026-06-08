@@ -12,6 +12,16 @@ from core.permissions.cache import (
     PermissionCacheInvalidator,
     invalidate_permission_cache,
 )
+from core.permissions.context import (
+    AccessContext,
+    AuthorizationDecisionSet,
+    append_access_decision,
+    append_access_decisions,
+    current_access,
+    get_current_access,
+    reset_current_access,
+    set_current_access,
+)
 from core.permissions.cross_tenant import (
     CrossTenantPermission,
     CrossTenantPermissionGate,
@@ -23,7 +33,11 @@ from core.permissions.decisions import (
     assert_authorization_decision,
     assert_platform_decision,
 )
-from core.permissions.deps import route_authorization_decision, route_authorization_decisions
+from core.permissions.deps import (
+    route_authorization_decision,
+    route_authorization_decision_for,
+    route_authorization_decisions,
+)
 from core.permissions.models import ProjectedPolicy, RoleGrant, RoleTemplate
 from core.permissions.policies import (
     PolicyRule,
@@ -39,7 +53,9 @@ from core.permissions.specs import PermissionSpec
 
 __all__ = [
     "AuthorizationDecision",
+    "AuthorizationDecisionSet",
     "AuthorizationService",
+    "AccessContext",
     "CachedPolicyDecisionBackend",
     "CasbinEquivalentPolicyBackend",
     "CrossTenantPermission",
@@ -65,7 +81,14 @@ __all__ = [
     "assert_cross_tenant_permission",
     "assert_authorization_decision",
     "assert_platform_decision",
+    "append_access_decision",
+    "append_access_decisions",
+    "current_access",
+    "get_current_access",
     "invalidate_permission_cache",
+    "reset_current_access",
     "route_authorization_decision",
+    "route_authorization_decision_for",
     "route_authorization_decisions",
+    "set_current_access",
 ]

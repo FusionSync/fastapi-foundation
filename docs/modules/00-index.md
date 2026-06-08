@@ -50,6 +50,9 @@
 - [Tenant Lifecycle](platform-tenant-lifecycle.md)
 - [Files](platform-files.md)
 - [Audit](platform-audit.md)
+- [Access](platform-access.md)
+- [Settings](platform-settings.md)
+- [Access And Settings Development Plan](../architecture/02-platform-access-settings-development.md)
 
 ## App 开发规范
 

@@ -50,6 +50,7 @@ from core.security import (
     resolve_settings_secrets,
 )
 from core.serialization import ok
+from core.settings import SettingRegistry
 from core.tasks import TaskRegistry
 from core.tenancy import tenant_lifecycle_policy_from_settings
 
@@ -354,11 +355,14 @@ def _assemble_app_runtime_registries(app: FastAPI, registry: AppRegistry) -> Non
         registry,
         task_registry=task_registry,
     )
+    setting_registry = SettingRegistry.from_app_registry(registry)
 
     if permission_registry.errors:
         raise ValueError("; ".join(permission_registry.errors))
     if migration_registry.errors:
         raise ValueError("; ".join(migration_registry.errors))
+    if setting_registry.errors:
+        raise ValueError("; ".join(setting_registry.errors))
 
     app.state.admin_registry = admin_registry
     app.state.permission_registry = permission_registry
@@ -366,4 +370,5 @@ def _assemble_app_runtime_registries(app: FastAPI, registry: AppRegistry) -> Non
     app.state.event_registry = event_registry
     app.state.task_registry = task_registry
     app.state.schedule_registry = schedule_registry
+    app.state.setting_registry = setting_registry
     app.include_router(build_admin_router(admin_registry))

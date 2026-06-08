@@ -23,9 +23,23 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             started_at=datetime.now(UTC),
         )
         token = set_current_context(context)
+        access_token = _set_empty_access_context()
         try:
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            _reset_access_context(access_token)
             reset_current_context(token)
+
+
+def _set_empty_access_context():
+    from core.permissions.context import set_current_access
+
+    return set_current_access(None)
+
+
+def _reset_access_context(token) -> None:  # type: ignore[no-untyped-def]
+    from core.permissions.context import reset_current_access
+
+    reset_current_access(token)

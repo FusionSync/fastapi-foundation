@@ -12,7 +12,13 @@ from core.auth.session import AuthSessionStore, AuthSessionValidator
 from core.base import RouteSecurityPolicy, parse_route_permission
 from core.context import RequestContext, get_current_context, set_current_context
 from core.exceptions import AppError
-from core.permissions import AuthorizationDecision, AuthorizationService
+from core.permissions import (
+    AccessContext,
+    AuthorizationDecision,
+    AuthorizationService,
+    append_access_decisions,
+    set_current_access,
+)
 from core.tenancy import DatabaseTenantContextResolver, TenantLifecyclePolicy
 
 SessionStoreFactory = Callable[[AsyncSession], AuthSessionStore]
@@ -54,8 +60,10 @@ class DatabaseRequestSecurityPipeline:
                     header_tenant_id=request.headers.get("X-Tenant-ID"),
                     operation=policy.tenant_operation,  # type: ignore[arg-type]
                 )
+                _bind_access_context()
                 return
             _bind_authenticated_user(current_user.id)
+            _bind_access_context()
 
     async def authorize(
         self,
@@ -106,7 +114,9 @@ class DatabaseRequestSecurityPipeline:
                 if audit is not None and exc.code == "PERMISSION_DENIED":
                     await session.commit()
                 raise
-            return tuple(decisions)
+            resolved = tuple(decisions)
+            append_access_decisions(resolved)
+            return resolved
 
 
 def _bearer_token(request: Request) -> str:
@@ -130,3 +140,16 @@ def _bind_authenticated_user(user_id: str) -> None:
     if context is None:
         return
     set_current_context(context.with_user(user_id).freeze())
+
+
+def _bind_access_context() -> None:
+    context = get_current_context()
+    if context is None or not context.user_id:
+        return
+    set_current_access(
+        AccessContext(
+            request_id=context.request_id,
+            user_id=context.user_id,
+            tenant_id=context.tenant_id,
+        )
+    )

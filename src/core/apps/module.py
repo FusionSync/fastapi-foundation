@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter
 
@@ -17,11 +17,36 @@ from core.messages.catalog import MessageCatalog
 from core.permissions.specs import PermissionSpec
 
 _LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+_SETTING_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 ScheduleTrigger = Literal["interval", "cron", "date", "manual"]
 MisfirePolicy = Literal["skip", "run_once", "catch_up_limited"]
 LifecyclePhase = Literal["startup", "shutdown"]
+SettingValueType = Literal[
+    "string",
+    "int",
+    "float",
+    "bool",
+    "json",
+    "enum",
+    "string_list",
+]
+SettingScope = Literal["platform", "tenant"]
+SettingKind = Literal["config", "flag"]
+SettingRiskLevel = Literal["low", "normal", "high", "critical"]
 _LIFECYCLE_PHASES = {"startup", "shutdown"}
 _EVENT_SCHEMA_FIELD_TYPES = {"str", "int", "float", "number", "bool", "dict", "list"}
+_SETTING_VALUE_TYPES = {
+    "string",
+    "int",
+    "float",
+    "bool",
+    "json",
+    "enum",
+    "string_list",
+}
+_SETTING_SCOPES = {"platform", "tenant"}
+_SETTING_KINDS = {"config", "flag"}
+_SETTING_RISK_LEVELS = {"low", "normal", "high", "critical"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +97,38 @@ class ScheduleSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class SettingSpec:
+    module: str
+    key: str
+    value_type: SettingValueType
+    default: Any
+    scopes: tuple[SettingScope, ...]
+    category: str
+    description: str
+    required: bool = False
+    runtime_mutable: bool = True
+    sensitive: bool = False
+    secret_ref_only: bool = False
+    risk_level: SettingRiskLevel = "normal"
+    cache_ttl_seconds: int | None = None
+    allowed_values: tuple[str, ...] = ()
+    min_value: float | None = None
+    max_value: float | None = None
+    kind: SettingKind = "config"
+    deprecated: bool = False
+
+    def __post_init__(self) -> None:
+        _validate_setting_spec(self)
+
+    @property
+    def full_key(self) -> str:
+        return f"{self.module}.{self.key}"
+
+    def validate_value(self, value: object) -> object:
+        return _validate_setting_value(self, value)
+
+
+@dataclass(frozen=True, slots=True)
 class LifecycleHookSpec:
     hook_id: str
     phase: LifecyclePhase
@@ -96,6 +153,7 @@ class AppModule:
     event_handlers: list[EventHandlerSpec] = field(default_factory=list)
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
     schedules: list[ScheduleSpec] = field(default_factory=list)
+    settings: list[SettingSpec] = field(default_factory=list)
     lifecycle_hooks: list[LifecycleHookSpec] = field(default_factory=list)
     auth_session_store: str | None = None
     public_api: list[str] = field(default_factory=list)
@@ -235,6 +293,10 @@ def validate_app_module(module: AppModule) -> AppModule:
             raise TypeError(f"App {module.label!r} schedule must be ScheduleSpec")
         _validate_non_empty_path(schedule.schedule_id, f"App {module.label!r} schedule_id")
         _validate_non_empty_path(schedule.task_type, f"App {module.label!r} schedule task_type")
+    _validate_list(module.settings, f"App {module.label!r} settings")
+    for setting in module.settings:
+        if not isinstance(setting, SettingSpec):
+            raise TypeError(f"App {module.label!r} setting must be SettingSpec")
     for lifecycle_hook in module.lifecycle_hooks:
         if not isinstance(lifecycle_hook, LifecycleHookSpec):
             raise TypeError(f"App {module.label!r} lifecycle_hook must be LifecycleHookSpec")
@@ -286,3 +348,78 @@ def _validate_non_empty_path(value: str, label: str) -> None:
 def _validate_list(value: object, label: str) -> None:
     if not isinstance(value, list):
         raise TypeError(f"{label} must be a list")
+
+
+def _validate_setting_spec(spec: SettingSpec) -> None:
+    if not _LABEL_PATTERN.fullmatch(spec.module):
+        raise ValueError(f"setting module is invalid: {spec.module!r}")
+    if not _SETTING_KEY_PATTERN.fullmatch(spec.key):
+        raise ValueError(f"setting key is invalid: {spec.key!r}")
+    if spec.value_type not in _SETTING_VALUE_TYPES:
+        raise ValueError(f"setting value_type is invalid: {spec.value_type!r}")
+    if not spec.scopes:
+        raise ValueError("setting scopes cannot be empty")
+    for scope in spec.scopes:
+        if scope not in _SETTING_SCOPES:
+            raise ValueError(f"setting scope is invalid: {scope!r}")
+    if not spec.category.strip():
+        raise ValueError("setting category is required")
+    if not spec.description.strip():
+        raise ValueError("setting description is required")
+    if spec.risk_level not in _SETTING_RISK_LEVELS:
+        raise ValueError(f"setting risk_level is invalid: {spec.risk_level!r}")
+    if spec.kind not in _SETTING_KINDS:
+        raise ValueError(f"setting kind is invalid: {spec.kind!r}")
+    if spec.cache_ttl_seconds is not None and spec.cache_ttl_seconds < 0:
+        raise ValueError("setting cache_ttl_seconds must be non-negative")
+    _validate_setting_value(spec, spec.default, field_name="default")
+
+
+def _validate_setting_value(
+    spec: SettingSpec,
+    value: object,
+    *,
+    field_name: str = "value",
+) -> object:
+    if spec.secret_ref_only:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"setting {field_name} must be a non-empty secret reference")
+        return value
+    if spec.value_type == "string":
+        if not isinstance(value, str):
+            raise ValueError(f"setting {field_name} must be a string")
+        return value
+    if spec.value_type == "int":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"setting {field_name} must be an int")
+        _validate_numeric_bounds(spec, float(value), field_name)
+        return value
+    if spec.value_type == "float":
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            raise ValueError(f"setting {field_name} must be a number")
+        _validate_numeric_bounds(spec, float(value), field_name)
+        return value
+    if spec.value_type == "bool":
+        if not isinstance(value, bool):
+            raise ValueError(f"setting {field_name} must be a bool")
+        return value
+    if spec.value_type == "enum":
+        if not isinstance(value, str):
+            raise ValueError(f"setting {field_name} must be an enum string")
+        if spec.allowed_values and value not in spec.allowed_values:
+            raise ValueError(f"setting {field_name} is not an allowed enum value")
+        return value
+    if spec.value_type == "string_list":
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"setting {field_name} must be a string list")
+        return value
+    if spec.value_type == "json":
+        return value
+    raise ValueError(f"setting value_type is invalid: {spec.value_type!r}")
+
+
+def _validate_numeric_bounds(spec: SettingSpec, value: float, field_name: str) -> None:
+    if spec.min_value is not None and value < spec.min_value:
+        raise ValueError(f"setting {field_name} is below min_value")
+    if spec.max_value is not None and value > spec.max_value:
+        raise ValueError(f"setting {field_name} is above max_value")

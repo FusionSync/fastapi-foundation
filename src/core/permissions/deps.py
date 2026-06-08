@@ -6,6 +6,7 @@ from starlette.requests import Request
 
 from core.base.routers import CORE_ROUTE_AUTHORIZATION_RESULT_ATTR
 from core.exceptions import AppError
+from core.permissions.context import AuthorizationDecisionSet
 from core.permissions.decisions import AuthorizationDecision
 
 
@@ -24,6 +25,16 @@ def route_authorization_decisions(request: Request) -> tuple[AuthorizationDecisi
 
 def route_authorization_decision(request: Request) -> AuthorizationDecision:
     return route_authorization_decisions(request)[0]
+
+
+def route_authorization_decision_for(permission: str, *, scope: str | None = None):
+    def dependency(request: Request) -> AuthorizationDecision:
+        return AuthorizationDecisionSet(route_authorization_decisions(request)).require(
+            permission,
+            scope=scope,
+        )
+
+    return dependency
 
 
 def _normalize_route_authorization_result(
