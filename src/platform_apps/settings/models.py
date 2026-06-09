@@ -6,10 +6,10 @@ from uuid import uuid4
 from sqlalchemy import JSON, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 
-class SettingValue(TimestampMixin, BaseModel):
+class SettingValue(TimestampMixin, Model):
     __tablename__ = "setting_values"
     __table_args__ = (
         UniqueConstraint(
@@ -35,7 +35,7 @@ class SettingValue(TimestampMixin, BaseModel):
     reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
-class SettingRevision(TimestampMixin, BaseModel):
+class SettingRevision(TimestampMixin, Model):
     __tablename__ = "setting_revisions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

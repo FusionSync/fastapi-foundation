@@ -17,7 +17,7 @@ from core.apps import (
 from core.base import create_router
 from core.config import Settings
 from core.exceptions import AppError, ErrorCodeSpec, get_error_code
-from core.messages import MessageCatalog, resolve_message
+from core.messages import MessageCatalog, TranslationCatalog, resolve_message, translate
 from core.permissions import PermissionSpec
 
 
@@ -54,6 +54,14 @@ def test_valid_app_module_contract() -> None:
                 hook_id="warmup",
                 phase="startup",
                 handler_path="apps.example_domain.lifecycle.warmup",
+            )
+        ],
+        translation_catalogs=[
+            TranslationCatalog(
+                locale="zh-CN",
+                domain="example_domain",
+                owner_module="example_domain",
+                messages={"Example ready": "示例已就绪"},
             )
         ],
     )
@@ -414,6 +422,29 @@ def test_registry_registers_declared_app_message_catalogs(
     assert resolve_message("DEMO_MESSAGE_NOT_READY", locale="en-GB") == (
         "Demo message is not ready"
     )
+
+
+def test_registry_registers_declared_app_translation_catalogs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = types.ModuleType("fake_app_with_translation_catalogs")
+    fake.module = AppModule(
+        label="demo_translations",
+        version="0.1.0",
+        translation_catalogs=[
+            TranslationCatalog(
+                locale="zh-CN",
+                domain="demo_translations",
+                owner_module="demo_translations",
+                messages={"Demo ready": "演示已就绪"},
+            )
+        ],
+    )
+    monkeypatch.setitem(sys.modules, "fake_app_with_translation_catalogs", fake)
+
+    AppRegistry(["fake_app_with_translation_catalogs"]).load()
+
+    assert translate("Demo ready", locale="zh-CN", domain="demo_translations") == "演示已就绪"
 
 
 def test_registry_rejects_message_catalog_owner_mismatch(

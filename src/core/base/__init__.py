@@ -7,10 +7,10 @@ from core.base.routers import (
     parse_route_permission,
 )
 from core.base.schemas import (
-    BaseSchema,
     CreateSchema,
     ListQuerySchema,
     ReadSchema,
+    Schema,
     SortTerm,
     UpdateSchema,
 )
@@ -23,7 +23,6 @@ _REPOSITORY_EXPORTS = {
 }
 
 __all__ = [
-    "BaseSchema",
     "BaseRepository",
     "BaseService",
     "CrossTenantRepository",
@@ -33,6 +32,7 @@ __all__ = [
     "RequestSecurityResolver",
     "RouteSecurityPolicy",
     "RouteAuthorizer",
+    "Schema",
     "SortTerm",
     "TenantScopedRepository",
     "UpdateSchema",

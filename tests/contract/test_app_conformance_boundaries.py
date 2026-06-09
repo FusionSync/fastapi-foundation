@@ -321,6 +321,113 @@ def test_check_app_accepts_declared_message_catalogs(isolated_apps: Path) -> Non
     assert result.errors == []
 
 
+def test_check_app_accepts_declared_translation_catalogs(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        translation_catalogs=(
+            "[TranslationCatalog("
+            "locale='zh-CN', domain='example_domain', owner_module='example_domain', "
+            "messages={'Example ready': '示例已就绪'}"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is True
+    assert result.errors == []
+
+
+def test_check_app_rejects_translation_catalog_owner_mismatch(isolated_apps: Path) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        translation_catalogs=(
+            "[TranslationCatalog("
+            "locale='zh-CN', domain='example_domain', owner_module='other_domain', "
+            "messages={'Example ready': '示例已就绪'}"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "translation catalog zh-CN owner_module must match app label 'example_domain'"
+        in result.errors
+    )
+
+
+def test_check_app_rejects_message_catalog_missing_non_deprecated_codes(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "["
+            "ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_READY', 409, 'example message ready', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            "),"
+            "ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_LOCKED', 409, 'example message locked', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            ")"
+            "]"
+        ),
+        message_catalogs=(
+            "[MessageCatalog("
+            "locale='en-US', owner_module='example_domain', "
+            "messages={'EXAMPLE_MESSAGE_READY': 'Example message ready'}"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is False
+    assert (
+        "message catalog en-US missing messages for codes: EXAMPLE_MESSAGE_LOCKED; "
+        "add messages or excluded_codes"
+    ) in result.errors
+
+
+def test_check_app_accepts_message_catalog_explicit_exclusions(
+    isolated_apps: Path,
+) -> None:
+    _write_app(
+        isolated_apps,
+        "example_domain",
+        error_codes=(
+            "["
+            "ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_READY', 409, 'example message ready', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            "),"
+            "ErrorCodeSpec("
+            "'EXAMPLE_MESSAGE_LOCKED', 409, 'example message locked', "
+            "owner_module='example_domain', details_schema={}, deprecated=False"
+            ")"
+            "]"
+        ),
+        message_catalogs=(
+            "[MessageCatalog("
+            "locale='en-US', owner_module='example_domain', "
+            "messages={'EXAMPLE_MESSAGE_READY': 'Example message ready'}, "
+            "excluded_codes=('EXAMPLE_MESSAGE_LOCKED',)"
+            ")]"
+        ),
+    )
+
+    result = check_app("apps.example_domain.module")
+
+    assert result.ok is True
+    assert result.errors == []
+
+
 def test_check_app_rejects_message_catalog_owner_mismatch(isolated_apps: Path) -> None:
     _write_app(
         isolated_apps,
@@ -522,6 +629,7 @@ def _write_app(
     task_handler_body: str | None = None,
     error_codes: str | None = None,
     message_catalogs: str | None = None,
+    translation_catalogs: str | None = None,
     route_permissions: tuple[str, ...] = (),
     tenant_model: bool = False,
     repository_body: str | None = None,
@@ -534,7 +642,7 @@ def _write_app(
     _write(migrations_dir / "__init__.py", "")
     _write(
         app_dir / "schemas.py",
-        "from core.base import BaseSchema\n\nclass ExampleSchema(BaseSchema):\n    name: str\n",
+        "from core.base import Schema\n\nclass ExampleSchema(Schema):\n    name: str\n",
     )
     if tenant_model:
         table_name = f"{name}_{root.name}_records".replace("-", "_")
@@ -588,9 +696,17 @@ def _write_app(
     message_catalog_import = (
         "from core.messages import MessageCatalog\n" if message_catalogs else ""
     )
+    translation_catalog_import = (
+        "from core.messages import TranslationCatalog\n" if translation_catalogs else ""
+    )
     error_codes_arg = f"    error_codes={error_codes},\n" if error_codes else ""
     message_catalogs_arg = (
         f"    message_catalogs={message_catalogs},\n" if message_catalogs else ""
+    )
+    translation_catalogs_arg = (
+        f"    translation_catalogs={translation_catalogs},\n"
+        if translation_catalogs
+        else ""
     )
     event_handlers = (
         "    event_handlers=[\n"
@@ -618,6 +734,7 @@ def _write_app(
         f"from core.apps import {', '.join(app_module_imports)}\n"
         f"{error_code_import}"
         f"{message_catalog_import}"
+        f"{translation_catalog_import}"
         f"from apps.{name}.permissions import PERMISSIONS\n"
         f"from apps.{name}.router import router\n\n"
         "module = AppModule(\n"
@@ -630,6 +747,7 @@ def _write_app(
         "    permissions=PERMISSIONS,\n"
         f"{error_codes_arg}"
         f"{message_catalogs_arg}"
+        f"{translation_catalogs_arg}"
         f"{event_handlers}"
         f"{task_handlers}"
         f"    public_api=['apps.{name}.public_api'],\n"

@@ -1,8 +1,10 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from core.base.schemas import Schema
 
 DeploymentMode = Literal["local", "private", "cloud"]
 ErrorHttpStatusMode = Literal["standard", "always_200"]
@@ -11,19 +13,19 @@ SchedulerProviderMode = Literal["local", "apscheduler", "celery_beat"]
 DatabaseTenantFallbackMode = Literal["disabled", "session_variable"]
 
 
-class AppSettings(BaseModel):
+class AppSettings(Schema):
     name: str = "FastAPI Foundation"
     version: str = "0.1.0"
     env: DeploymentMode = "local"
     debug: bool = False
 
 
-class ApiSettings(BaseModel):
+class ApiSettings(Schema):
     prefix: str = "/api/v1"
     error_http_status_mode: ErrorHttpStatusMode = "standard"
 
 
-class SecuritySettings(BaseModel):
+class SecuritySettings(Schema):
     jwt_secret: str = "change-me"
     jwt_secret_ref: str | None = None
     cors_origins: list[str] = Field(default_factory=list)
@@ -33,7 +35,7 @@ class SecuritySettings(BaseModel):
     max_request_body_bytes: int | None = 10 * 1024 * 1024
 
 
-class DatabaseSettings(BaseModel):
+class DatabaseSettings(Schema):
     url: str = "sqlite+aiosqlite:///./data/local.db"
     read_url: str | None = None
     pool_size: int | None = Field(default=None, ge=1)
@@ -42,32 +44,32 @@ class DatabaseSettings(BaseModel):
     tenant_fallback_setting_name: str = "app.tenant_id"
 
 
-class ObservabilitySettings(BaseModel):
+class ObservabilitySettings(Schema):
     service_role: str = "server"
     instance_id: str | None = None
     metrics_enabled: bool = True
 
 
-class TaskQueueSettings(BaseModel):
+class TaskQueueSettings(Schema):
     provider: TaskQueueProviderMode = "sync"
     max_attempts: int = 3
     retry_backoff_seconds: int = 30
     idle_sleep_seconds: float = 1.0
 
 
-class SchedulerSettings(BaseModel):
+class SchedulerSettings(Schema):
     provider: SchedulerProviderMode = "local"
     idle_sleep_seconds: float = 1.0
     lock_ttl_seconds: int = 60
 
 
-class TenantLifecycleSettings(BaseModel):
+class TenantLifecycleSettings(Schema):
     allow_suspended_file_download: bool = False
     allow_archived_read: bool = False
     allow_archived_file_download: bool = False
 
 
-class DependencySettings(BaseModel):
+class DependencySettings(Schema):
     redis_url: str | None = None
     rabbitmq_url: str | None = None
     object_storage_endpoint: str | None = None

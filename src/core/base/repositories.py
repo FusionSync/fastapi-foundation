@@ -4,14 +4,14 @@ from typing import Any, Generic, TypeVar
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.base.schemas import ListQuerySchema
 from core.context import get_current_context
 from core.exceptions import AppError
 from core.permissions.cross_tenant import CrossTenantPermission, cross_tenant_reason_and_decision
 from core.permissions.decisions import AuthorizationDecision, assert_platform_decision
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
+ModelT = TypeVar("ModelT", bound=Model)
 FilterApplier = Callable[[Select[tuple[Any]], Any], Select[tuple[Any]]]
 
 

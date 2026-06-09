@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.apps import EventSchemaSpec
-from core.base.models import BaseModel, TenantScopedModel
+from core.base.models import Model, TenantScopedModel
 from core.db import unit_of_work
 from core.events import EventRegistry
 from core.exceptions import AppError
@@ -26,7 +26,7 @@ class BusinessRecord(TenantScopedModel):
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
@@ -154,7 +154,7 @@ async def test_outbox_validates_registered_event_payload_schema(
 
 async def _count(
     session_factory: async_sessionmaker[AsyncSession],
-    model: type[BaseModel],
+    model: type[Model],
 ) -> int:
     async with session_factory() as session:
         result = await session.scalar(select(func.count()).select_from(model))
@@ -163,8 +163,8 @@ async def _count(
 
 async def _all(
     session_factory: async_sessionmaker[AsyncSession],
-    model: type[BaseModel],
-) -> list[BaseModel]:
+    model: type[Model],
+) -> list[Model]:
     async with session_factory() as session:
         result = await session.execute(select(model))
         rows = list(result.scalars().all())

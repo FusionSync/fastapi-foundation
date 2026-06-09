@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from core.app import create_app
 from core.auth import LocalJwtConfig, LocalJwtProvider, TokenClaims
 from core.auth.request_security import DatabaseRequestSecurityPipeline
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.config import Settings
 from core.permissions import PLATFORM_TENANT_ID, ProjectedPolicy
 from core.tenancy import Tenant, TenantMember
@@ -305,7 +305,7 @@ def _session_factory(database_url: str) -> async_sessionmaker:
 async def _seed_security_facts(database_url: str, *, include_policy: bool) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:
@@ -362,7 +362,7 @@ async def _seed_auth_only_facts(
 ) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:
@@ -405,7 +405,7 @@ async def _seed_auth_only_facts(
 async def _seed_header_selection_facts(database_url: str) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:
@@ -495,7 +495,7 @@ def _write_protected_runtime_app(root: Path, *, use_decision_dependency: bool = 
     _write(app_dir / "__init__.py", "from runtime_apps.secure_runtime.module import module\n")
     _write(
         app_dir / "schemas.py",
-        "from core.base import BaseSchema\n\nclass RuntimeSchema(BaseSchema):\n    name: str\n",
+        "from core.base import Schema\n\nclass RuntimeSchema(Schema):\n    name: str\n",
     )
     _write(app_dir / "models.py", "MODEL_IMPORTED = True\n")
     _write(app_dir / "services.py", "class RuntimeService:\n    pass\n")
@@ -571,7 +571,7 @@ def _write_auth_only_runtime_app(
     _write(app_dir / "__init__.py", "from runtime_apps.auth_only_runtime.module import module\n")
     _write(
         app_dir / "schemas.py",
-        "from core.base import BaseSchema\n\nclass RuntimeIdentitySchema(BaseSchema):\n"
+        "from core.base import Schema\n\nclass RuntimeIdentitySchema(Schema):\n"
         "    user_id: str\n"
         "    tenant_id: str | None\n"
         "\n\nclass RuntimeDecisionSchema(RuntimeIdentitySchema):\n"

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.app import create_app
 from core.auth import LocalJwtConfig, LocalJwtProvider, TokenClaims
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.config import Settings
 from core.db import unit_of_work
 from core.permissions import PLATFORM_TENANT_ID, ProjectedPolicy
@@ -170,7 +170,7 @@ def test_platform_audit_retention_policy_and_siem_export(tmp_path: Path) -> None
 async def _seed_audit_api_facts(database_url: str) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with unit_of_work(session_factory) as uow:

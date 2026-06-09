@@ -11,7 +11,7 @@ from core.apps.dependencies import validate_app_dependencies
 from core.apps.module import AppModule, validate_app_module
 from core.exceptions.base import AppError
 from core.exceptions.codes import register_error_codes, validate_error_code_spec
-from core.messages import register_message_catalogs
+from core.messages import register_message_catalogs, register_translation_catalogs
 
 CORE_FRAMEWORK_VERSION = "0.1.0"
 
@@ -169,6 +169,7 @@ class AppRegistry:
         try:
             self._register_app_error_codes(validation.ordered_modules)
             self._register_app_message_catalogs(validation.ordered_modules)
+            self._register_app_translation_catalogs(validation.ordered_modules)
         except ValueError as exc:
             self._set_diagnostics(
                 modules=diagnostics,
@@ -250,6 +251,7 @@ class AppRegistry:
                 )
         errors.extend(_error_code_gate_errors(modules))
         errors.extend(_message_catalog_gate_errors(modules))
+        errors.extend(_translation_catalog_gate_errors(modules))
         return errors
 
     def _register_app_error_codes(self, modules: list[AppModule]) -> None:
@@ -262,6 +264,16 @@ class AppRegistry:
         if catalogs:
             try:
                 register_message_catalogs(*catalogs)
+            except AppError as exc:
+                raise ValueError(str(exc)) from exc
+
+    def _register_app_translation_catalogs(self, modules: list[AppModule]) -> None:
+        catalogs = [
+            catalog for module in modules for catalog in module.translation_catalogs
+        ]
+        if catalogs:
+            try:
+                register_translation_catalogs(*catalogs)
             except AppError as exc:
                 raise ValueError(str(exc)) from exc
 
@@ -352,4 +364,51 @@ def _message_catalog_gate_errors(modules: list[AppModule]) -> list[str]:
                         f"App {module.label!r} message catalog {catalog.locale} code {code} "
                         "cannot target deprecated error code"
                     )
+            for code in catalog.excluded_codes:
+                spec = specs_by_code.get(code)
+                if code in catalog.messages:
+                    errors.append(
+                        f"App {module.label!r} message catalog {catalog.locale} code {code} "
+                        "cannot be both defined and excluded"
+                    )
+                if spec is None:
+                    errors.append(
+                        f"App {module.label!r} message catalog {catalog.locale} excluded "
+                        f"code {code} must be declared in AppModule.error_codes"
+                    )
+                    continue
+            missing_codes = sorted(
+                code
+                for code, spec in specs_by_code.items()
+                if not spec.deprecated
+                and code not in catalog.messages
+                and code not in catalog.excluded_codes
+            )
+            if missing_codes:
+                errors.append(
+                    f"App {module.label!r} message catalog {catalog.locale} missing "
+                    f"messages for codes: {', '.join(missing_codes)}; add messages "
+                    "or excluded_codes"
+                )
+    return errors
+
+
+def _translation_catalog_gate_errors(modules: list[AppModule]) -> list[str]:
+    errors: list[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    for module in modules:
+        for catalog in module.translation_catalogs:
+            if catalog.owner_module != module.label:
+                errors.append(
+                    f"App {module.label!r} translation catalog {catalog.locale} "
+                    "owner_module must match app label"
+                )
+            for source in catalog.messages:
+                key = (catalog.locale, catalog.domain, source)
+                if key in seen:
+                    errors.append(
+                        f"App {module.label!r} duplicate translation source {source!r} "
+                        f"in locale {catalog.locale} domain {catalog.domain}"
+                    )
+                seen.add(key)
     return errors

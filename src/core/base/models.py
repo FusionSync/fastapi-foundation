@@ -15,7 +15,7 @@ metadata = MetaData(
 )
 
 
-class BaseModel(DeclarativeBase):
+class Model(DeclarativeBase):
     metadata = metadata
 
 
@@ -40,5 +40,5 @@ class TenantScopedMixin:
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
 
-class TenantScopedModel(TenantScopedMixin, BaseModel):
+class TenantScopedModel(TenantScopedMixin, Model):
     __abstract__ = True

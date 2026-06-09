@@ -3,12 +3,48 @@
 ## Progress
 
 - Status: `connected`
-- Done: BaseModel/BaseSchema/router/service/repository 基线已落地，tenant repository、route security policy、platform permission scope、ListQuerySchema 分页/过滤/排序 helper、repository 查询应用 helper、业务 repository 继承 conformance gate 和 service/router 查询绕过 lint 已被上层 gate 或 contract tests 使用。
+- Done: Pydantic Schema、ORM Model/router/service/repository 基线已落地，tenant repository、route security policy、platform permission scope、ListQuerySchema 分页/过滤/排序 helper、repository 查询应用 helper、业务 repository 继承 conformance gate 和 service/router 查询绕过 lint 已被上层 gate 或 contract tests 使用。
 - Next: _none_
 
 ## 职责
 
 Base Classes 模块提供所有 app 必须使用的通用基类和基础工具，保证模型、schema、router 和 service 的行为一致。
+
+## 数据结构边界
+
+底座统一使用两套基础类型，禁止混用名字：
+
+```text
+core.base.Schema
+  Pydantic 契约基类。用于 API schema、service DTO/result、module spec、配置子模型、响应 envelope、事件 payload、任务 payload。
+
+core.base.models.Model
+  SQLAlchemy ORM 根类。用于数据库表模型。
+```
+
+ORM 语义统一写 `Model`，Pydantic 契约语义统一写 `Schema`。
+
+### 必须使用 Pydantic Schema 的场景
+
+- HTTP API request schema、response schema、query schema。
+- service 方法的公开入参和返回值，尤其是会传给 router、task、event、cache 或测试断言的对象。
+- `AppModule`、权限、配置、事件、任务、调度、admin metadata 等模块声明契约。
+- response envelope、分页对象、错误响应 details 的结构化对象。
+- 需要 `model_dump()`、字段校验、OpenAPI/JSON schema、别名或跨层序列化的对象。
+
+### 可以使用 dataclass 的场景
+
+- 私有 runtime holder，例如进程内 cache entry、lock state、临时统计结果。
+- 不跨 HTTP、task、event、module registry、public API 边界的局部不可变值对象。
+- 不需要 `model_dump()`、OpenAPI schema、多语言/错误响应序列化或外部契约承诺的内部对象。
+
+### 禁止规则
+
+- 禁止在 `schemas.py` 中使用 `@dataclass` 声明 API 入参或返回值。
+- 禁止 service 公开返回 dataclass 给 router。
+- 禁止 module contract/spec 使用裸 `dict` 代替 Pydantic 契约对象。
+- Pydantic 契约基类统一从 `core.base` 导入 `Schema`。
+- ORM 基类统一使用 `core.base.models.Model` 或 `TenantScopedModel`。
 
 ## 目录建议
 
@@ -24,11 +60,11 @@ src/core/base/
 
 ## Model 基类
 
-建议提供：
+ORM 模型基类只负责数据库映射，命名为 `Model`：
 
 ```text
-BaseModel
-  id
+Model
+  SQLAlchemy DeclarativeBase 根类
 
 TimestampMixin
   created_at
@@ -47,12 +83,32 @@ AuditUserMixin
 
 业务模型按需组合，不允许每个 app 自己重复定义审计字段和租户字段。
 
+示例：
+
+```python
+from core.base.models import IdMixin, Model, TimestampMixin
+
+
+class ExampleRecord(IdMixin, TimestampMixin, Model):
+    __tablename__ = "example_records"
+```
+
+租户表优先继承 `TenantScopedModel`：
+
+```python
+from core.base.models import IdMixin, TenantScopedModel, TimestampMixin
+
+
+class ExampleRecord(IdMixin, TimestampMixin, TenantScopedModel):
+    __tablename__ = "example_records"
+```
+
 ## Schema 基类
 
-建议提供：
+Pydantic 契约基类命名为 `Schema`，API schema 在此基础上继承更具体的 schema 基类：
 
 ```text
-BaseSchema
+Schema
   Pydantic 基础配置
 
 ReadSchema
@@ -94,6 +150,25 @@ class ExampleListQuery(ListQuerySchema):
 ```
 
 所有对外 schema 必须继承 core schema 基类，避免序列化规则不一致。
+
+示例：
+
+```python
+from core.base import CreateSchema, ReadSchema, Schema
+
+
+class ExampleServiceResult(Schema):
+    id: str
+    status: str
+
+
+class ExampleCreate(CreateSchema):
+    name: str
+
+
+class ExampleRead(ReadSchema):
+    name: str
+```
 
 ## Route 和 Router 基类
 

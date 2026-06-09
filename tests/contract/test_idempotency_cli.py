@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.cli.main import main
 from core.idempotency import IdempotencyRecord, hash_request_payload
 
@@ -178,7 +178,7 @@ async def _seed_idempotency_record(
 ) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     now = datetime(2026, 5, 28, 10, 0, tzinfo=UTC)
     resolved_request_hash = request_hash or hash_request_payload({"file_name": "proposal.docx"})

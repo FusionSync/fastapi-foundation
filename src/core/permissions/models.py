@@ -5,10 +5,10 @@ from uuid import uuid4
 from sqlalchemy import JSON, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 
-class RoleTemplate(TimestampMixin, BaseModel):
+class RoleTemplate(TimestampMixin, Model):
     __tablename__ = "role_templates"
     __table_args__ = (
         UniqueConstraint("scope", "name", "version", name="uq_role_templates_scope_name_version"),
@@ -21,7 +21,7 @@ class RoleTemplate(TimestampMixin, BaseModel):
     permissions: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False, default=list)
 
 
-class RoleGrant(TimestampMixin, BaseModel):
+class RoleGrant(TimestampMixin, Model):
     __tablename__ = "role_grants"
     __table_args__ = (
         UniqueConstraint(
@@ -41,7 +41,7 @@ class RoleGrant(TimestampMixin, BaseModel):
     policy_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
-class ProjectedPolicy(TimestampMixin, BaseModel):
+class ProjectedPolicy(TimestampMixin, Model):
     __tablename__ = "projected_policies"
     __table_args__ = (
         UniqueConstraint(

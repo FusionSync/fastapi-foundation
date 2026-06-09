@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.cache import (
     CacheInvalidationHandler,
     MemoryCacheProvider,
@@ -36,7 +36,7 @@ TENANT_INVITATION_ISSUED_EVENT = "tenant.invitation_issued"
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:

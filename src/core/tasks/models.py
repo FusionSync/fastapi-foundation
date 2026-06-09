@@ -6,12 +6,12 @@ from typing import Any, Literal
 from sqlalchemy import JSON, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel
+from core.base.models import Model
 
 TaskRunStatus = Literal["pending", "running", "succeeded", "failed", "dead_letter", "cancelled"]
 
 
-class TaskRun(BaseModel):
+class TaskRun(Model):
     __tablename__ = "task_runs"
     __table_args__ = (
         UniqueConstraint(

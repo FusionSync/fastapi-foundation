@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from core.base import BaseSchema, CreateSchema
+from core.base import CreateSchema, Schema
 
 
-class AuditLogRead(BaseSchema):
+class AuditLogRead(Schema):
     id: str
     tenant_id: str | None = None
     actor_id: str | None = None
@@ -30,7 +30,7 @@ class AuditChainVerifyRequest(CreateSchema):
     tenant_id: str | None = None
 
 
-class AuditChainVerifyRead(BaseSchema):
+class AuditChainVerifyRead(Schema):
     tenant_id: str | None = None
     checked: int
     valid: bool
@@ -44,7 +44,7 @@ class AuditExportCreateRequest(CreateSchema):
     destination_root: str | None = None
 
 
-class AuditExportRead(BaseSchema):
+class AuditExportRead(Schema):
     id: str
     tenant_id: str | None = None
     actor_id: str | None = None
@@ -68,7 +68,7 @@ class AuditRetentionRequest(CreateSchema):
     dry_run: bool = True
 
 
-class AuditRetentionRead(BaseSchema):
+class AuditRetentionRead(Schema):
     tenant_id: str | None = None
     older_than: datetime
     matched_count: int

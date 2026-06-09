@@ -7,10 +7,10 @@ from uuid import uuid4
 from sqlalchemy import JSON, DateTime, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel
+from core.base.models import Model
 
 
-class ScheduleTriggerLog(BaseModel):
+class ScheduleTriggerLog(Model):
     __tablename__ = "schedule_trigger_logs"
     __table_args__ = (
         UniqueConstraint(
@@ -36,7 +36,7 @@ class ScheduleTriggerLog(BaseModel):
     details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
 
-class ScheduleState(BaseModel):
+class ScheduleState(Model):
     __tablename__ = "schedule_states"
     __table_args__ = (
         UniqueConstraint(

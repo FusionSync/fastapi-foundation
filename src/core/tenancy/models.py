@@ -7,12 +7,12 @@ from uuid import uuid4
 from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 TenantLifecycleStepStatus = Literal["pending", "succeeded", "failed"]
 
 
-class Tenant(TimestampMixin, BaseModel):
+class Tenant(TimestampMixin, Model):
     __tablename__ = "tenants"
     __table_args__ = (
         UniqueConstraint("code", name="uq_tenants_code"),
@@ -25,7 +25,7 @@ class Tenant(TimestampMixin, BaseModel):
     deployment_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
 
 
-class TenantMember(TimestampMixin, BaseModel):
+class TenantMember(TimestampMixin, Model):
     __tablename__ = "tenant_members"
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_tenant_members_tenant_user"),
@@ -37,7 +37,7 @@ class TenantMember(TimestampMixin, BaseModel):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
 
 
-class TenantInvitation(TimestampMixin, BaseModel):
+class TenantInvitation(TimestampMixin, Model):
     __tablename__ = "tenant_invitations"
     __table_args__ = (
         UniqueConstraint("token_hash", name="uq_tenant_invitations_token_hash"),
@@ -68,7 +68,7 @@ class TenantInvitation(TimestampMixin, BaseModel):
     revoked_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
-class TenantLifecycleStepRecord(TimestampMixin, BaseModel):
+class TenantLifecycleStepRecord(TimestampMixin, Model):
     __tablename__ = "tenant_lifecycle_step_records"
     __table_args__ = (
         UniqueConstraint(

@@ -6,10 +6,10 @@ from uuid import uuid4
 from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 
-class User(TimestampMixin, BaseModel):
+class User(TimestampMixin, Model):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
@@ -22,7 +22,7 @@ class User(TimestampMixin, BaseModel):
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
-class UserCredential(TimestampMixin, BaseModel):
+class UserCredential(TimestampMixin, Model):
     __tablename__ = "user_credentials"
 
     user_id: Mapped[str] = mapped_column(
@@ -37,7 +37,7 @@ class UserCredential(TimestampMixin, BaseModel):
     )
 
 
-class ExternalIdentity(TimestampMixin, BaseModel):
+class ExternalIdentity(TimestampMixin, Model):
     __tablename__ = "external_identities"
     __table_args__ = (
         UniqueConstraint("provider", "subject", name="uq_external_identities_provider_subject"),
@@ -49,7 +49,7 @@ class ExternalIdentity(TimestampMixin, BaseModel):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
-class UserSession(BaseModel):
+class UserSession(Model):
     __tablename__ = "user_sessions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

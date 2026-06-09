@@ -6,10 +6,10 @@ from uuid import uuid4
 from sqlalchemy import JSON, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel
+from core.base.models import Model
 
 
-class AuditLog(BaseModel):
+class AuditLog(Model):
     __tablename__ = "audit_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -36,7 +36,7 @@ class AuditLog(BaseModel):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class AuditExportRecord(BaseModel):
+class AuditExportRecord(Model):
     __tablename__ = "audit_export_records"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))

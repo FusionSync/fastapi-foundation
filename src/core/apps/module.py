@@ -13,7 +13,7 @@ from core.admin.specs import (
     AdminRouteSpec,
 )
 from core.exceptions.codes import ErrorCodeSpec, validate_error_code_spec
-from core.messages.catalog import MessageCatalog
+from core.messages import MessageCatalog, TranslationCatalog
 from core.permissions.specs import PermissionSpec
 
 _LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -149,6 +149,7 @@ class AppModule:
     permissions: list[PermissionSpec] = field(default_factory=list)
     error_codes: list[ErrorCodeSpec] = field(default_factory=list)
     message_catalogs: list[MessageCatalog] = field(default_factory=list)
+    translation_catalogs: list[TranslationCatalog] = field(default_factory=list)
     event_schemas: list[EventSchemaSpec] = field(default_factory=list)
     event_handlers: list[EventHandlerSpec] = field(default_factory=list)
     task_handlers: list[TaskHandlerSpec] = field(default_factory=list)
@@ -186,6 +187,7 @@ def validate_app_module(module: AppModule) -> AppModule:
     )
     _validate_list(module.error_codes, f"App {module.label!r} error_codes")
     _validate_list(module.message_catalogs, f"App {module.label!r} message_catalogs")
+    _validate_list(module.translation_catalogs, f"App {module.label!r} translation_catalogs")
     for dependency in module.dependencies:
         if not _LABEL_PATTERN.match(dependency):
             raise ValueError(f"App {module.label!r} has invalid dependency: {dependency!r}")
@@ -220,6 +222,11 @@ def validate_app_module(module: AppModule) -> AppModule:
     for message_catalog in module.message_catalogs:
         if not isinstance(message_catalog, MessageCatalog):
             raise TypeError(f"App {module.label!r} message_catalog must be MessageCatalog")
+    for translation_catalog in module.translation_catalogs:
+        if not isinstance(translation_catalog, TranslationCatalog):
+            raise TypeError(
+                f"App {module.label!r} translation_catalog must be TranslationCatalog"
+            )
     for event_schema in module.event_schemas:
         if not isinstance(event_schema, EventSchemaSpec):
             raise TypeError(f"App {module.label!r} event_schema must be EventSchemaSpec")

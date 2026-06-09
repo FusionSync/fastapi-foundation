@@ -3,6 +3,8 @@ import pytest
 from core.exceptions import (
     AppError,
     ErrorCodeSpec,
+    ModuleErrorCode,
+    define_module_error_codes,
     get_error_code,
     register_error_codes,
 )
@@ -29,6 +31,37 @@ def test_apps_must_register_error_codes_before_throwing_them() -> None:
 
     assert error.code == "EXAMPLE_NOT_READY"
     assert get_error_code("EXAMPLE_NOT_READY").default_http_status == 409
+
+
+def test_define_module_error_codes_applies_owner_and_prefix_policy() -> None:
+    specs = define_module_error_codes(
+        "orders",
+        ModuleErrorCode(
+            "ORDERS_NOT_READY",
+            409,
+            "orders are not ready",
+            details_schema={"order_id": "str"},
+        ),
+    )
+
+    assert specs == [
+        ErrorCodeSpec(
+            "ORDERS_NOT_READY",
+            409,
+            "orders are not ready",
+            owner_module="orders",
+            details_schema={"order_id": "str"},
+            deprecated=False,
+        )
+    ]
+
+
+def test_define_module_error_codes_rejects_code_without_module_prefix() -> None:
+    with pytest.raises(ValueError, match="must start with module prefix 'ORDERS_'"):
+        define_module_error_codes(
+            "orders",
+            ModuleErrorCode("ORDER_NOT_READY", 409, "order is not ready"),
+        )
 
 
 @pytest.mark.parametrize(

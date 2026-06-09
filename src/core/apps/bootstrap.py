@@ -96,6 +96,10 @@ class _TemplateContext:
         return self.label.replace("_", " ").title()
 
     @property
+    def label_upper(self) -> str:
+        return self.label.upper()
+
+    @property
     def module_package(self) -> str:
         return f"{self.package}.{self.label}"
 
@@ -120,6 +124,7 @@ def _render_app_files(context: _TemplateContext) -> dict[str, str]:
         "__PASCAL__": context.pascal_name,
         "__ROUTE_PREFIX__": context.route_prefix,
         "__TITLE__": context.title,
+        "__LABEL_UPPER__": context.label_upper,
         "__MODULE_PACKAGE__": context.module_package,
     }
     return {
@@ -148,7 +153,7 @@ class __PASCAL__Record(IdMixin, TimestampMixin, TenantScopedModel):
 
     title: Mapped[str] = mapped_column(String(128), nullable=False)
 """,
-    "schemas.py": """from core.base import BaseSchema, CreateSchema, ReadSchema, UpdateSchema
+    "schemas.py": """from core.base import Schema, CreateSchema, ReadSchema, UpdateSchema
 
 
 class __PASCAL__Create(CreateSchema):
@@ -164,7 +169,7 @@ class __PASCAL__Read(ReadSchema):
     title: str
 
 
-class __PASCAL__Status(BaseSchema):
+class __PASCAL__Status(Schema):
     app: str
     status: str
 """,
@@ -210,7 +215,44 @@ PERMISSIONS = [
     ),
 ]
 """,
-    "module.py": """from __MODULE_PACKAGE__.permissions import PERMISSIONS
+    "errors.py": """from core.exceptions import ModuleErrorCode, define_module_error_codes
+
+__LABEL_UPPER___NOT_READY = "__LABEL_UPPER___NOT_READY"
+
+ERROR_CODES = define_module_error_codes(
+    "__LABEL__",
+    ModuleErrorCode(
+        __LABEL_UPPER___NOT_READY,
+        409,
+        "__TITLE__ is not ready",
+        details_schema={"reason": "str"},
+    ),
+)
+
+__all__ = ["ERROR_CODES", "__LABEL_UPPER___NOT_READY"]
+""",
+    "error_messages.py": """from __MODULE_PACKAGE__.errors import (
+    ERROR_CODES,
+    __LABEL_UPPER___NOT_READY,
+)
+from core.messages import ModuleMessageCatalog, define_module_message_catalogs
+
+MESSAGE_CATALOGS = define_module_message_catalogs(
+    "__LABEL__",
+    error_codes=ERROR_CODES,
+    catalogs=[
+        ModuleMessageCatalog(
+            locale="en-US",
+            messages={__LABEL_UPPER___NOT_READY: "__TITLE__ is not ready"},
+        )
+    ],
+)
+
+__all__ = ["MESSAGE_CATALOGS"]
+""",
+    "module.py": """from __MODULE_PACKAGE__.errors import ERROR_CODES
+from __MODULE_PACKAGE__.error_messages import MESSAGE_CATALOGS
+from __MODULE_PACKAGE__.permissions import PERMISSIONS
 from __MODULE_PACKAGE__.router import router
 from core.apps import AppModule, MigrationSpec
 
@@ -222,6 +264,8 @@ module = AppModule(
     models=["__MODULE_PACKAGE__.models"],
     migrations=MigrationSpec(path="__MODULE_PACKAGE__.migrations"),
     permissions=PERMISSIONS,
+    error_codes=ERROR_CODES,
+    message_catalogs=MESSAGE_CATALOGS,
     public_api=["__MODULE_PACKAGE__.public_api"],
 )
 """,

@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel as PydanticBaseModel
 
 from core.exceptions import AppError
 
@@ -30,7 +30,7 @@ def to_jsonable(value: Any) -> Any:
         return str(value)
     if isinstance(value, Enum):
         return to_jsonable(value.value)
-    if isinstance(value, BaseModel):
+    if isinstance(value, PydanticBaseModel):
         return to_jsonable(value.model_dump(mode="python", by_alias=True))
     if isinstance(value, Mapping):
         return {str(key): to_jsonable(item) for key, item in value.items()}

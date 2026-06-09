@@ -5,10 +5,26 @@ from fastapi.testclient import TestClient
 from core.exceptions import (
     AppError,
     ErrorCodeSpec,
+    ModuleErrorCode,
+    define_module_error_codes,
     register_error_codes,
     register_exception_handlers,
 )
-from core.messages import MessageCatalog, MessageRegistry, resolve_message
+from core.messages import (
+    MessageCatalog,
+    MessageRegistry,
+    ModuleMessageCatalog,
+    ModuleTranslationCatalog,
+    TranslationCatalog,
+    TranslationRegistry,
+    define_module_message_catalogs,
+    define_module_translation_catalogs,
+    resolve_message,
+    translate,
+)
+from core.messages import (
+    gettext as _,
+)
 from core.serialization import fail
 
 
@@ -50,6 +66,47 @@ def test_message_registry_registers_app_catalog_and_rejects_duplicates() -> None
         )
 
     assert duplicate.value.code == "VALIDATION_ERROR"
+
+
+def test_define_module_message_catalogs_requires_messages_or_exclusions() -> None:
+    error_codes = define_module_error_codes(
+        "orders",
+        ModuleErrorCode("ORDERS_NOT_READY", 409, "orders are not ready"),
+        ModuleErrorCode("ORDERS_LOCKED", 409, "orders are locked"),
+    )
+
+    with pytest.raises(ValueError, match="missing messages for codes: ORDERS_LOCKED"):
+        define_module_message_catalogs(
+            "orders",
+            error_codes=error_codes,
+            catalogs=[
+                ModuleMessageCatalog(
+                    locale="en-US",
+                    messages={"ORDERS_NOT_READY": "Orders are not ready"},
+                )
+            ],
+        )
+
+    catalogs = define_module_message_catalogs(
+        "orders",
+        error_codes=error_codes,
+        catalogs=[
+            ModuleMessageCatalog(
+                locale="en-US",
+                messages={"ORDERS_NOT_READY": "Orders are not ready"},
+                excluded_codes=["ORDERS_LOCKED"],
+            )
+        ],
+    )
+
+    assert catalogs == [
+        MessageCatalog(
+            locale="en-US",
+            owner_module="orders",
+            messages={"ORDERS_NOT_READY": "Orders are not ready"},
+            excluded_codes=("ORDERS_LOCKED",),
+        )
+    ]
 
 
 def test_message_registry_rejects_catalogs_without_matching_error_metadata() -> None:
@@ -179,3 +236,72 @@ def test_exception_handler_uses_resolved_message_unless_error_message_is_explici
     assert default_response.json()["message"] == "无权限访问该资源"
     assert explicit_response.status_code == 403
     assert explicit_response.json()["message"] == "custom denied"
+
+
+def test_translation_registry_translates_source_strings_by_domain_and_locale() -> None:
+    registry = TranslationRegistry()
+    registry.register(
+        TranslationCatalog(
+            locale="zh-CN",
+            domain="orders",
+            owner_module="orders",
+            messages={"Order {order_id} created": "订单 {order_id} 已创建"},
+        )
+    )
+
+    assert registry.translate(
+        "Order {order_id} created",
+        locale="zh-CN",
+        domain="orders",
+        params={"order_id": "A001"},
+    ) == "订单 A001 已创建"
+    assert registry.translate(
+        "Order {order_id} created",
+        locale="en-US",
+        domain="orders",
+        params={"order_id": "A001"},
+    ) == "Order A001 created"
+
+
+def test_define_module_translation_catalogs_sets_owner_and_domain() -> None:
+    catalogs = define_module_translation_catalogs(
+        "orders",
+        catalogs=[
+            ModuleTranslationCatalog(
+                locale="zh-CN",
+                messages={"Create order": "创建订单"},
+            )
+        ],
+    )
+
+    assert catalogs == [
+        TranslationCatalog(
+            locale="zh-CN",
+            domain="orders",
+            owner_module="orders",
+            messages={"Create order": "创建订单"},
+        )
+    ]
+
+
+def test_global_translate_uses_registered_source_string_catalog() -> None:
+    from core.messages import register_translation_catalogs
+
+    register_translation_catalogs(
+        TranslationCatalog(
+            locale="zh-CN",
+            domain="contract_test",
+            owner_module="contract_test",
+            messages={"Welcome, {name}": "欢迎，{name}"},
+        )
+    )
+
+    assert translate(
+        "Welcome, {name}",
+        locale="zh-CN",
+        domain="contract_test",
+        params={"name": "Ada"},
+    ) == "欢迎，Ada"
+    assert _("Welcome, {name}", locale="zh-CN", domain="contract_test", params={"name": "Ada"}) == (
+        "欢迎，Ada"
+    )

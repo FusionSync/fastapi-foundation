@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.base import BaseSchema, CreateSchema
+from core.base import CreateSchema, Schema
 
 
-class SettingDefinitionRead(BaseSchema):
+class SettingDefinitionRead(Schema):
     app_label: str
     module: str
     key: str
@@ -41,7 +41,7 @@ class SettingValueValidateRequest(CreateSchema):
     secret_ref: str | None = None
 
 
-class SettingValueValidateRead(BaseSchema):
+class SettingValueValidateRead(Schema):
     module: str
     key: str
     scope: str
@@ -53,7 +53,7 @@ class SettingValueValidateRead(BaseSchema):
     dry_run: bool
 
 
-class SettingValueRead(BaseSchema):
+class SettingValueRead(Schema):
     id: str
     module: str
     key: str
@@ -68,7 +68,7 @@ class SettingValueRead(BaseSchema):
     reason: str | None
 
 
-class ResolvedSettingRead(BaseSchema):
+class ResolvedSettingRead(Schema):
     module: str
     key: str
     scope: str
@@ -78,7 +78,7 @@ class ResolvedSettingRead(BaseSchema):
     version: int
 
 
-class SettingRevisionRead(BaseSchema):
+class SettingRevisionRead(Schema):
     id: str
     setting_value_id: str
     module: str
@@ -94,7 +94,7 @@ class SettingRevisionRead(BaseSchema):
     reason: str | None
 
 
-class SettingResetRead(BaseSchema):
+class SettingResetRead(Schema):
     module: str
     key: str
     scope: str

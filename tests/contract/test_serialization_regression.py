@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import Field
 
 from core.app import create_app
-from core.base import BaseSchema
+from core.base import Schema
 from core.config import Settings
 from core.serialization import ok
 
@@ -20,7 +20,7 @@ class GoldenStatus(StrEnum):
     READY = "ready"
 
 
-class GoldenPayload(BaseSchema):
+class GoldenPayload(Schema):
     external_id: UUID = Field(alias="externalId")
     created_at: datetime
     business_date: date

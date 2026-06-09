@@ -14,6 +14,16 @@ class ErrorCodeSpec:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class ModuleErrorCode:
+    code: str
+    default_http_status: int
+    default_message: str
+    details_schema: dict[str, Any] | None = None
+    deprecated: bool = False
+    headers: dict[str, str] = field(default_factory=dict)
+
+
 _CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -118,6 +128,44 @@ def validate_error_code_spec(spec: ErrorCodeSpec) -> None:
         raise ValueError(f"Deprecated flag metadata must be a bool for error code {spec.code!r}")
     if not isinstance(spec.headers, dict):
         raise ValueError(f"Headers metadata must be a dict for error code {spec.code!r}")
+
+
+def define_module_error_codes(
+    owner_module: str,
+    *codes: ModuleErrorCode,
+    code_prefix: str | None = None,
+) -> list[ErrorCodeSpec]:
+    owner = owner_module.strip()
+    if not owner:
+        raise ValueError("owner_module is required")
+    prefix = code_prefix if code_prefix is not None else f"{owner.upper()}_"
+    if not _CODE_PATTERN.fullmatch(f"{prefix}X"):
+        raise ValueError(f"Invalid module error code prefix: {prefix!r}")
+
+    specs: list[ErrorCodeSpec] = []
+    seen: set[str] = set()
+    for code in codes:
+        if not isinstance(code, ModuleErrorCode):
+            raise TypeError("module error code must be ModuleErrorCode")
+        if not code.code.startswith(prefix):
+            raise ValueError(
+                f"Module error code {code.code!r} must start with module prefix {prefix!r}"
+            )
+        spec = ErrorCodeSpec(
+            code.code,
+            code.default_http_status,
+            code.default_message,
+            owner_module=owner,
+            details_schema=code.details_schema or {},
+            deprecated=code.deprecated,
+            headers=dict(code.headers),
+        )
+        validate_error_code_spec(spec)
+        if spec.code in seen:
+            raise ValueError(f"Duplicate module error code: {spec.code}")
+        seen.add(spec.code)
+        specs.append(spec)
+    return specs
 
 
 def register_error_codes(*specs: ErrorCodeSpec, replace: bool = False) -> None:

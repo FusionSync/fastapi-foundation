@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from core.base import BaseSchema
+from core.base import Schema
 
 
-class FileObjectRead(BaseSchema):
+class FileObjectRead(Schema):
     id: str
     tenant_id: str
     owner_type: str
@@ -21,7 +21,7 @@ class FileObjectRead(BaseSchema):
     version: int
 
 
-class BatchFileContentUploadRequest(BaseSchema):
+class BatchFileContentUploadRequest(Schema):
     file_name: str
     content_type: str
     file_type: str
@@ -29,17 +29,17 @@ class BatchFileContentUploadRequest(BaseSchema):
     expected_checksum: str | None = None
 
 
-class BatchFileUploadRequest(BaseSchema):
+class BatchFileUploadRequest(Schema):
     owner_type: str
     owner_id: str
     files: list[BatchFileContentUploadRequest] = Field(min_length=1)
 
 
-class BatchFileUploadRead(BaseSchema):
+class BatchFileUploadRead(Schema):
     files: list[FileObjectRead]
 
 
-class PresignedUploadRequest(BaseSchema):
+class PresignedUploadRequest(Schema):
     owner_type: str
     owner_id: str
     file_name: str
@@ -50,13 +50,13 @@ class PresignedUploadRequest(BaseSchema):
     expected_checksum: str | None = None
 
 
-class PresignedUploadRead(BaseSchema):
+class PresignedUploadRead(Schema):
     file: FileObjectRead
     upload_url: str
     expires_seconds: int
 
 
-class FileDownloadRead(BaseSchema):
+class FileDownloadRead(Schema):
     file_id: str
     file_name: str
     content_type: str
@@ -65,21 +65,21 @@ class FileDownloadRead(BaseSchema):
     content_base64: str
 
 
-class PresignedDownloadRequest(BaseSchema):
+class PresignedDownloadRequest(Schema):
     expires_seconds: int = Field(default=300, gt=0)
 
 
-class PresignedDownloadRead(BaseSchema):
+class PresignedDownloadRead(Schema):
     file: FileObjectRead
     download_url: str
     expires_seconds: int
 
 
-class FileDeleteRead(BaseSchema):
+class FileDeleteRead(Schema):
     deleted: bool
 
 
-class MultipartUploadInitiateRequest(BaseSchema):
+class MultipartUploadInitiateRequest(Schema):
     owner_type: str
     owner_id: str
     file_name: str
@@ -91,23 +91,23 @@ class MultipartUploadInitiateRequest(BaseSchema):
     expected_checksum: str | None = None
 
 
-class MultipartPartUploadRead(BaseSchema):
+class MultipartPartUploadRead(Schema):
     part_number: int
     upload_url: str
 
 
-class MultipartUploadInitiatedRead(BaseSchema):
+class MultipartUploadInitiatedRead(Schema):
     file: FileObjectRead
     upload_id: str
     parts: list[MultipartPartUploadRead]
     expires_seconds: int
 
 
-class MultipartUploadPartComplete(BaseSchema):
+class MultipartUploadPartComplete(Schema):
     part_number: int = Field(gt=0)
     etag: str
 
 
-class MultipartUploadCompleteRequest(BaseSchema):
+class MultipartUploadCompleteRequest(Schema):
     upload_id: str
     parts: list[MultipartUploadPartComplete] = Field(min_length=1)

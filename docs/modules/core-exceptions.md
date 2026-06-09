@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: app exception、错误码 catalog、owner/deprecation/details schema metadata gate、业务 app 错误码 conformance 注册、tenant deletion step failure code、统一 handler 和 response envelope 已接入。
+- Done: app exception、错误码 catalog、模块错误码标准定义 helper、owner/deprecation/details schema metadata gate、业务 app 错误码 conformance 注册、tenant deletion step failure code、统一 handler 和 response envelope 已接入。
 - Next: _none_
 
 ## 职责
@@ -50,6 +50,8 @@ SystemAppError
 ## 当前实现
 
 - `ErrorCodeSpec` 必须显式声明 `owner_module`、`details_schema` 和 `deprecated`；无 details 的错误码使用空 schema `{}` 表达。
+- 业务模块默认使用 `ModuleErrorCode` + `define_module_error_codes()` 生成 `ErrorCodeSpec`，避免在 `module.py` 里重复手写 `owner_module`。
+- `define_module_error_codes()` 默认要求 code 以模块 label 的大写前缀开头，例如 `orders -> ORDERS_`，作为字符串错误码的模块基码。
 - `register_error_codes()` 会拒绝缺失 metadata、非法 HTTP status、重复 code 和非 dict 的 details schema。
 - `check_app()` 会检查 app 声明的错误码 metadata，并要求 `owner_module` 等于 `AppModule.label`。
 - `check_apps()` 和 `AppRegistry.load()` 会拒绝多个 app 声明同一个业务错误码。
@@ -58,7 +60,7 @@ SystemAppError
 ## 设计要求
 
 - service 只抛 AppError 或其子类。
-- 禁止在 service 或 router 中临时拼接未登记的错误码；未登记 code 会在 `AppError` 构造时直接失败。
+- 禁止在 service 或 router 中临时拼接未登记的错误码；未登记 code 会在 `AppError` 构造时直接失败。业务 app 的 code 常量放在 `errors.py`，通过 `AppModule.error_codes` 注册。
 - router 不直接拼错误响应。
 - exception handler 必须记录 request_id、user_id、tenant_id。
 - details 必须先经过脱敏。

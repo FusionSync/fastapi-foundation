@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from core.base import BaseSchema, CreateSchema, UpdateSchema
+from core.base import CreateSchema, Schema, UpdateSchema
 
 
-class UserRead(BaseSchema):
+class UserRead(Schema):
     id: str
     email: str
     display_name: str
@@ -27,7 +27,7 @@ class PasswordResetRequest(UpdateSchema):
     new_password: str
 
 
-class PasswordResetRead(BaseSchema):
+class PasswordResetRead(Schema):
     password_updated: bool
 
 
@@ -36,14 +36,14 @@ class ExternalIdentityCreateRequest(CreateSchema):
     subject: str
 
 
-class ExternalIdentityRead(BaseSchema):
+class ExternalIdentityRead(Schema):
     id: str
     user_id: str
     provider: str
     subject: str
 
 
-class UserSessionRead(BaseSchema):
+class UserSessionRead(Schema):
     id: str
     user_id: str
     tenant_id: str | None = None
@@ -55,7 +55,7 @@ class SessionRevokeRequest(CreateSchema):
     reason: str
 
 
-class SessionRevokeRead(BaseSchema):
+class SessionRevokeRead(Schema):
     revoked_sessions: int
 
 
@@ -65,7 +65,7 @@ class LoginRequest(CreateSchema):
     tenant_id: str | None = None
 
 
-class LoginRead(BaseSchema):
+class LoginRead(Schema):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
@@ -76,7 +76,7 @@ class TokenRefreshRead(LoginRead):
     pass
 
 
-class ExternalAuthAuthorizeRead(BaseSchema):
+class ExternalAuthAuthorizeRead(Schema):
     provider: str
     authorization_url: str
     state: str

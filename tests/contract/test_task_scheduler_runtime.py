@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.apps import AppModule, AppRegistry, ScheduleSpec, TaskHandlerSpec
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.context import (
     RequestContext,
     get_current_context,
@@ -40,7 +40,7 @@ from platform_apps.audit import AuditLog, AuditService
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:

@@ -44,7 +44,7 @@ src/core/serialization/
 - `UUID` 转字符串。
 - `Enum` 输出 value。
 - ORM model 不直接裸返回，必须经过 schema 或 serializer。
-- Pydantic 输出统一使用 `model_dump(mode="json", by_alias=True)`。
+- Pydantic 输出统一使用 `model_dump(mode="json", by_alias=True)`；项目内 Pydantic 对象必须继承 `core.base.Schema` 或其子类。
 - 默认不使用 `exclude_none=True` 影响 envelope 字段；envelope 未使用字段显式为 `null`。
 
 当前实现提供 `to_jsonable()`，并已接入 `ok()`、`ok_list()` 和 `fail()`：
@@ -61,16 +61,16 @@ src/core/serialization/
 - `docs/contracts/serialization/golden-examples.json`：覆盖 aware `datetime`、`date`、`Decimal`、`UUID`、`Enum`、Pydantic alias、tuple/list、嵌套对象和 envelope null 字段。
 - `docs/contracts/serialization/example-openapi-schema.json`：固定 golden app 的 typed `Envelope[ExamplePing]`、`ListEnvelope[ExampleRead]`、pagination schema 和 list query 参数。
 
-`tests/contract/test_serialization_regression.py` 会把当前运行时输出和上述 artifact 对比。修改 serialization、BaseSchema、response envelope、OpenAPI 生成或 golden app schema 时，必须先确认契约变更是有意的，再同步更新对应 artifact。
+`tests/contract/test_serialization_regression.py` 会把当前运行时输出和上述 artifact 对比。修改 serialization、Schema、response envelope、OpenAPI 生成或 golden app schema 时，必须先确认契约变更是有意的，再同步更新对应 artifact。
 
-## BaseSchema 关系
+## Schema 关系
 
-`core.base.schemas.BaseSchema` 应复用 serialization 配置：
+`core.base.schemas.Schema` 是项目内 Pydantic 契约根类，`Schema`、response envelope、配置子模型和 service DTO 都应继承它：
 
 ```text
 from_attributes = True
 populate_by_name = True
-json_encoders = core serialization encoders
+arbitrary_types_allowed = True
 ```
 
 ## 响应封装

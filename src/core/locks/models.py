@@ -5,10 +5,10 @@ from datetime import datetime
 from sqlalchemy import DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 
-class DatabaseLock(TimestampMixin, BaseModel):
+class DatabaseLock(TimestampMixin, Model):
     __tablename__ = "core_locks"
     __table_args__ = (Index("ix_core_locks_expires_at", "expires_at"),)
 

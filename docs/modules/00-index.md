@@ -36,6 +36,8 @@
 - [Exceptions](core-exceptions.md)
 - [Serialization](core-serialization.md)
 - [Messages](core-messages.md)
+- [Error Responses](error-responses.md)
+- [Internationalization](i18n.md)
 - [MQ](core-mq.md)
 - [Admin Registry](core-admin-registry.md)
 - [CLI](core-cli.md)

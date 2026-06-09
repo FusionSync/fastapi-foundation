@@ -7,12 +7,12 @@ from uuid import uuid4
 from sqlalchemy import JSON, DateTime, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 IdempotencyStatus = Literal["processing", "succeeded", "failed", "expired"]
 
 
-class IdempotencyRecord(TimestampMixin, BaseModel):
+class IdempotencyRecord(TimestampMixin, Model):
     __tablename__ = "idempotency_records"
     __table_args__ = (
         UniqueConstraint(

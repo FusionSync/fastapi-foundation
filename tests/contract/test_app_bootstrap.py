@@ -20,6 +20,8 @@ def test_bootstrap_app_writes_conformance_ready_backend_app(
     assert result.relative_files == [
         "apps/__init__.py",
         "apps/sales_ops/__init__.py",
+        "apps/sales_ops/error_messages.py",
+        "apps/sales_ops/errors.py",
         "apps/sales_ops/events.py",
         "apps/sales_ops/migrations/__init__.py",
         "apps/sales_ops/migrations/manifest.py",
@@ -34,6 +36,19 @@ def test_bootstrap_app_writes_conformance_ready_backend_app(
         "apps/sales_ops/tests/test_sales_ops_contract.py",
     ]
     _assert_generated_app_contains_no_alternate_orm(target_root / "apps" / "sales_ops")
+    module_text = (target_root / "apps" / "sales_ops" / "module.py").read_text(
+        encoding="utf-8"
+    )
+    errors_text = (target_root / "apps" / "sales_ops" / "errors.py").read_text(
+        encoding="utf-8"
+    )
+    messages_text = (target_root / "apps" / "sales_ops" / "error_messages.py").read_text(
+        encoding="utf-8"
+    )
+    assert "error_codes=ERROR_CODES" in module_text
+    assert "message_catalogs=MESSAGE_CATALOGS" in module_text
+    assert "define_module_error_codes" in errors_text
+    assert "define_module_message_catalogs" in messages_text
 
     monkeypatch.syspath_prepend(str(target_root))
     _clear_imported_app_modules("sales_ops")

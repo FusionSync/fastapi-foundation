@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.app import create_app
 from core.auth import LocalJwtConfig, LocalJwtProvider, TokenClaims
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.config import Settings
 from core.outbox import OutboxEvent
 from core.permissions import PLATFORM_TENANT_ID, ProjectedPolicy
@@ -186,7 +186,7 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
 async def _seed_platform_actor(database_url: str) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:

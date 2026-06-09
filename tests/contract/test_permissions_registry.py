@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.admin import AdminModelSpec, AdminPermissionSpec, AdminRouteSpec
 from core.apps import AppModule, AppRegistry
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.cli.main import main
 from core.permissions import (
     PermissionRegistry,
@@ -196,7 +196,7 @@ def _sqlite_url(tmp_path: Path) -> str:
 async def _seed_role_grant_without_projection(database_url: str) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:

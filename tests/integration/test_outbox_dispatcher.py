@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.apps import EventHandlerSpec, EventSchemaSpec
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.context import (
     RequestContext,
     get_current_context,
@@ -38,7 +38,7 @@ from core.outbox import (
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
@@ -715,7 +715,7 @@ async def _create_schema(database_url: str) -> None:
     engine = create_async_engine(database_url)
     try:
         async with engine.begin() as connection:
-            await connection.run_sync(BaseModel.metadata.create_all)
+            await connection.run_sync(Model.metadata.create_all)
     finally:
         await engine.dispose()
 

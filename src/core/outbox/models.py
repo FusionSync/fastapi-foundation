@@ -7,12 +7,12 @@ from uuid import uuid4
 from sqlalchemy import JSON, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 OutboxStatus = Literal["pending", "publishing", "published", "failed", "dead_letter"]
 
 
-class OutboxEvent(TimestampMixin, BaseModel):
+class OutboxEvent(TimestampMixin, Model):
     __tablename__ = "outbox_events"
     __table_args__ = (
         Index("ix_outbox_events_status_next_retry_at", "status", "next_retry_at"),

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import Index, UniqueConstraint
 
-from core.base.models import BaseModel
+from core.base.models import Model
 
 
-def check_tenant_scoped_model(model: type[BaseModel]) -> list[str]:
+def check_tenant_scoped_model(model: type[Model]) -> list[str]:
     violations: list[str] = []
     table = model.__table__
     tenant_id = table.columns.get("tenant_id")
@@ -26,7 +26,7 @@ def check_tenant_scoped_model(model: type[BaseModel]) -> list[str]:
     return violations
 
 
-def _has_tenant_index_or_constraint(model: type[BaseModel]) -> bool:
+def _has_tenant_index_or_constraint(model: type[Model]) -> bool:
     table = model.__table__
     for index in table.indexes:
         if isinstance(index, Index) and "tenant_id" in {column.name for column in index.columns}:

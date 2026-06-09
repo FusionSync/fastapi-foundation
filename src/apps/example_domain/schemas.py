@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from core.base import BaseSchema, CreateSchema, ListQuerySchema, ReadSchema, UpdateSchema
+from core.base import CreateSchema, ListQuerySchema, ReadSchema, Schema, UpdateSchema
 
 
 class ExampleCreate(CreateSchema):
@@ -24,6 +24,6 @@ class ExampleListQuery(ListQuerySchema):
     title: str | None = None
 
 
-class ExamplePing(BaseSchema):
+class ExamplePing(Schema):
     app: str
     status: str

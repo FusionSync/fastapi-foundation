@@ -7,10 +7,10 @@ from uuid import uuid4
 from sqlalchemy import JSON, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 
-class FrontendAccessMapping(TimestampMixin, BaseModel):
+class FrontendAccessMapping(TimestampMixin, Model):
     __tablename__ = "frontend_access_mappings"
     __table_args__ = (
         UniqueConstraint("client_id", "access_key", name="uq_frontend_access_client_key"),
@@ -29,7 +29,7 @@ class FrontendAccessMapping(TimestampMixin, BaseModel):
     reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
 
-class FrontendAccessMappingRevision(TimestampMixin, BaseModel):
+class FrontendAccessMappingRevision(TimestampMixin, Model):
     __tablename__ = "frontend_access_mapping_revisions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

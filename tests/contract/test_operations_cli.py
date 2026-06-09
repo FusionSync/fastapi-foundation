@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from core.apps import AppModule, EventHandlerSpec, ScheduleSpec, TaskHandlerSpec
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.cli import operations
 from core.cli.main import main
 from core.operations import ProcessHeartbeat
@@ -738,7 +738,7 @@ def _sqlite_url(tmp_path: Path) -> str:
 async def _seed_pending_event(database_url: str) -> str:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:
@@ -766,7 +766,7 @@ async def _create_schema(database_url: str) -> None:
     engine = create_async_engine(database_url)
     try:
         async with engine.begin() as connection:
-            await connection.run_sync(BaseModel.metadata.create_all)
+            await connection.run_sync(Model.metadata.create_all)
     finally:
         await engine.dispose()
 
@@ -779,7 +779,7 @@ async def _seed_pending_task(
 ) -> None:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with session_factory() as session:

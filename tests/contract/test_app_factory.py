@@ -656,7 +656,7 @@ def _write_runtime_app(
     _write(app_dir / "__init__.py", f"from runtime_apps.{name}.module import module\n")
     _write(
         app_dir / "schemas.py",
-        "from core.base import BaseSchema\n\nclass RuntimeSchema(BaseSchema):\n    name: str\n",
+        "from core.base import Schema\n\nclass RuntimeSchema(Schema):\n    name: str\n",
     )
     if bad_tenant_model:
         _write(

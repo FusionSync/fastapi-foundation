@@ -148,3 +148,31 @@ def _validate_catalog_codes(catalog: MessageCatalog) -> None:
                 status_code=400,
                 details={"code": code, "reason": "deprecated_error_code"},
             )
+    for code in catalog.excluded_codes:
+        if code in catalog.messages:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "message catalog code cannot be both defined and excluded",
+                status_code=400,
+                details={"code": code, "reason": "message_exclusion_conflict"},
+            )
+        if not is_error_code_registered(code):
+            raise AppError(
+                "VALIDATION_ERROR",
+                "message catalog excluded code must be registered in error code registry",
+                status_code=400,
+                details={"code": code, "reason": "unregistered_excluded_error_code"},
+            )
+        spec = require_error_code(code)
+        if spec.owner_module != catalog.owner_module:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "message catalog excluded code owner must match error code owner",
+                status_code=400,
+                details={
+                    "code": code,
+                    "expected_owner_module": spec.owner_module,
+                    "owner_module": catalog.owner_module,
+                    "reason": "excluded_owner_mismatch",
+                },
+            )

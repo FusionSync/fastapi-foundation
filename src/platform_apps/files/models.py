@@ -6,10 +6,10 @@ from uuid import uuid4
 from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel
+from core.base.models import Model
 
 
-class FileObject(BaseModel):
+class FileObject(Model):
     __tablename__ = "file_objects"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

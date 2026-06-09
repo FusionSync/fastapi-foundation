@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
+from core.base.schemas import Schema
 from core.context.context import get_current_context
 from core.messages import resolve_message
 from core.serialization.encoders import to_jsonable
@@ -12,16 +13,14 @@ EnvelopeDataT = TypeVar("EnvelopeDataT")
 EnvelopeItemT = TypeVar("EnvelopeItemT")
 
 
-class Pagination(BaseModel):
+class Pagination(Schema):
     total: int = Field(ge=0)
     page: int = Field(ge=1)
     page_size: int = Field(ge=1)
     has_next: bool
 
 
-class Envelope(BaseModel, Generic[EnvelopeDataT]):
-    model_config = ConfigDict(populate_by_name=True)
-
+class Envelope(Schema, Generic[EnvelopeDataT]):
     code: str
     message: str
     data: EnvelopeDataT | None = None
@@ -31,9 +30,7 @@ class Envelope(BaseModel, Generic[EnvelopeDataT]):
     request_id: str
 
 
-class ListEnvelope(BaseModel, Generic[EnvelopeItemT]):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ListEnvelope(Schema, Generic[EnvelopeItemT]):
     code: str
     message: str
     data: None = None

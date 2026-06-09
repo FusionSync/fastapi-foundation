@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: SQLAlchemy async runtime、session factory、UnitOfWork、base model、raw SQL guard、tenant constraint helper、连接池诊断、读写拆分预留、数据库级租户兜底策略、真实 Alembic executor 和 revision 状态验证已落地。
+- Done: SQLAlchemy async runtime、session factory、UnitOfWork、ORM Model、raw SQL guard、tenant constraint helper、连接池诊断、读写拆分预留、数据库级租户兜底策略、真实 Alembic executor 和 revision 状态验证已落地。
 - Next: _none_
 
 ## 职责
@@ -72,11 +72,14 @@ async with unit_of_work() as uow:
 - 缺失 tenant_id 会返回 `VALIDATION_ERROR`，避免静默打开无租户兜底的写事务。
 - `verify_database_tenant_guard(settings, tenant_tables=[...])` 输出 cloud profile 的数据库级兜底验证报告：检查 PostgreSQL dialect、`session_variable` fallback、RLS policy plan 和事务级 advisory lock plan。`check-config` 会把该报告放入 `details.database_tenant_guard`，cloud profile 缺少兜底配置时返回失败。
 
-## 基础模型约定
+## ORM 模型约定
 
-建议提供以下 abstract model/mixin：
+所有 ORM 表模型继承 `core.base.models.Model` 或 `TenantScopedModel`。建议提供以下 abstract model/mixin：
 
 ```text
+Model
+  SQLAlchemy DeclarativeBase 根类
+
 TimestampMixin
   created_at
   updated_at

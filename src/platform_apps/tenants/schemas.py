@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import ClassVar
 
-from core.base import BaseSchema, CreateSchema, ListQuerySchema, UpdateSchema
+from core.base import CreateSchema, ListQuerySchema, Schema, UpdateSchema
 from core.tenancy import TenantStatus
 
 
@@ -17,7 +17,7 @@ class TenantListQuery(ListQuerySchema):
     status: TenantStatus | None = None
 
 
-class TenantRead(BaseSchema):
+class TenantRead(Schema):
     id: str
     name: str
     code: str
@@ -46,7 +46,7 @@ class TenantMemberListQuery(ListQuerySchema):
     user_id: str | None = None
 
 
-class TenantMemberRead(BaseSchema):
+class TenantMemberRead(Schema):
     id: str
     tenant_id: str
     user_id: str
@@ -62,7 +62,7 @@ class TenantMemberUpdateRequest(UpdateSchema):
     status: str
 
 
-class TenantInvitationRead(BaseSchema):
+class TenantInvitationRead(Schema):
     id: str
     tenant_id: str
     email: str

@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from core.base import BaseSchema, CreateSchema, UpdateSchema
+from core.base import CreateSchema, Schema, UpdateSchema
 
 FrontendAccessScope = Literal["tenant", "platform"]
 FrontendAccessStatus = Literal["active", "disabled", "deprecated"]
@@ -18,7 +18,7 @@ FrontendAccessReason = Literal[
 ]
 
 
-class PermissionRead(BaseSchema):
+class PermissionRead(Schema):
     app_label: str
     resource: str
     action: str
@@ -33,7 +33,7 @@ class PlatformAdminGrantRequest(CreateSchema):
     reason: str | None = None
 
 
-class RoleTemplatePermission(BaseSchema):
+class RoleTemplatePermission(Schema):
     resource: str
     action: str
 
@@ -50,7 +50,7 @@ class RoleTemplateUpdateRequest(UpdateSchema):
     permissions: list[RoleTemplatePermission] | None = None
 
 
-class RoleTemplateRead(BaseSchema):
+class RoleTemplateRead(Schema):
     id: str
     scope: str
     name: str
@@ -65,7 +65,7 @@ class TenantRoleGrantCreateRequest(CreateSchema):
     reason: str | None = None
 
 
-class RoleGrantRead(BaseSchema):
+class RoleGrantRead(Schema):
     id: str
     tenant_id: str
     subject_type: str
@@ -74,7 +74,7 @@ class RoleGrantRead(BaseSchema):
     policy_version: int
 
 
-class EffectivePermissionRead(BaseSchema):
+class EffectivePermissionRead(Schema):
     tenant_id: str
     subject: str
     resource: str
@@ -88,14 +88,14 @@ class PermissionCheckRequest(CreateSchema):
     permissions: list[str] = Field(min_length=1)
 
 
-class PermissionCheckItemRead(BaseSchema):
+class PermissionCheckItemRead(Schema):
     permission: str
     resource: str
     action: str
     allowed: bool
 
 
-class PermissionCheckRead(BaseSchema):
+class PermissionCheckRead(Schema):
     permissions: list[PermissionCheckItemRead]
 
 
@@ -103,7 +103,7 @@ class ProjectionReconcileRequest(CreateSchema):
     repair: bool = False
 
 
-class ProjectionReconcileRead(BaseSchema):
+class ProjectionReconcileRead(Schema):
     ok: bool
     repaired: bool
     missing: list[EffectivePermissionRead]
@@ -129,7 +129,7 @@ class FrontendAccessMappingUpdateRequest(UpdateSchema):
     reason: str | None = None
 
 
-class FrontendAccessMappingRead(BaseSchema):
+class FrontendAccessMappingRead(Schema):
     id: str
     client_id: str
     access_key: str
@@ -143,7 +143,7 @@ class FrontendAccessMappingRead(BaseSchema):
     reason: str | None
 
 
-class FrontendAccessMappingRevisionRead(BaseSchema):
+class FrontendAccessMappingRevisionRead(Schema):
     id: str
     mapping_id: str
     client_id: str
@@ -163,7 +163,7 @@ class FrontendAccessValidateRequest(CreateSchema):
     reason: str | None = None
 
 
-class FrontendAccessValidateRead(BaseSchema):
+class FrontendAccessValidateRead(Schema):
     ok: bool
     permissions: list[str]
 
@@ -173,14 +173,14 @@ class FrontendAccessCheckRequest(CreateSchema):
     access_keys: list[str] = Field(min_length=1, max_length=100)
 
 
-class FrontendAccessCheckItemRead(BaseSchema):
+class FrontendAccessCheckItemRead(Schema):
     access_key: str
     allowed: bool
     reason: FrontendAccessReason
     version: int | None = None
 
 
-class FrontendAccessCheckRead(BaseSchema):
+class FrontendAccessCheckRead(Schema):
     client_id: str
     tenant_id: str | None
     policy_version: int
@@ -189,7 +189,7 @@ class FrontendAccessCheckRead(BaseSchema):
     results: list[FrontendAccessCheckItemRead]
 
 
-class FrontendAccessRead(BaseSchema):
+class FrontendAccessRead(Schema):
     client_id: str
     tenant_id: str | None
     version: int

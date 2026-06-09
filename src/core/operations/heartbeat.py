@@ -9,12 +9,12 @@ from sqlalchemy import JSON, DateTime, Index, String, UniqueConstraint, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.base.models import BaseModel, TimestampMixin
+from core.base.models import Model, TimestampMixin
 
 ProcessHeartbeatStatus = Literal["healthy", "unhealthy"]
 
 
-class ProcessHeartbeat(TimestampMixin, BaseModel):
+class ProcessHeartbeat(TimestampMixin, Model):
     __tablename__ = "process_heartbeats"
     __table_args__ = (
         UniqueConstraint("role", "instance_id", name="uq_process_heartbeats_role_instance_id"),

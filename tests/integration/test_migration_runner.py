@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.apps import AppModule, MigrationSpec
-from core.base.models import BaseModel
+from core.base.models import Model
 from core.cli.main import main
 from core.locks import DatabaseLockProvider, MemoryLockProvider
 from core.migrations import (
@@ -25,7 +25,7 @@ from core.migrations import (
 async def async_session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
-        await connection.run_sync(BaseModel.metadata.create_all)
+        await connection.run_sync(Model.metadata.create_all)
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:

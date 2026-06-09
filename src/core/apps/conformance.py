@@ -90,6 +90,7 @@ def check_app(module_path: str) -> AppCheckResult:
     _check_migration_metadata(app_module, result)
     _check_error_code_metadata(app_module, result)
     _check_message_catalog_metadata(app_module, result)
+    _check_translation_catalog_metadata(app_module, result)
     _check_admin_metadata(app_module, result)
     _check_background_handler_signatures(app_module, result)
     _check_lifecycle_hook_signatures(app_module, result)
@@ -253,6 +254,49 @@ def _check_message_catalog_metadata(app_module: AppModule, result: AppCheckResul
                     f"message catalog {catalog.locale} code {code} cannot target "
                     "deprecated error code"
                 )
+        for code in catalog.excluded_codes:
+            spec = specs_by_code.get(code)
+            if code in catalog.messages:
+                result.errors.append(
+                    f"message catalog {catalog.locale} code {code} cannot be both "
+                    "defined and excluded"
+                )
+            if spec is None:
+                result.errors.append(
+                    f"message catalog {catalog.locale} excluded code {code} must be "
+                    "declared in AppModule.error_codes"
+                )
+                continue
+        missing_codes = sorted(
+            code
+            for code, spec in specs_by_code.items()
+            if not spec.deprecated
+            and code not in catalog.messages
+            and code not in catalog.excluded_codes
+        )
+        if missing_codes:
+            result.errors.append(
+                f"message catalog {catalog.locale} missing messages for codes: "
+                f"{', '.join(missing_codes)}; add messages or excluded_codes"
+            )
+
+
+def _check_translation_catalog_metadata(app_module: AppModule, result: AppCheckResult) -> None:
+    seen: set[tuple[str, str, str]] = set()
+    for catalog in app_module.translation_catalogs:
+        if catalog.owner_module != app_module.label:
+            result.errors.append(
+                f"translation catalog {catalog.locale} owner_module must match app label "
+                f"{app_module.label!r}"
+            )
+        for source in catalog.messages:
+            key = (catalog.locale, catalog.domain, source)
+            if key in seen:
+                result.errors.append(
+                    f"translation catalog {catalog.locale} duplicate source {source!r} "
+                    f"in domain {catalog.domain}"
+                )
+            seen.add(key)
 
 
 def _check_admin_metadata(app_module: AppModule, result: AppCheckResult) -> None:

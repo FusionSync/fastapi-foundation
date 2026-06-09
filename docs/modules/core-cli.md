@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: `bootstrap-app`、`check-app`、`list-apps`、config template/drift-check/artifacts/write-artifacts、release checkpoint、dependency-probes、permissions catalog/reconcile/bootstrap-platform-admin、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、migration phase 参数和 execution records、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run/profile 参数、scheduler run-once/run/profile 参数、worker run-once/run、worker task queue provider/profile 参数、tasks、idempotency expire/diagnose、MQ check/publish-json/consume-one、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
+- Done: `bootstrap-app`、`check-app`、`list-apps`、i18n export-babel、config template/drift-check/artifacts/write-artifacts、release checkpoint、dependency-probes、permissions catalog/reconcile/bootstrap-platform-admin、migrate plan/preflight/dry-run/apply/status/drift-check/run、显式 Alembic apply、migration phase 参数和 execution records、serve run dry-run、outbox dispatch/dead-letter、outbox-dispatcher run/profile 参数、scheduler run-once/run/profile 参数、worker run-once/run、worker task queue provider/profile 参数、tasks、idempotency expire/diagnose、MQ check/publish-json/consume-one、operations/smoke、统一 JSON error envelope 和 exit code 契约已接入。
 - Next: _none_
 
 ## 职责
@@ -58,6 +58,7 @@ migrate run
 mq check
 mq publish-json
 mq consume-one
+i18n export-babel
 ```
 
 `migrate apply` 必须传 `--yes`，并在执行前复用 migration preflight gate。破坏性迁移还必须传 `--backup-ready`。未传 `--alembic-config` 时只返回 `mode=metadata-apply-disabled`、`applied=false`，避免 CI/CD 把 no-op 当作已应用；显式传 `--alembic-config <path>` 时使用 Alembic executor 执行 manifest 绑定 revision，并可用 `--database-url` 覆盖配置中的连接。
@@ -71,6 +72,7 @@ mq consume-one
 `release checkpoint --profile <profile> --artifact-target <target>` 是发布脚本入口，会串联 profile template、部署产物、config check、backup readiness、按角色 config drift、dependency-probes、migrate dry-run 和 smoke，并输出五个进程角色的参数矩阵。
 `dependency-probes` 默认做 profile 依赖配置门禁，确认生产 profile 使用非 `sync` 任务队列，并声明 Redis、对象存储和 OIDC 目标；传 `--probe-dependencies` 时会对 Redis TCP、配置了的 RabbitMQ TCP 和 HTTP 依赖执行真实探活，用于候选环境或发布后 smoke。
 `mq check|publish-json|consume-one` 提供 RabbitMQ 基础验证入口；`--url` 可覆盖 `DEPENDENCIES__RABBITMQ_URL`，JSON 输出会脱敏 URL password。`publish-json` 默认使用 queue 作为 routing key 并声明 durable queue，`consume-one` 取到消息后自动 ack。
+`i18n export-babel --installed-app <module> --output-dir locales` 从已安装 app 的 `translation_catalogs` 导出 Babel/gettext 兼容 `.po` 文件，按 `{locale}/LC_MESSAGES/{domain}.po` 写入。
 `permissions bootstrap-platform-admin --database-url <url> --user-id <id>` 是首个平台管理员初始化入口；它只允许在 `__platform__` 域没有任何 platform `RoleGrant` 时执行，可通过 `--installed-app` 加载权限目录，默认创建 `platform-admin` role template 并投影权限。
 `migrate plan|preflight|dry-run|apply|run --phase <phase>` 可把迁移计划限制到 expand/backfill/contract/maintenance 单阶段；apply/dry-run 输出 `execution_records`，记录每条目标 migration 的 rollback strategy 和 forward-fix 要求。
 `outbox dispatch-once` 必须通过 `--installed-app` 或 settings 加载 AppModule 后构建 `EventRegistry`，领取 pending/failed outbox event，投递到已注册 handler，并输出 claimed/published/failed/dead_lettered JSON。

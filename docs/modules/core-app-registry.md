@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、错误码和 message catalog 声明注册、core version/capability gate、Settings 派生 runtime capability，以及 CLI/readiness 共用装载诊断已接入。
+- Done: app loader、typed `AppModule` 校验、dependency-first 排序、缺失/循环/重复 label 检查、错误码、message catalog 和 translation catalog 声明注册、core version/capability gate、Settings 派生 runtime capability，以及 CLI/readiness 共用装载诊断已接入。
 - Next: _none_
 
 ## 职责
@@ -35,6 +35,7 @@ migrations
 permissions
 error_codes
 message_catalogs
+translation_catalogs
 event_handlers
 task_handlers
 schedules
@@ -60,8 +61,9 @@ admin_permissions
 - `models`：ORM model module 列表。
 - `migrations`：迁移路径和依赖声明。
 - `permissions`：PermissionSpec 列表。
-- `error_codes`：业务错误码声明，启动期注册到统一 exception registry。
-- `message_catalogs`：业务文案 catalog，启动期注册到统一 message registry。
+- `error_codes`：业务错误码声明，通常来自 app 的 `errors.py`，启动期注册到统一 exception registry。
+- `message_catalogs`：错误 message catalog，通常来自 app 的 `error_messages.py`，启动期注册到统一 message registry；每个 locale 必须覆盖非废弃错误码或显式写 `excluded_codes`。
+- `translation_catalogs`：普通服务端多语言 catalog，按需来自 app 的可选 `translations.py`，启动期注册到统一 translation registry。
 - `event_handlers`：事件 handler 列表。
 - `task_handlers`：任务 handler 列表。
 - `schedules`：调度定义列表。
@@ -86,6 +88,7 @@ admin_permissions
   -> 收集 permissions
   -> 收集 error codes 并注册到 exception registry
   -> 收集 message catalogs 并注册到 message registry
+  -> 收集 translation catalogs 并注册到 translation registry
   -> 收集 event/task handlers/schedules
   -> 收集 auth session store 声明
   -> 收集 admin metadata

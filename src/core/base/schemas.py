@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from core.serialization.responses import Pagination
@@ -12,30 +13,34 @@ _FIELD_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _LIST_QUERY_CONTROL_FIELDS = frozenset({"page", "page_size", "sort"})
 
 
-class BaseSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+class Schema(PydanticBaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
 
-class ReadSchema(BaseSchema):
+class ReadSchema(Schema):
     id: UUID | str
     created_at: datetime
     updated_at: datetime
 
 
-class CreateSchema(BaseSchema):
+class CreateSchema(Schema):
     pass
 
 
-class UpdateSchema(BaseSchema):
+class UpdateSchema(Schema):
     pass
 
 
-class SortTerm(BaseSchema):
+class SortTerm(Schema):
     field: str
     direction: Literal["asc", "desc"] = "asc"
 
 
-class ListQuerySchema(BaseSchema):
+class ListQuerySchema(Schema):
     sortable_fields: ClassVar[frozenset[str] | None] = None
     default_sort: ClassVar[tuple[str, ...]] = ()
     filterable_fields: ClassVar[frozenset[str] | None] = None

@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security 和 route permission conformance、response envelope、public_api 边界、业务错误码和 message catalog metadata、event schema metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
+- Done: typed `AppModule`、core version/capability metadata、依赖图、标准文件、router security 和 route permission conformance、response envelope、public_api 边界、业务错误码和 error message catalog 标准定义/覆盖校验、可选普通多语言 translation catalog、event schema metadata、repository 继承约束、admin/migration metadata 细化诊断、background/lifecycle handler 签名和 tenant model conformance 已接入启动检查。
 - Next: _none_
 
 ## 目标
@@ -21,6 +21,9 @@ src/apps/example_domain/
   services.py
   repository.py
   permissions.py
+  errors.py
+  error_messages.py
+  translations.py  # optional, only when the app emits normal server-side text
   events.py
   tasks.py
   migrations/
@@ -32,9 +35,9 @@ src/apps/example_domain/
 ```python
 from core.admin import AdminModelSpec, AdminPermissionSpec
 from core.apps.module import AppModule, EventHandlerSpec, EventSchemaSpec, LifecycleHookSpec, MigrationSpec, ScheduleSpec, TaskHandlerSpec
-from core.exceptions import ErrorCodeSpec
-from core.messages import MessageCatalog
 from core.permissions import PermissionSpec
+from .errors import ERROR_CODES
+from .error_messages import MESSAGE_CATALOGS
 from .router import router
 
 module = AppModule(
@@ -54,23 +57,8 @@ module = AppModule(
         PermissionSpec(resource="example", action="read", scope="tenant"),
         PermissionSpec(resource="example", action="write", scope="tenant"),
     ],
-    error_codes=[
-        ErrorCodeSpec(
-            "EXAMPLE_NOT_READY",
-            409,
-            "示例资源尚未就绪",
-            owner_module="example_domain",
-            details_schema={},
-            deprecated=False,
-        )
-    ],
-    message_catalogs=[
-        MessageCatalog(
-            locale="en-US",
-            owner_module="example_domain",
-            messages={"EXAMPLE_NOT_READY": "Example is not ready"},
-        )
-    ],
+    error_codes=ERROR_CODES,
+    message_catalogs=MESSAGE_CATALOGS,
     event_schemas=[
         EventSchemaSpec(
             event_type="example.created",
@@ -131,17 +119,91 @@ module = AppModule(
 )
 ```
 
+## errors.py
+
+```python
+from core.exceptions import ModuleErrorCode, define_module_error_codes
+
+EXAMPLE_DOMAIN_NOT_READY = "EXAMPLE_DOMAIN_NOT_READY"
+
+ERROR_CODES = define_module_error_codes(
+    "example_domain",
+    ModuleErrorCode(
+        EXAMPLE_DOMAIN_NOT_READY,
+        409,
+        "示例资源尚未就绪",
+        details_schema={"reason": "str"},
+    ),
+)
+```
+
+`define_module_error_codes()` 会自动写入 `owner_module`、补齐空 `details_schema`、校验 metadata，并要求 code 默认以模块 label 的大写前缀开头，例如 `example_domain -> EXAMPLE_DOMAIN_`。需要自定义前缀时可以显式传 `code_prefix`。
+
+## error_messages.py
+
+```python
+from core.messages import ModuleMessageCatalog, define_module_message_catalogs
+from .errors import ERROR_CODES, EXAMPLE_DOMAIN_NOT_READY
+
+MESSAGE_CATALOGS = define_module_message_catalogs(
+    "example_domain",
+    error_codes=ERROR_CODES,
+    catalogs=[
+        ModuleMessageCatalog(
+            locale="en-US",
+            messages={EXAMPLE_DOMAIN_NOT_READY: "Example is not ready"},
+        )
+    ],
+)
+```
+
+每个 `ModuleMessageCatalog` 必须覆盖本 app 的非废弃错误码。某个 locale 需要跳过特定 code 时，必须显式写入 `excluded_codes`：
+
+```python
+ModuleMessageCatalog(
+    locale="en-US",
+    messages={EXAMPLE_DOMAIN_NOT_READY: "Example is not ready"},
+    excluded_codes=["EXAMPLE_DOMAIN_LEGACY_ERROR"],
+)
+```
+
+`excluded_codes` 只能排除本 app 已声明错误码，不能同时出现在 `messages` 中。
+
+## translations.py
+
+```python
+from core.messages import ModuleTranslationCatalog, define_module_translation_catalogs
+
+TRANSLATION_CATALOGS = define_module_translation_catalogs(
+    "example_domain",
+    catalogs=[
+        ModuleTranslationCatalog(
+            locale="zh-CN",
+            messages={"Example is ready": "示例已就绪"},
+        )
+    ],
+)
+```
+
+`translations.py` 是可选文件，用于普通服务端文案，不用于 API 错误响应。API 错误响应必须继续通过 `errors.py` + `error_messages.py` 的错误码体系返回。
+
 ## 注册项类型
 
-`AppModule` 不接受裸 `dict` 或任意对象注册事件、任务和调度。必须使用：
+`AppModule` 不接受裸 `dict`、业务自定义 `@dataclass` 或任意对象注册事件、任务和调度。注册项属于 module contract，必须使用 core 提供的 contract 类型：
 
 - `EventHandlerSpec(event_type, event_version, handler_path)`
 - `EventSchemaSpec(event_type, event_version, required_payload_fields, field_types, compatible_with)`
 - `TaskHandlerSpec(task_type, handler_path, queue)`
 - `ScheduleSpec(schedule_id, task_type, trigger, trigger_config, misfire_policy)`
 - `LifecycleHookSpec(hook_id, phase, handler_path)`
-- `ErrorCodeSpec(code, default_http_status, default_message, owner_module, details_schema, deprecated)`
-- `MessageCatalog(locale, owner_module, messages)`
+- `ModuleErrorCode(code, default_http_status, default_message, details_schema, deprecated, headers)`
+- `define_module_error_codes(owner_module, *codes, code_prefix=None)`
+- `ModuleMessageCatalog(locale, messages, excluded_codes)`
+- `define_module_message_catalogs(owner_module, error_codes, catalogs)`
+- `ModuleTranslationCatalog(locale, messages, domain)`
+- `define_module_translation_catalogs(owner_module, catalogs, domain=None)`
+- `ErrorCodeSpec(code, default_http_status, default_message, owner_module, details_schema, deprecated)`，底层注册结构，业务模块默认不直接手写。
+- `MessageCatalog(locale, owner_module, messages, excluded_codes)`，底层注册结构，业务模块默认不直接手写。
 - `AdminModelSpec(admin_id, model_path, label, permissions, tenant_scoped, read_only)`
 - `AdminRouteSpec(route_id, path, handler_path, permissions, methods)`
 - `AdminDashboardWidgetSpec(widget_id, title, provider_path, permissions)`
@@ -153,8 +215,9 @@ app contract check 会导入 admin metadata 中声明的 `AdminModelSpec.model_p
 event/task handler 必须是可导入 callable，并且签名必须正好接受一个 envelope 参数；不符合运行时契约的 handler 会在 `check_app()` 或 app factory 启动检查中失败。
 event schema 必须通过 `EventSchemaSpec` 声明，必填字段和字段类型会在 outbox 写入和 dispatcher 投递前校验；声明 `compatible_with` 时，新版本必须保留兼容旧版本的必填字段和字段类型。
 lifecycle hook handler 必须是可导入 callable，并且签名必须正好接受一个 context 参数；startup hook 失败会阻止应用 lifespan 启动，shutdown hook 会在数据库 runtime 释放前按反向依赖顺序执行。
-业务错误码必须通过 `error_codes` 声明，不能在 service 中临时发明 code。`ErrorCodeSpec.owner_module` 必须等于 `AppModule.label`，并显式声明 `details_schema` 和 `deprecated`；多个 app 不能声明同一个错误码。通过 conformance 后，`AppRegistry.load()` 会把这些错误码注册到统一 exception registry。
-业务文案必须通过 `message_catalogs` 声明；`MessageCatalog.owner_module` 必须等于 `AppModule.label`，每个 message code 必须属于本 app 的 `error_codes`，不能为 deprecated code 注册新文案。通过 conformance 后，`AppRegistry.load()` 会在错误码注册后把这些 catalog 注册到统一 message registry。
+业务错误码必须通过 `errors.py` 中的 `ERROR_CODES` 声明，不能在 service 中临时发明 code。`ErrorCodeSpec.owner_module` 必须等于 `AppModule.label`，并显式声明 `details_schema` 和 `deprecated`；多个 app 不能声明同一个错误码。通过 conformance 后，`AppRegistry.load()` 会把这些错误码注册到统一 exception registry。
+错误 message 必须通过 `error_messages.py` 中的 `MESSAGE_CATALOGS` 声明；`MessageCatalog.owner_module` 必须等于 `AppModule.label`，每个 message code 必须属于本 app 的 `error_codes`，不能为 deprecated code 注册新文案。每个 locale catalog 必须覆盖本 app 的非废弃错误码；需要跳过特定 code 时必须写 `excluded_codes`。通过 conformance 后，`AppRegistry.load()` 会在错误码注册后把这些 catalog 注册到统一 message registry。
+普通服务端多语言文案需要时才通过 `translations.py` 中的 `TRANSLATION_CATALOGS` 声明；`TranslationCatalog.owner_module` 必须等于 `AppModule.label`。通过 conformance 后，`AppRegistry.load()` 会把这些 catalog 注册到统一 translation registry，`core i18n export-babel` 可以统一导出 Babel/gettext 兼容 `.po` 文件。
 
 `auth_session_store` 是少数由 app 向 core runtime 暴露的装配钩子，值必须是可导入 callable 路径，例如 `platform_apps.accounts.public_api.AccountsAuthSessionStore`。同一运行时只能安装一个声明该字段的 app。
 `min_core_version` 和 `required_capabilities` 是启动前 gate：AppRegistry 会在依赖排序后拒绝 core 版本过低或 runtime capability 缺失的 app，并把失败原因写入 registry diagnostics。runtime capability 来自当前 Settings、部署 profile、进程 role 和已配置 provider，例如 `profile.cloud`、`provider.database.postgresql`、`provider.auth.external_secret` 或 `observability.metrics`。`provided_capabilities` 只表达 app 对外提供的能力标签，用于诊断和后续 capability 发现，不替代 dependencies。
@@ -211,7 +274,8 @@ apps.foo -> platform_apps.tenants.models
 - app contract check 必须拒绝不可导入、不可调用或签名不符合一个 envelope 参数契约的 event/task handler。
 - app contract check 必须拒绝不可导入、不可调用或签名不符合一个 context 参数契约的 lifecycle hook。
 - app contract check 必须拒绝缺失 metadata、owner 与 app label 不一致或跨 app 重复声明的业务错误码。
-- app contract check 必须拒绝 owner 与 app label 不一致、code 未在 `AppModule.error_codes` 声明或指向 deprecated code 的 message catalog。
+- app contract check 必须拒绝 owner 与 app label 不一致、code 未在 `AppModule.error_codes` 声明、指向 deprecated code、缺失非废弃 code 且未写 `excluded_codes`，或同一 code 同时出现在 `messages` 和 `excluded_codes` 的 message catalog。
+- app contract check 必须拒绝 owner 与 app label 不一致、同一 locale/domain 重复 source string 的 translation catalog。
 - app contract check 必须拒绝不可导入的 admin metadata dotted path，以及 app_label 不匹配、类型错误、重复 key 或 `MigrationManifest.validate()` 不通过的 migration metadata。
 - app contract check 必须扫描 `AppModule.models` 中的 `TenantScopedModel` 约束，拒绝全局唯一键等会破坏租户隔离的数据模型。
 - app contract check 必须扫描 `repository.py` / `repositories.py`，拒绝指向 tenant-scoped model 但未继承 `TenantScopedRepository` 或 `CrossTenantRepository` 的 repository。
