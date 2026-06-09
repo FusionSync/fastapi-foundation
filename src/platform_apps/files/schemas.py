@@ -18,6 +18,7 @@ class FileObjectRead(BaseSchema):
     checksum: str
     file_type: str
     status: str
+    version: int
 
 
 class BatchFileContentUploadRequest(BaseSchema):
@@ -53,6 +54,29 @@ class PresignedUploadRead(BaseSchema):
     file: FileObjectRead
     upload_url: str
     expires_seconds: int
+
+
+class FileDownloadRead(BaseSchema):
+    file_id: str
+    file_name: str
+    content_type: str
+    checksum: str
+    size: int
+    content_base64: str
+
+
+class PresignedDownloadRequest(BaseSchema):
+    expires_seconds: int = Field(default=300, gt=0)
+
+
+class PresignedDownloadRead(BaseSchema):
+    file: FileObjectRead
+    download_url: str
+    expires_seconds: int
+
+
+class FileDeleteRead(BaseSchema):
+    deleted: bool
 
 
 class MultipartUploadInitiateRequest(BaseSchema):

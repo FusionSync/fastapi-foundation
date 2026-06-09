@@ -175,9 +175,12 @@ GET    /api/v1/platform/access/platform-admins
 POST   /api/v1/platform/access/platform-admins
 DELETE /api/v1/platform/access/platform-admins/{grant_id}
 
-GET    /api/v1/tenants/{tenant_id}/access/role-grants
-POST   /api/v1/tenants/{tenant_id}/access/role-grants
-DELETE /api/v1/tenants/{tenant_id}/access/role-grants/{grant_id}
+GET    /api/v1/access/role-grants
+POST   /api/v1/access/role-grants
+DELETE /api/v1/access/role-grants/{grant_id}
+
+GET    /api/v1/me/permissions
+POST   /api/v1/me/permissions/check
 
 GET    /api/v1/platform/access/subjects/{subject_type}/{subject_id}/effective-permissions
 POST   /api/v1/platform/access/check
@@ -588,9 +591,8 @@ GET   /api/v1/platform/settings/values
 PUT   /api/v1/platform/settings/values/{module}/{key}
 DELETE /api/v1/platform/settings/values/{module}/{key}
 
-GET   /api/v1/tenants/{tenant_id}/settings/values
-PUT   /api/v1/tenants/{tenant_id}/settings/values/{module}/{key}
-DELETE /api/v1/tenants/{tenant_id}/settings/values/{module}/{key}
+GET   /api/v1/settings/values
+PUT   /api/v1/settings/values/{module}/{key}
 ```
 
 API permissions:

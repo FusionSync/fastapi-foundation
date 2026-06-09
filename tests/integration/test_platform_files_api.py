@@ -17,6 +17,7 @@ from core.storage import LocalStorageProvider, MultipartUploadRequest, StoredObj
 from core.tenancy import Tenant, TenantMember
 from platform_apps.accounts.models import User, UserSession
 from platform_apps.files import FileObject
+from platform_apps.settings.models import SettingValue
 
 
 def test_platform_files_api_supports_batch_and_presigned_uploads(tmp_path: Path) -> None:
@@ -63,6 +64,69 @@ def test_platform_files_api_supports_batch_and_presigned_uploads(tmp_path: Path)
         "a.txt",
         "b.txt",
     ]
+    first_file = batch_response.json()["data"]["files"][0]
+    assert first_file["version"] == 1
+
+    list_response = client.get(
+        "/api/v1/platform/files",
+        headers=_tenant_headers(),
+        params={"owner_type": "project", "owner_id": "project-1", "status": "available"},
+    )
+    assert list_response.status_code == 200
+    assert [item["file_name"] for item in list_response.json()["list"]] == ["a.txt", "b.txt"]
+
+    detail_response = client.get(
+        f"/api/v1/platform/files/{first_file['id']}",
+        headers=_tenant_headers(),
+    )
+    assert detail_response.status_code == 200
+    assert detail_response.json()["data"]["file_name"] == "a.txt"
+    assert detail_response.json()["data"]["version"] == 1
+
+    content_response = client.get(
+        f"/api/v1/platform/files/{first_file['id']}/content",
+        headers=_tenant_headers(),
+    )
+    assert content_response.status_code == 200
+    assert content_response.content == b"alpha"
+    assert content_response.headers["content-type"].startswith("text/plain")
+    assert 'filename="a.txt"' in content_response.headers["content-disposition"]
+
+    download_response = client.get(
+        f"/api/v1/platform/files/{first_file['id']}/download",
+        headers=_tenant_headers(),
+    )
+    assert download_response.status_code == 200
+    assert download_response.json()["data"]["content_base64"] == base64.b64encode(
+        b"alpha"
+    ).decode("ascii")
+
+    presigned_download_response = client.post(
+        f"/api/v1/platform/files/{first_file['id']}/presigned-download",
+        headers=_tenant_headers(),
+        json={"expires_seconds": 600},
+    )
+    assert presigned_download_response.status_code == 200
+    assert presigned_download_response.json()["data"]["download_url"].startswith(
+        "local://local-files/"
+    )
+
+    delete_response = client.delete(
+        f"/api/v1/platform/files/{first_file['id']}",
+        headers=_tenant_headers(),
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"] == {"deleted": True}
+    deleted_list_response = client.get(
+        "/api/v1/platform/files",
+        headers=_tenant_headers(),
+        params={"owner_type": "project", "owner_id": "project-1", "status": "deleted"},
+    )
+    assert deleted_list_response.status_code == 200
+    assert [
+        (item["id"], item["status"], item["version"])
+        for item in deleted_list_response.json()["list"]
+    ] == [(first_file["id"], "deleted", 2)]
 
     presigned_response = client.post(
         "/api/v1/platform/files/presigned-upload",
@@ -86,8 +150,49 @@ def test_platform_files_api_supports_batch_and_presigned_uploads(tmp_path: Path)
 
     files = asyncio.run(_all_files(database_url))
     assert len(files) == 3
-    assert sum(1 for file_object in files if file_object.status == "available") == 2
+    assert sum(1 for file_object in files if file_object.status == "available") == 1
+    assert sum(1 for file_object in files if file_object.status == "deleted") == 1
     assert sum(1 for file_object in files if file_object.status == "uploading") == 1
+
+
+def test_platform_files_api_uses_runtime_upload_size_setting(tmp_path: Path) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'platform-files-settings.db'}"
+    asyncio.run(_seed_file_api_facts(database_url))
+    asyncio.run(_seed_upload_size_setting(database_url))
+    app = create_app(
+        Settings(
+            database={"url": database_url},
+            security={"jwt_secret": "test-secret"},
+            installed_apps=[
+                "platform_apps.accounts.module",
+                "platform_apps.settings.module",
+                "platform_apps.files.module",
+            ],
+        )
+    )
+    app.state.storage_provider = LocalStorageProvider(tmp_path / "files")
+    client = TestClient(app)
+    too_large = b"x" * (1024 * 1024 + 1)
+
+    response = client.post(
+        "/api/v1/platform/files/batch",
+        headers=_tenant_headers(),
+        json={
+            "owner_type": "project",
+            "owner_id": "project-1",
+            "files": [
+                {
+                    "file_name": "too-large.bin",
+                    "content_type": "application/octet-stream",
+                    "file_type": "archive",
+                    "content_base64": base64.b64encode(too_large).decode("ascii"),
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "UPLOAD_REJECTED"
 
 
 def test_platform_files_api_supports_multipart_large_upload_lifecycle(
@@ -145,6 +250,7 @@ def test_platform_files_api_supports_multipart_large_upload_lifecycle(
 
     assert complete_response.status_code == 200
     assert complete_response.json()["data"]["status"] == "available"
+    assert complete_response.json()["data"]["version"] == 2
     assert storage.completed_uploads == [
         MultipartUploadRequest(
             object_key=initiated["file"]["object_key"],
@@ -286,10 +392,34 @@ async def _seed_file_api_facts(database_url: str) -> None:
         await engine.dispose()
 
 
+async def _seed_upload_size_setting(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            uow.session.add(
+                SettingValue(
+                    module="files",
+                    key="max_file_size_mb",
+                    scope="tenant",
+                    scope_id="tenant-a",
+                    value_json=1,
+                    secret_ref=None,
+                    value_type="int",
+                    version=1,
+                    status="active",
+                    updated_by="user-1",
+                    reason="test limit",
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
 def _tenant_headers() -> dict[str, str]:
     return {
         "Authorization": f"Bearer {_tenant_token()}",
-        "X-Tenant-ID": "tenant-a",
     }
 
 

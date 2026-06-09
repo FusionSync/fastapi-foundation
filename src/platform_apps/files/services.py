@@ -48,6 +48,13 @@ class PresignedFileUpload:
 
 
 @dataclass(frozen=True, slots=True)
+class PresignedFileDownload:
+    file_object: FileObject
+    download_url: str
+    expires_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
 class MultipartPartUpload:
     part_number: int
     upload_url: str
@@ -542,7 +549,77 @@ class FileService:
         file_object.size = stored.size
         file_object.checksum = stored.checksum
         file_object.status = "available"
+        file_object.version += 1
         await self.session.flush()
+        return file_object
+
+    async def list_files(
+        self,
+        *,
+        tenant_id: str,
+        owner_type: str,
+        owner_id: str,
+        status: str = "available",
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> list[FileObject]:
+        await self._require_file_resource_access(
+            file_object=None,
+            action="download",
+            tenant_id=tenant_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
+        await self._require_file_permission(
+            action="download",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=owner_id,
+            request_id=request_id,
+        )
+        result = await self.session.execute(
+            select(FileObject)
+            .where(FileObject.tenant_id == tenant_id)
+            .where(FileObject.owner_type == owner_type)
+            .where(FileObject.owner_id == owner_id)
+            .where(FileObject.status == status)
+            .order_by(FileObject.created_at.asc(), FileObject.file_name.asc(), FileObject.id.asc())
+        )
+        return list(result.scalars().all())
+
+    async def get_file_object(
+        self,
+        *,
+        file_id: str,
+        tenant_id: str,
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> FileObject:
+        file_object = await self._load_available_file(file_id)
+        await self._require_file_resource_access(
+            file_object=file_object,
+            action="download",
+            tenant_id=tenant_id,
+            owner_type=file_object.owner_type,
+            owner_id=file_object.owner_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
+        await self._require_file_permission(
+            action="download",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            resource_id=file_object.id,
+            request_id=request_id,
+        )
         return file_object
 
     async def download_bytes(
@@ -592,6 +669,45 @@ class FileService:
             data=data,
         )
 
+    async def create_presigned_download(
+        self,
+        *,
+        file_id: str,
+        tenant_id: str,
+        expires_seconds: int,
+        tenant_status: TenantStatus = "active",
+        user_id: str | None = None,
+        authorization: AuthorizationService | None = None,
+        request_id: str | None = None,
+    ) -> PresignedFileDownload:
+        assert_tenant_operation_allowed(
+            tenant_id=tenant_id,
+            status=tenant_status,
+            operation="file_download",
+            policy=self.tenant_lifecycle_policy,
+        )
+        if expires_seconds <= 0:
+            raise AppError(
+                "VALIDATION_ERROR",
+                "expires_seconds must be greater than zero",
+                status_code=400,
+            )
+        file_object = await self.get_file_object(
+            file_id=file_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            authorization=authorization,
+            request_id=request_id,
+        )
+        return PresignedFileDownload(
+            file_object=file_object,
+            download_url=await self.storage.generate_download_url(
+                file_object.object_key,
+                expires_seconds=expires_seconds,
+            ),
+            expires_seconds=expires_seconds,
+        )
+
     async def delete_file(
         self,
         *,
@@ -625,6 +741,7 @@ class FileService:
         )
         file_object.status = "deleted"
         file_object.deleted_at = _coerce_utc(now or datetime.now(UTC))
+        file_object.version += 1
         if self.delete_retention_seconds == 0:
             await self.storage.delete_file(file_object.object_key)
         await self.session.flush()
@@ -656,6 +773,7 @@ class FileService:
         for file_object in file_objects:
             await self.storage.delete_file(file_object.object_key)
             file_object.status = "purged"
+            file_object.version += 1
         await self.session.flush()
         return len(file_objects)
 
@@ -807,6 +925,19 @@ class FileService:
                 "VALIDATION_ERROR",
                 "expected_size must be greater than zero",
                 status_code=400,
+            )
+        if expected_size > self.upload_policy.max_bytes:
+            raise AppError(
+                "UPLOAD_REJECTED",
+                "Upload rejected by security policy",
+                status_code=400,
+                details={
+                    "reason": "file_too_large",
+                    "file_name": normalized_name,
+                    "content_type": content_type.strip().lower(),
+                    "size": expected_size,
+                    "max_bytes": self.upload_policy.max_bytes,
+                },
             )
         if expires_seconds <= 0:
             raise AppError(

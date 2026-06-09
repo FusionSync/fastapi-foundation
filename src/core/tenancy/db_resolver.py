@@ -32,12 +32,14 @@ class DatabaseTenantContextResolver:
         token_tenant_id: str | None = None,
         header_tenant_id: str | None = None,
         operation: TenantOperation = "read",
+        allow_header_tenant_id: bool = False,
     ) -> str:
         resolved_token_tenant_id = token_tenant_id or current_user.tenant_id
         selected_tenant_id = _select_tenant_id(
             token_tenant_id=resolved_token_tenant_id,
             header_tenant_id=header_tenant_id,
             default_tenant_id=current_user.tenant_id,
+            allow_header_tenant_id=allow_header_tenant_id,
         )
         tenant_record = await self._tenant_record(selected_tenant_id)
         tenant_user = CurrentUser(
@@ -52,6 +54,7 @@ class DatabaseTenantContextResolver:
             tenant=tenant_record,
             operation=operation,
             policy=self.policy,
+            allow_header_tenant_id=allow_header_tenant_id,
         )
 
     async def _tenant_record(self, tenant_id: str | None) -> TenantRecord | None:
@@ -83,7 +86,15 @@ def _select_tenant_id(
     token_tenant_id: str | None,
     header_tenant_id: str | None,
     default_tenant_id: str | None,
+    allow_header_tenant_id: bool,
 ) -> str | None:
+    if header_tenant_id and not allow_header_tenant_id:
+        raise AppError(
+            "TENANT_CONTEXT_CONFLICT",
+            "Header tenant is not allowed for this request",
+            status_code=403,
+            details={"reason": "header_tenant_not_allowed"},
+        )
     if token_tenant_id and header_tenant_id and token_tenant_id != header_tenant_id:
         raise AppError(
             "TENANT_CONTEXT_CONFLICT",

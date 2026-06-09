@@ -47,7 +47,7 @@ def test_request_security_pipeline_authenticates_tenant_and_route_permission(
 
     response = client.get(
         "/api/v1/secure/ping",
-        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 200
@@ -84,7 +84,7 @@ def test_request_security_pipeline_rejects_missing_route_permission(
 
     response = client.get(
         "/api/v1/secure/ping",
-        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 403
@@ -121,7 +121,7 @@ def test_request_security_pipeline_audits_route_permission_denial(
 
     response = client.get(
         "/api/v1/secure/ping",
-        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     audit_logs = asyncio.run(_audit_logs(session_factory))
@@ -171,13 +171,50 @@ def test_request_security_pipeline_exposes_route_authorization_decision(
 
     response = client.post(
         "/api/v1/secure/mutate",
-        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 200
     assert response.json()["data"] == {
         "name": "secure:read:tenant-a:user-1:1",
     }
+
+
+def test_request_security_pipeline_rejects_header_tenant_selection_for_tenant_route(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'header-tenant-selection.db'}"
+    asyncio.run(_seed_header_selection_facts(database_url))
+    token = _auth_only_token()
+    _purge_runtime_apps()
+    monkeypatch.syspath_prepend(str(tmp_path))
+    _write_protected_runtime_app(tmp_path)
+
+    session_factory = _session_factory(database_url)
+    pipeline = DatabaseRequestSecurityPipeline(
+        session_factory=session_factory,
+        jwt_provider=LocalJwtProvider(LocalJwtConfig(secret="test-secret")),
+        session_store_factory=AccountsAuthSessionStore,
+    )
+    app = create_app(
+        Settings(
+            database={"url": database_url},
+            security={"jwt_secret": "test-secret"},
+            installed_apps=["runtime_apps.secure_runtime.module"],
+        ),
+        request_security_pipeline=pipeline,
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/v1/secure/ping",
+        headers={"Authorization": f"Bearer {token}", "X-Tenant-ID": "tenant-a"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "TENANT_CONTEXT_CONFLICT"
+    assert response.json()["details"] == {"reason": "header_tenant_not_allowed"}
 
 
 def test_request_security_pipeline_allows_auth_without_tenant_context(
@@ -360,6 +397,58 @@ async def _seed_auth_only_facts(
                         policy_version=1,
                     )
                 )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _seed_header_selection_facts(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(BaseModel.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            session.add(
+                Tenant(
+                    id="tenant-a",
+                    name="Tenant A",
+                    code="tenant-a",
+                    status="active",
+                    deployment_mode="local",
+                )
+            )
+            session.add(TenantMember(tenant_id="tenant-a", user_id="user-1", status="active"))
+            session.add(
+                User(
+                    id="user-1",
+                    email="owner@example.com",
+                    display_name="Owner",
+                    status="active",
+                    token_version=1,
+                )
+            )
+            session.add(
+                UserSession(
+                    id="sess-auth-only",
+                    user_id="user-1",
+                    tenant_id=None,
+                    auth_provider="local",
+                    status="active",
+                    token_version=1,
+                )
+            )
+            session.add(
+                ProjectedPolicy(
+                    tenant_id="tenant-a",
+                    subject="user:user-1",
+                    resource="secure",
+                    action="read",
+                    effect="allow",
+                    role_grant_id="grant-tenant",
+                    policy_version=1,
+                )
+            )
             await session.commit()
     finally:
         await engine.dispose()

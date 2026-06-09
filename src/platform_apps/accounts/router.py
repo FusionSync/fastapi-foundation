@@ -1,3 +1,4 @@
+import importlib
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -19,6 +20,7 @@ from core.events import EventRegistry
 from core.exceptions import AppError
 from core.outbox import OutboxEventPublisher, OutboxRepository
 from core.permissions import AuthorizationDecision, route_authorization_decision
+from core.security import PasswordHasher
 from core.serialization import Envelope, ListEnvelope, ok, ok_list
 from platform_apps.accounts.models import ExternalIdentity, User, UserSession
 from platform_apps.accounts.schemas import (
@@ -193,7 +195,10 @@ async def reset_my_password(
 ) -> dict[str, object]:
     context = _request_context()
     async with unit_of_work(_session_factory(request)) as uow:
-        await _accounts(request, _active_session(uow.session)).reset_local_password(
+        session = _active_session(uow.session)
+        await (
+            await _accounts_with_runtime_password_policy(request, session)
+        ).reset_local_password(
             context.user_id,
             current_password=payload.current_password,
             new_password=payload.new_password,
@@ -277,7 +282,10 @@ async def create_platform_user(
     payload: UserCreateRequest,
 ) -> dict[str, object]:
     async with unit_of_work(_session_factory(request)) as uow:
-        user = await _accounts(request, _active_session(uow.session)).create_local_user(
+        session = _active_session(uow.session)
+        user = await (
+            await _accounts_with_runtime_password_policy(request, session)
+        ).create_local_user(
             email=payload.email,
             display_name=payload.display_name,
             password=payload.password,
@@ -328,6 +336,32 @@ async def revoke_platform_user_sessions(
 
 def _accounts(request: Request, session: AsyncSession) -> AccountsService:
     return AccountsService(session, events=_event_publisher(request, session))
+
+
+async def _accounts_with_runtime_password_policy(
+    request: Request,
+    session: AsyncSession,
+) -> AccountsService:
+    return AccountsService(
+        session,
+        events=_event_publisher(request, session),
+        password_hasher=await _password_hasher(request, session),
+    )
+
+
+async def _password_hasher(request: Request, session: AsyncSession) -> PasswordHasher:
+    registry = getattr(request.app.state, "setting_registry", None)
+    if registry is None or not registry.has_setting(
+        module="auth",
+        key="password_min_length",
+    ):
+        return PasswordHasher()
+    public_api = importlib.import_module("platform_apps.settings.public_api")
+    resolved = await public_api.SettingResolver(session, registry).resolve(
+        module="auth",
+        key="password_min_length",
+    )
+    return PasswordHasher(min_length=int(resolved.value))
 
 
 def _session_factory(request: Request):

@@ -2,10 +2,15 @@
 
 ## Progress
 
-- Status: `connected`
+- Status: `partial`
 - Done: audit model、AuditService、result/reason/session/policy fields、request/trace/route/method 默认 context 字段、hash chain、进程内链路锁、可选分布式链路锁、service/route 权限拒绝审计、账号 session 创建/撤销审计、tenant lifecycle 审计、WORM/SIEM NDJSON export、导出批次记录和 checksum 已落地。
-- Next:
-  - _none_
+- Done: platform audit HTTP APIs expose log query, hash-chain verification, export execution, and export record query.
+- Done: audit APIs are protected with `audit_log.read` / `audit_log.export` platform permissions.
+- Done: API checkpoint tests cover log query, hash-chain verification, WORM export, and export record retrieval.
+- Done: log query supports actor/request/trace and created-at range filters.
+- Done: retention API supports dry-run and execution; unsafe partial hash-chain deletion is rejected.
+- Done: local SIEM export sink writes `.siem.jsonl` NDJSON objects for collector handoff.
+- Next: add production WORM/SIEM provider adapters and profile-configured retention schedules.
 
 ## 职责
 
@@ -96,9 +101,29 @@ AuditExportRecord
 - `AccountsService` 可注入 `AuditService`，session 创建/撤销和禁用用户会写 `session.created` / `session.revoked` / `user.disabled` 审计。
 - `TenantLifecycleService` 可注入 `AuditService`，租户创建、暂停、恢复、删除和归档会写对应 `tenant.*` 审计。
 - `platform_apps.audit.permissions.PERMISSIONS` 注册 `audit_log.read` 和 `audit_log.export` 平台权限。
+- `platform_apps.audit.router` 已暴露面向平台管理员的 HTTP 控制面：日志查询、hash chain 校验、导出执行和导出记录查询。
+- 日志查询支持 `tenant_id`、`actor_id`、`action`、`resource_type`、`result`、`request_id`、`trace_id`、`created_from`、`created_to` 过滤。
 - `AuditExportService.export_logs()` 在导出前校验目标 tenant/platform hash chain，失败时以 `CONFLICT` 拒绝并且不会写出导出对象。
 - 导出格式为 `audit.ndjson.v1`：首行是 manifest，后续每行是一条审计记录，保留 `hash_prev`、`hash`、result、reason、session、policy 和 request/trace 字段，便于 SIEM 消费。
 - `AuditExportRecord` 记录导出者、request_id、过滤条件、记录数、hash root/tip、目标 URI、状态、导出时间和 payload 的 `checksum_sha256`。
 - `LocalWormAuditExportSink` 使用独占创建写入本地 `.jsonl` 对象，已存在同名导出时返回 `CONFLICT`，作为 WORM/object-storage adapter 的本地实现。
+- `LocalSiemAuditExportSink` 使用 `.siem.jsonl` 后缀写出同一 NDJSON 格式，便于本地或私有化环境交给 SIEM collector 拉取。
+- `POST /api/v1/platform/audit/retention` 会先按 `older_than` 计算匹配记录；`dry_run=true` 只返回匹配数量，`dry_run=false` 才执行删除。若删除会留下断开的 hash chain，接口返回 `CONFLICT`。
 
 当前 hash chain 是数据库内轻量链路；多 worker 部署应使用 `DatabaseLockProvider`、后续 Redis/advisory lock provider 或同等分布式串行化能力。生产环境如果需要外部合规归档，可以通过 `AuditExportSink` protocol 接入对象存储 WORM bucket 或 SIEM collector。
+
+## TODO
+
+- [x] Add append-oriented `AuditLog`.
+- [x] Add hash-chain verification service.
+- [x] Add WORM/SIEM export service and export records.
+- [x] Add `GET /api/v1/platform/audit/logs`.
+- [x] Add `GET /api/v1/platform/audit/exports`.
+- [x] Add `POST /api/v1/platform/audit/exports`.
+- [x] Add `POST /api/v1/platform/audit/verify`.
+- [x] Add route-level platform permissions for audit read/export APIs.
+- [x] Add integration tests for audit log query, export record query, export execution, and chain verification.
+- [x] Add actor/request/trace/time-range query filters.
+- [x] Add local SIEM export sink.
+- [x] Add retention dry-run/apply API with hash-chain safety check.
+- [ ] Add production WORM/SIEM provider adapters.

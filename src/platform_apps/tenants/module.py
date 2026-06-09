@@ -10,6 +10,10 @@ from core.tenancy import (
 )
 from platform_apps.tenants.permissions import PERMISSIONS
 from platform_apps.tenants.router import (
+    current_invitation_issue_router,
+    current_invitation_revoke_router,
+    current_member_manage_router,
+    current_member_read_router,
     invitation_accept_router,
     invitation_issue_router,
     invitation_revoke_router,
@@ -30,8 +34,12 @@ module = AppModule(
         platform_router,
         member_read_router,
         member_manage_router,
+        current_member_read_router,
+        current_member_manage_router,
         invitation_issue_router,
         invitation_revoke_router,
+        current_invitation_issue_router,
+        current_invitation_revoke_router,
         invitation_accept_router,
     ],
     models=["platform_apps.tenants.models"],

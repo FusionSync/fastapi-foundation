@@ -7,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from core.context import get_current_context
+from core.exceptions import AppError
 from core.rate_limit.provider import CacheRateLimiter, RateLimitDecision
 from core.rate_limit.rules import RateLimitIdentity, RateLimitRegistry
 from core.serialization import fail
@@ -27,7 +28,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if rule is None:
             return await call_next(request)
 
-        decision = await limiter.check(rule, _identity_for(request, route))
+        try:
+            decision = await limiter.check(rule, _identity_for(request, route))
+        except AppError as exc:
+            if exc.code == "VALIDATION_ERROR":
+                return await call_next(request)
+            raise
         if decision.allowed:
             return await call_next(request)
         return _rate_limited_response(request, decision)
@@ -36,7 +42,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 def _identity_for(request: Request, route: str) -> RateLimitIdentity:
     context = get_current_context()
     return RateLimitIdentity(
-        tenant_id=(context.tenant_id if context else None) or request.headers.get("X-Tenant-ID"),
+        tenant_id=context.tenant_id if context else None,
         user_id=context.user_id if context else None,
         ip_address=request.client.host if request.client else None,
         route=route,

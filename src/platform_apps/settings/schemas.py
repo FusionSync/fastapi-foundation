@@ -21,6 +21,8 @@ class SettingDefinitionRead(BaseSchema):
     risk_level: str
     cache_ttl_seconds: int | None
     allowed_values: list[str]
+    min_value: float | None = None
+    max_value: float | None = None
     kind: str
     deprecated: bool
 
@@ -28,7 +30,27 @@ class SettingDefinitionRead(BaseSchema):
 class SettingValueUpsertRequest(CreateSchema):
     value: Any | None = None
     secret_ref: str | None = None
+    expected_version: int | None = None
     reason: str | None = None
+
+
+class SettingValueValidateRequest(CreateSchema):
+    scope: str = "platform"
+    scope_id: str | None = None
+    value: Any | None = None
+    secret_ref: str | None = None
+
+
+class SettingValueValidateRead(BaseSchema):
+    module: str
+    key: str
+    scope: str
+    scope_id: str
+    value: Any | None
+    secret_ref: str | None
+    value_type: str
+    valid: bool
+    dry_run: bool
 
 
 class SettingValueRead(BaseSchema):
@@ -53,4 +75,29 @@ class ResolvedSettingRead(BaseSchema):
     scope_id: str
     source: str
     value: Any | None
+    version: int
+
+
+class SettingRevisionRead(BaseSchema):
+    id: str
+    setting_value_id: str
+    module: str
+    key: str
+    scope: str
+    scope_id: str
+    old_value: Any | None
+    new_value: Any | None
+    old_secret_ref: str | None
+    new_secret_ref: str | None
+    version: int
+    changed_by: str
+    reason: str | None
+
+
+class SettingResetRead(BaseSchema):
+    module: str
+    key: str
+    scope: str
+    scope_id: str
+    status: str
     version: int

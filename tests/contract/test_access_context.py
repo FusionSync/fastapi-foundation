@@ -9,6 +9,8 @@ from core.permissions import (
     AuthorizationDecisionSet,
     append_access_decision,
     get_current_access,
+    require_any_permission,
+    require_permission,
     reset_current_access,
     route_authorization_decision_for,
     set_current_access,
@@ -55,6 +57,47 @@ def test_route_authorization_decision_for_selects_named_decision() -> None:
     dependency = route_authorization_decision_for("role_grant:grant")
 
     assert dependency(request) is role_grant_decision
+
+
+def test_require_permission_returns_fastapi_dependency_for_named_decision() -> None:
+    role_grant_decision = _decision(resource="role_grant", action="grant")
+    request = SimpleNamespace(
+        state=SimpleNamespace(_core_route_authorization_result=(role_grant_decision,))
+    )
+
+    dependency = require_permission("role_grant:grant")
+
+    assert dependency.dependency(request) is role_grant_decision
+
+
+def test_require_any_permission_returns_first_matching_decision() -> None:
+    read_decision = _decision(resource="file", action="download")
+    request = SimpleNamespace(
+        state=SimpleNamespace(_core_route_authorization_result=(read_decision,))
+    )
+
+    dependency = require_any_permission(("file:delete", "file:download"))
+
+    assert dependency.dependency(request) is read_decision
+
+
+def test_require_any_permission_rejects_missing_permissions() -> None:
+    request = SimpleNamespace(
+        state=SimpleNamespace(
+            _core_route_authorization_result=(_decision(resource="file", action="download"),)
+        )
+    )
+
+    dependency = require_any_permission(("file:delete", "file:upload"))
+
+    with pytest.raises(AppError) as exc_info:
+        dependency.dependency(request)
+
+    assert exc_info.value.code == "PERMISSION_DENIED"
+    assert exc_info.value.details == {
+        "reason": "missing_route_authorization_decision",
+        "permissions": ["file:delete", "file:upload"],
+    }
 
 
 def test_access_context_appends_decisions_without_mutating_request_context() -> None:

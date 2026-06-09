@@ -4,7 +4,10 @@ from platform_apps.settings.permissions import PERMISSIONS
 from platform_apps.settings.router import (
     definition_router,
     platform_resolve_router,
+    platform_validate_router,
+    platform_value_read_router,
     platform_value_router,
+    tenant_value_read_router,
     tenant_value_router,
 )
 from platform_apps.settings.services import PLATFORM_SETTING_VALUE_CHANGED_EVENT
@@ -14,8 +17,11 @@ module = AppModule(
     version="0.1.0",
     routers=[
         definition_router,
+        platform_value_read_router,
         platform_value_router,
+        platform_validate_router,
         platform_resolve_router,
+        tenant_value_read_router,
         tenant_value_router,
     ],
     models=["platform_apps.settings.models"],

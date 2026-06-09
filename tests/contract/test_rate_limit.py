@@ -290,6 +290,33 @@ def test_rate_limit_middleware_blocks_request_with_retry_after_envelope() -> Non
     ) in metrics.render()
 
 
+def test_rate_limit_middleware_does_not_use_tenant_header_without_context() -> None:
+    app = FastAPI()
+    registry = RateLimitRegistry(
+        default_rule=RateLimitRule(
+            name="tenant.write",
+            limit=1,
+            window_seconds=30,
+            dimensions=("tenant_id", "route"),
+        )
+    )
+    app.state.rate_limit_registry = registry
+    app.state.rate_limiter = CacheRateLimiter(MemoryCacheProvider())
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.post("/workspaces")
+    async def create_workspace() -> dict[str, object]:
+        return ok({"created": True}, request_id="req_test")
+
+    client = TestClient(app)
+
+    first = client.post("/workspaces", headers={"X-Tenant-ID": "tenant-a"})
+    second = client.post("/workspaces", headers={"X-Tenant-ID": "tenant-a"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
 def test_rate_limit_middleware_uses_route_override_before_default_rule() -> None:
     app = FastAPI()
     registry = RateLimitRegistry(

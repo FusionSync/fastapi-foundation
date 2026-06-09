@@ -22,7 +22,7 @@ def test_resolve_current_tenant_injects_frozen_context() -> None:
     try:
         tenant_id = resolve_current_tenant(
             current_user=_user("user-1", "tenant-a"),
-            header_tenant_id="tenant-a",
+            token_tenant_id="tenant-a",
             tenant=TenantRecord(tenant_id="tenant-a", status="active"),
         )
 
@@ -34,6 +34,39 @@ def test_resolve_current_tenant_injects_frozen_context() -> None:
         assert context.frozen is True
     finally:
         reset_current_context(token)
+
+
+def test_header_tenant_selection_requires_explicit_opt_in() -> None:
+    user = CurrentUser(
+        user_id="user-1",
+        memberships=(TenantMembership(tenant_id="tenant-a"),),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        resolve_current_tenant(
+            current_user=user,
+            header_tenant_id="tenant-a",
+            tenant=TenantRecord(tenant_id="tenant-a", status="active"),
+        )
+
+    assert exc_info.value.code == "TENANT_CONTEXT_CONFLICT"
+    assert exc_info.value.details == {"reason": "header_tenant_not_allowed"}
+
+
+def test_header_tenant_selection_can_be_explicitly_enabled() -> None:
+    user = CurrentUser(
+        user_id="user-1",
+        memberships=(TenantMembership(tenant_id="tenant-a"),),
+    )
+
+    tenant_id = resolve_current_tenant(
+        current_user=user,
+        header_tenant_id="tenant-a",
+        tenant=TenantRecord(tenant_id="tenant-a", status="active"),
+        allow_header_tenant_id=True,
+    )
+
+    assert tenant_id == "tenant-a"
 
 
 def test_header_and_token_tenant_conflict_is_rejected() -> None:
@@ -54,7 +87,7 @@ def test_inactive_membership_is_rejected() -> None:
     )
 
     with pytest.raises(AppError) as exc_info:
-        resolve_current_tenant(current_user=user, header_tenant_id="tenant-a")
+        resolve_current_tenant(current_user=user, token_tenant_id="tenant-a")
 
     assert exc_info.value.code == "TENANT_ACCESS_DENIED"
 
@@ -63,7 +96,7 @@ def test_tenant_resolution_requires_loaded_tenant_record() -> None:
     with pytest.raises(AppError) as exc_info:
         resolve_current_tenant(
             current_user=_user("user-1", "tenant-a"),
-            header_tenant_id="tenant-a",
+            token_tenant_id="tenant-a",
         )
 
     assert exc_info.value.code == "TENANT_ACCESS_DENIED"
@@ -76,7 +109,7 @@ def test_suspended_tenant_allows_read_but_rejects_write() -> None:
     assert (
         resolve_current_tenant(
             current_user=user,
-            header_tenant_id="tenant-a",
+            token_tenant_id="tenant-a",
             tenant=suspended,
             operation="read",
         )
@@ -85,7 +118,7 @@ def test_suspended_tenant_allows_read_but_rejects_write() -> None:
     with pytest.raises(AppError) as exc_info:
         resolve_current_tenant(
             current_user=user,
-            header_tenant_id="tenant-a",
+            token_tenant_id="tenant-a",
             tenant=suspended,
             operation="write",
         )
@@ -100,7 +133,7 @@ def test_archived_read_can_be_enabled_from_settings_policy() -> None:
 
     tenant_id = resolve_current_tenant(
         current_user=_user("user-1", "tenant-a"),
-        header_tenant_id="tenant-a",
+        token_tenant_id="tenant-a",
         tenant=TenantRecord(tenant_id="tenant-a", status="archived"),
         operation="read",
         policy=policy,

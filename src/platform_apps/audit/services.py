@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import event, select
+from sqlalchemy import delete, event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.context import get_current_context
@@ -63,6 +63,11 @@ class LocalWormAuditExportSink:
                 details={"destination_uri": str(destination)},
             ) from exc
         return AuditExportSinkResult(destination_uri=str(destination))
+
+
+class LocalSiemAuditExportSink(LocalWormAuditExportSink):
+    def __init__(self, root: str | Path) -> None:
+        super().__init__(root, suffix=".siem.jsonl")
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +170,85 @@ class AuditExportService:
         else:
             statement = statement.where(AuditLog.tenant_id == tenant_id)
         result = await self.session.execute(statement.order_by(AuditLog.id))
+        return list(result.scalars().all())
+
+
+@dataclass(frozen=True, slots=True)
+class AuditRetentionResult:
+    tenant_id: str | None
+    older_than: datetime
+    matched_count: int
+    deleted_count: int
+    dry_run: bool
+    chain_safe: bool
+    oldest_created_at: datetime | None
+    newest_created_at: datetime | None
+
+
+class AuditRetentionService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def apply_policy(
+        self,
+        *,
+        tenant_id: str | None,
+        older_than: datetime,
+        dry_run: bool = True,
+    ) -> AuditRetentionResult:
+        cutoff = _datetime_utc(older_than)
+        audit_logs = await self._audit_logs(tenant_id)
+        expired = [
+            audit_log
+            for audit_log in audit_logs
+            if audit_log.created_at is not None and _datetime_utc(audit_log.created_at) < cutoff
+        ]
+        chain_safe = not expired or len(expired) == len(audit_logs)
+        if not dry_run and expired and not chain_safe:
+            raise AppError(
+                "CONFLICT",
+                "audit retention would break the hash chain; export a complete chain first",
+                status_code=409,
+                details={
+                    "tenant_id": tenant_id,
+                    "matched_count": len(expired),
+                    "total_count": len(audit_logs),
+                },
+            )
+
+        deleted_count = 0
+        if not dry_run and expired:
+            await self.session.execute(
+                delete(AuditLog).where(AuditLog.id.in_([audit_log.id for audit_log in expired]))
+            )
+            deleted_count = len(expired)
+            await self.session.flush()
+
+        created_values = [
+            _datetime_utc(audit_log.created_at)
+            for audit_log in expired
+            if audit_log.created_at is not None
+        ]
+        return AuditRetentionResult(
+            tenant_id=tenant_id,
+            older_than=cutoff,
+            matched_count=len(expired),
+            deleted_count=deleted_count,
+            dry_run=dry_run,
+            chain_safe=chain_safe,
+            oldest_created_at=min(created_values) if created_values else None,
+            newest_created_at=max(created_values) if created_values else None,
+        )
+
+    async def _audit_logs(self, tenant_id: str | None) -> list[AuditLog]:
+        statement = select(AuditLog)
+        if tenant_id is None:
+            statement = statement.where(AuditLog.tenant_id.is_(None))
+        else:
+            statement = statement.where(AuditLog.tenant_id == tenant_id)
+        result = await self.session.execute(
+            statement.order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+        )
         return list(result.scalars().all())
 
 
@@ -422,6 +506,12 @@ def _safe_export_file_name(export_id: str, suffix: str) -> str:
     if export_id in {".", ".."} or any(separator in export_id for separator in ("/", "\\", ":")):
         raise AppError("VALIDATION_ERROR", "audit export_id is invalid", status_code=400)
     return f"{export_id}{suffix}"
+
+
+def _datetime_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _audit_export_filters(tenant_id: str | None) -> dict[str, object]:

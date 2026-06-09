@@ -7,6 +7,7 @@ from platform_apps.files.services import (
     FileService,
     FileVirusScanner,
     OwnerOnlyFileResourceAuthorizationAdapter,
+    PresignedFileDownload,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "FileService",
     "FileVirusScanner",
     "OwnerOnlyFileResourceAuthorizationAdapter",
+    "PresignedFileDownload",
 ]

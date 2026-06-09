@@ -45,8 +45,19 @@ member_read_router = create_router(
     tags=["tenant-members"],
     permissions=["tenant_member:read"],
 )
+current_member_read_router = create_router(
+    "/tenant/members",
+    tags=["tenant-members"],
+    permissions=["tenant_member:read"],
+)
 member_manage_router = create_router(
     "/tenants/{tenant_id}/members",
+    tags=["tenant-members"],
+    permissions=["tenant_member:manage"],
+    tenant_operation="write",
+)
+current_member_manage_router = create_router(
+    "/tenant/members",
     tags=["tenant-members"],
     permissions=["tenant_member:manage"],
     tenant_operation="write",
@@ -57,8 +68,20 @@ invitation_issue_router = create_router(
     permissions=["tenant_invitation:invite"],
     tenant_operation="write",
 )
+current_invitation_issue_router = create_router(
+    "/tenant/invitations",
+    tags=["tenant-invitations"],
+    permissions=["tenant_invitation:invite"],
+    tenant_operation="write",
+)
 invitation_revoke_router = create_router(
     "/tenants/{tenant_id}/invitations",
+    tags=["tenant-invitations"],
+    permissions=["tenant_invitation:revoke"],
+    tenant_operation="write",
+)
+current_invitation_revoke_router = create_router(
+    "/tenant/invitations",
     tags=["tenant-invitations"],
     permissions=["tenant_invitation:revoke"],
     tenant_operation="write",
@@ -119,22 +142,17 @@ async def list_tenant_members(
     query: Annotated[TenantMemberListQuery, Depends()],
     decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
 ) -> dict[str, object]:
-    context = _request_context()
-    async with unit_of_work(_session_factory(request)) as uow:
-        session = _active_session(uow.session)
-        members, total = await TenantMembershipService(
-            session,
-            _event_publisher(request, session),
-        ).list_members(
-            tenant_id=tenant_id,
-            query=query,
-            actor_id=context.user_id,
-            authorization_decision=decision,
-        )
-        return ok_list(
-            [_member_read(member) for member in members],
-            query.to_pagination(total=total),
-        )
+    return await _list_members(request, tenant_id=tenant_id, query=query, decision=decision)
+
+
+@current_member_read_router.get("", response_model=ListEnvelope[TenantMemberRead])
+async def list_current_tenant_members(
+    request: Request,
+    query: Annotated[TenantMemberListQuery, Depends()],
+    decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+) -> dict[str, object]:
+    tenant_id = _current_tenant_id(_request_context())
+    return await _list_members(request, tenant_id=tenant_id, query=query, decision=decision)
 
 
 @member_manage_router.post("", response_model=Envelope[TenantMemberRead])
@@ -144,21 +162,17 @@ async def create_tenant_member(
     payload: TenantMemberCreateRequest,
     decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
 ) -> dict[str, object]:
-    context = _request_context()
-    async with unit_of_work(_session_factory(request)) as uow:
-        session = _active_session(uow.session)
-        member = await TenantMembershipService(
-            session,
-            _event_publisher(request, session),
-        ).create_member(
-            tenant_id=tenant_id,
-            user_id=payload.user_id,
-            status=payload.status,
-            actor_id=context.user_id,
-            request_id=context.request_id,
-            authorization_decision=decision,
-        )
-        return ok(_member_read(member))
+    return await _create_member(request, tenant_id=tenant_id, payload=payload, decision=decision)
+
+
+@current_member_manage_router.post("", response_model=Envelope[TenantMemberRead])
+async def create_current_tenant_member(
+    request: Request,
+    payload: TenantMemberCreateRequest,
+    decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+) -> dict[str, object]:
+    tenant_id = _current_tenant_id(_request_context())
+    return await _create_member(request, tenant_id=tenant_id, payload=payload, decision=decision)
 
 
 @member_manage_router.patch("/{member_id}", response_model=Envelope[TenantMemberRead])
@@ -169,21 +183,30 @@ async def update_tenant_member(
     payload: TenantMemberUpdateRequest,
     decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
 ) -> dict[str, object]:
-    context = _request_context()
-    async with unit_of_work(_session_factory(request)) as uow:
-        session = _active_session(uow.session)
-        member = await TenantMembershipService(
-            session,
-            _event_publisher(request, session),
-        ).update_member_status(
-            tenant_id=tenant_id,
-            member_id=member_id,
-            status=payload.status,
-            actor_id=context.user_id,
-            request_id=context.request_id,
-            authorization_decision=decision,
-        )
-        return ok(_member_read(member))
+    return await _update_member(
+        request,
+        tenant_id=tenant_id,
+        member_id=member_id,
+        payload=payload,
+        decision=decision,
+    )
+
+
+@current_member_manage_router.patch("/{member_id}", response_model=Envelope[TenantMemberRead])
+async def update_current_tenant_member(
+    request: Request,
+    member_id: str,
+    payload: TenantMemberUpdateRequest,
+    decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+) -> dict[str, object]:
+    tenant_id = _current_tenant_id(_request_context())
+    return await _update_member(
+        request,
+        tenant_id=tenant_id,
+        member_id=member_id,
+        payload=payload,
+        decision=decision,
+    )
 
 
 @invitation_issue_router.post("", response_model=Envelope[TenantInvitationIssuedRead])
@@ -193,22 +216,27 @@ async def issue_tenant_invitation(
     payload: TenantInvitationIssueRequest,
     decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
 ) -> dict[str, object]:
-    context = _request_context()
-    async with unit_of_work(_session_factory(request)) as uow:
-        session = _active_session(uow.session)
-        issued = await TenantInvitationService(
-            session,
-            _event_publisher(request, session),
-        ).issue_invitation(
-            tenant_id=tenant_id,
-            email=payload.email,
-            role_template_id=payload.role_template_id,
-            actor_id=context.user_id,
-            request_id=context.request_id,
-            expires_at=payload.expires_at,
-            authorization_decision=decision,
-        )
-        return ok(_invitation_issued_read(issued))
+    return await _issue_invitation(
+        request,
+        tenant_id=tenant_id,
+        payload=payload,
+        decision=decision,
+    )
+
+
+@current_invitation_issue_router.post("", response_model=Envelope[TenantInvitationIssuedRead])
+async def issue_current_tenant_invitation(
+    request: Request,
+    payload: TenantInvitationIssueRequest,
+    decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+) -> dict[str, object]:
+    tenant_id = _current_tenant_id(_request_context())
+    return await _issue_invitation(
+        request,
+        tenant_id=tenant_id,
+        payload=payload,
+        decision=decision,
+    )
 
 
 @invitation_revoke_router.patch(
@@ -221,21 +249,30 @@ async def revoke_tenant_invitation(
     invitation_id: str,
     decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
 ) -> dict[str, object]:
-    context = _request_context()
-    async with unit_of_work(_session_factory(request)) as uow:
-        session = _active_session(uow.session)
-        service = TenantInvitationService(session, _event_publisher(request, session))
-        invitation = await service.get_invitation(
-            tenant_id=tenant_id,
-            invitation_id=invitation_id,
-        )
-        revoked = await service.revoke_invitation(
-            invitation,
-            actor_id=context.user_id,
-            request_id=context.request_id,
-            authorization_decision=decision,
-        )
-        return ok(_invitation_read(revoked))
+    return await _revoke_invitation(
+        request,
+        tenant_id=tenant_id,
+        invitation_id=invitation_id,
+        decision=decision,
+    )
+
+
+@current_invitation_revoke_router.patch(
+    "/{invitation_id}/revoke",
+    response_model=Envelope[TenantInvitationRead],
+)
+async def revoke_current_tenant_invitation(
+    request: Request,
+    invitation_id: str,
+    decision: Annotated[AuthorizationDecision, Depends(route_authorization_decision)],
+) -> dict[str, object]:
+    tenant_id = _current_tenant_id(_request_context())
+    return await _revoke_invitation(
+        request,
+        tenant_id=tenant_id,
+        invitation_id=invitation_id,
+        decision=decision,
+    )
 
 
 @invitation_accept_router.post("/accept", response_model=Envelope[TenantInvitationRead])
@@ -281,6 +318,135 @@ def _request_context():
     if context is None or not context.user_id:
         raise AppError("AUTH_INVALID_TOKEN", "Authenticated user is required", status_code=401)
     return context
+
+
+def _current_tenant_id(context) -> str:
+    if not context.tenant_id:
+        raise AppError("TENANT_ACCESS_DENIED", "Tenant context is required", status_code=403)
+    return context.tenant_id
+
+
+async def _list_members(
+    request: Request,
+    *,
+    tenant_id: str,
+    query: TenantMemberListQuery,
+    decision: AuthorizationDecision,
+) -> dict[str, object]:
+    context = _request_context()
+    async with unit_of_work(_session_factory(request)) as uow:
+        session = _active_session(uow.session)
+        members, total = await TenantMembershipService(
+            session,
+            _event_publisher(request, session),
+        ).list_members(
+            tenant_id=tenant_id,
+            query=query,
+            actor_id=context.user_id,
+            authorization_decision=decision,
+        )
+        return ok_list(
+            [_member_read(member) for member in members],
+            query.to_pagination(total=total),
+        )
+
+
+async def _create_member(
+    request: Request,
+    *,
+    tenant_id: str,
+    payload: TenantMemberCreateRequest,
+    decision: AuthorizationDecision,
+) -> dict[str, object]:
+    context = _request_context()
+    async with unit_of_work(_session_factory(request)) as uow:
+        session = _active_session(uow.session)
+        member = await TenantMembershipService(
+            session,
+            _event_publisher(request, session),
+        ).create_member(
+            tenant_id=tenant_id,
+            user_id=payload.user_id,
+            status=payload.status,
+            actor_id=context.user_id,
+            request_id=context.request_id,
+            authorization_decision=decision,
+        )
+        return ok(_member_read(member))
+
+
+async def _update_member(
+    request: Request,
+    *,
+    tenant_id: str,
+    member_id: str,
+    payload: TenantMemberUpdateRequest,
+    decision: AuthorizationDecision,
+) -> dict[str, object]:
+    context = _request_context()
+    async with unit_of_work(_session_factory(request)) as uow:
+        session = _active_session(uow.session)
+        member = await TenantMembershipService(
+            session,
+            _event_publisher(request, session),
+        ).update_member_status(
+            tenant_id=tenant_id,
+            member_id=member_id,
+            status=payload.status,
+            actor_id=context.user_id,
+            request_id=context.request_id,
+            authorization_decision=decision,
+        )
+        return ok(_member_read(member))
+
+
+async def _issue_invitation(
+    request: Request,
+    *,
+    tenant_id: str,
+    payload: TenantInvitationIssueRequest,
+    decision: AuthorizationDecision,
+) -> dict[str, object]:
+    context = _request_context()
+    async with unit_of_work(_session_factory(request)) as uow:
+        session = _active_session(uow.session)
+        issued = await TenantInvitationService(
+            session,
+            _event_publisher(request, session),
+        ).issue_invitation(
+            tenant_id=tenant_id,
+            email=payload.email,
+            role_template_id=payload.role_template_id,
+            actor_id=context.user_id,
+            request_id=context.request_id,
+            expires_at=payload.expires_at,
+            authorization_decision=decision,
+        )
+        return ok(_invitation_issued_read(issued))
+
+
+async def _revoke_invitation(
+    request: Request,
+    *,
+    tenant_id: str,
+    invitation_id: str,
+    decision: AuthorizationDecision,
+) -> dict[str, object]:
+    context = _request_context()
+    async with unit_of_work(_session_factory(request)) as uow:
+        session = _active_session(uow.session)
+        service = TenantInvitationService(session, _event_publisher(request, session))
+        invitation = await service.get_invitation(
+            tenant_id=tenant_id,
+            invitation_id=invitation_id,
+        )
+        revoked = await service.revoke_invitation(
+            invitation,
+            actor_id=context.user_id,
+            request_id=context.request_id,
+            authorization_decision=decision,
+        )
+        return ok(_invitation_read(revoked))
 
 
 def _tenant_read(tenant) -> dict[str, object]:

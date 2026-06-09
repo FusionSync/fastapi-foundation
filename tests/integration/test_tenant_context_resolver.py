@@ -55,6 +55,27 @@ async def test_database_tenant_context_resolver_uses_auth_user_and_db_facts(
 
 
 @pytest.mark.asyncio
+async def test_database_tenant_context_resolver_rejects_header_tenant_selection_by_default(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with unit_of_work(session_factory) as uow:
+        assert uow.session is not None
+        _add_tenant(uow.session, tenant_id="tenant-a")
+        uow.session.add(TenantMember(tenant_id="tenant-a", user_id="user-1", status="active"))
+
+    async with session_factory() as session:
+        with pytest.raises(AppError) as rejected:
+            await DatabaseTenantContextResolver(session).resolve(
+                current_user=_auth_user("user-1", tenant_id=None),
+                header_tenant_id="tenant-a",
+                operation="read",
+            )
+
+    assert rejected.value.code == "TENANT_CONTEXT_CONFLICT"
+    assert rejected.value.details == {"reason": "header_tenant_not_allowed"}
+
+
+@pytest.mark.asyncio
 async def test_database_tenant_context_resolver_rejects_inactive_membership(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

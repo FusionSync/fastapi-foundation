@@ -59,6 +59,7 @@ class DatabaseRequestSecurityPipeline:
                     token_tenant_id=claims.tenant_id,
                     header_tenant_id=request.headers.get("X-Tenant-ID"),
                     operation=policy.tenant_operation,  # type: ignore[arg-type]
+                    allow_header_tenant_id=False,
                 )
                 _bind_access_context()
                 return

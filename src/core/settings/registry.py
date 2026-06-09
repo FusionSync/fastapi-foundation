@@ -35,6 +35,8 @@ class RegisteredSetting:
             "risk_level": self.spec.risk_level,
             "cache_ttl_seconds": self.spec.cache_ttl_seconds,
             "allowed_values": list(self.spec.allowed_values),
+            "min_value": self.spec.min_value,
+            "max_value": self.spec.max_value,
             "kind": self.spec.kind,
             "deprecated": self.spec.deprecated,
         }

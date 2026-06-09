@@ -20,6 +20,7 @@ from core.config import Settings
 from core.db import unit_of_work
 from core.permissions import PLATFORM_TENANT_ID, ProjectedPolicy
 from platform_apps.accounts import AccountsService, ExternalIdentity, UserSession
+from platform_apps.settings.models import SettingValue
 
 
 def test_platform_accounts_api_manages_profile_password_identity_and_sessions(
@@ -237,6 +238,49 @@ def test_platform_accounts_api_external_provider_callback_creates_session(
     )
 
 
+def test_platform_accounts_api_uses_runtime_password_min_length_setting(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'platform-accounts-settings.db'}"
+    seeded = asyncio.run(_seed_accounts_api_facts(database_url))
+    asyncio.run(_seed_password_min_length_setting(database_url, value=16))
+    client = TestClient(
+        create_app(
+            Settings(
+                database={"url": database_url},
+                security={"jwt_secret": "test-secret"},
+                installed_apps=[
+                    "platform_apps.accounts.module",
+                    "platform_apps.settings.module",
+                ],
+            )
+        )
+    )
+
+    short_password_response = client.post(
+        "/api/v1/platform/accounts/users",
+        headers={"Authorization": f"Bearer {_admin_token(seeded)}"},
+        json={
+            "email": "short@example.com",
+            "display_name": "Short Password",
+            "password": "ShortPass123",
+        },
+    )
+    assert short_password_response.status_code == 400
+    assert short_password_response.json()["code"] == "VALIDATION_ERROR"
+
+    accepted_response = client.post(
+        "/api/v1/platform/accounts/users",
+        headers={"Authorization": f"Bearer {_admin_token(seeded)}"},
+        json={
+            "email": "long@example.com",
+            "display_name": "Long Password",
+            "password": "LongEnoughPass123",
+        },
+    )
+    assert accepted_response.status_code == 200
+
+
 async def _seed_accounts_api_facts(database_url: str) -> dict[str, str]:
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
@@ -305,6 +349,31 @@ async def _seed_external_login_facts(database_url: str) -> dict[str, str]:
                 subject="logto-user-1",
             )
             return {"user_id": user.id}
+    finally:
+        await engine.dispose()
+
+
+async def _seed_password_min_length_setting(database_url: str, *, value: int) -> None:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with unit_of_work(session_factory) as uow:
+            assert uow.session is not None
+            uow.session.add(
+                SettingValue(
+                    module="auth",
+                    key="password_min_length",
+                    scope="platform",
+                    scope_id=PLATFORM_TENANT_ID,
+                    value_json=value,
+                    secret_ref=None,
+                    value_type="int",
+                    version=1,
+                    status="active",
+                    updated_by="admin",
+                    reason="test policy",
+                )
+            )
     finally:
         await engine.dispose()
 

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from core.events import EventEnvelope, EventRegistry
+from core.events.dispatch_context import use_event_dispatch_session
 from core.idempotency import IdempotencyStore
 from core.locks import LockProvider
 from core.observability import MetricsRegistry
@@ -84,10 +85,11 @@ class OutboxDispatcher:
                 if self.external_publisher is not None:
                     await self.external_publisher.publish(envelope)
                 else:
-                    await self.registry.dispatch(
-                        envelope,
-                        idempotency_store=self.idempotency_store,
-                    )
+                    with use_event_dispatch_session(self.repository.session):
+                        await self.registry.dispatch(
+                            envelope,
+                            idempotency_store=self.idempotency_store,
+                        )
             except Exception as exc:
                 await self.repository.mark_failed(
                     event,

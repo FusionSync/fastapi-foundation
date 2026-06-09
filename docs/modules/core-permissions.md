@@ -3,7 +3,7 @@
 ## Progress
 
 - Status: `connected`
-- Done: permission registry、authorization decision、platform/tenant scope 校验、跨租户平台权限统一 gate、route authorization dependency、route permission conformance、projection cache invalidation、resource owner adapter、outbox-backed role grant events、reconciliation CLI 和审计字段要求已落地。
+- Done: permission registry、authorization decision、platform/tenant scope 校验、跨租户平台权限统一 gate、route authorization dependency/helper、route permission conformance、projection cache invalidation、resource owner adapter、outbox-backed role grant events、reconciliation/bootstrap CLI 和审计字段要求已落地。
 - Next: _none_
 
 ## 职责
@@ -85,6 +85,31 @@ async def mutate_workspace(
 
 如果 handler 声明了 `route_authorization_decision`，但当前 route 未声明权限或 authorizer 没有返回 `AuthorizationDecision`，请求会被拒绝为 `PERMISSION_DENIED`。声明多个 route permissions 时，可用 `route_authorization_decisions()` 读取完整 decision 列表；默认单 decision dependency 返回第一个 decision。
 
+业务 handler 也可以使用更短的 helper 写法：
+
+```python
+from typing import Annotated
+
+from core.permissions import AuthorizationDecision, require_any_permission, require_permission
+
+
+async def grant_role(
+    decision: Annotated[AuthorizationDecision, require_permission("role_grant:grant")],
+) -> dict[str, object]:
+    ...
+
+
+async def read_or_download(
+    decision: Annotated[
+        AuthorizationDecision,
+        require_any_permission(("file:download", "file:read")),
+    ],
+) -> dict[str, object]:
+    ...
+```
+
+`require_permission()` 返回指定 permission 的 FastAPI dependency；`require_any_permission()` 返回第一个匹配的允许决策。两者都从 route authorizer 已写入 request state 的 `AuthorizationDecision` 集合读取结果，不会绕过 route-level permission 声明。
+
 当前实现提供 `AuthorizationService`：
 
 - `authorize()` 查询 `ProjectedPolicy`，返回 `AuthorizationDecision`，不抛异常。
@@ -121,6 +146,7 @@ core permissions catalog --installed-app apps.example_domain.module --json
 core permissions reconcile --installed-app apps.example_domain.module --json
 core permissions reconcile --database-url sqlite+aiosqlite:///./data/local.db --json
 core permissions reconcile --database-url sqlite+aiosqlite:///./data/local.db --repair --json
+core permissions bootstrap-platform-admin --database-url sqlite+aiosqlite:///./data/local.db --user-id admin-1 --installed-app platform_apps.access.module --json
 ```
 
 `catalog` 来自 app module 的 `PermissionSpec` 和 admin metadata 转换后的平台权限。
@@ -129,6 +155,7 @@ core permissions reconcile --database-url sqlite+aiosqlite:///./data/local.db --
 - 不传 `--database-url` 时运行 metadata mode，用于部署前检查权限目录是否可收集。
 - 传 `--database-url` 时运行 projection mode，调用 `PolicyProjector.reconcile()` 检测 RoleGrant/RoleTemplate 与 ProjectedPolicy 的 drift。
 - projection mode 只有显式传 `--repair` 时才会修复 missing/stale policy，并提交事务。
+- `bootstrap-platform-admin` 是首个平台管理员初始化入口，只允许在 `__platform__` 域没有 platform `RoleGrant` 时执行。
 
 RoleGrant 投影变更会失效 `PermissionCache`：投影 handler 更新或删除 ProjectedPolicy 后立即 invalidate；角色撤销会在 outbox handler 消费前同步删除已有 ProjectedPolicy 并失效缓存，避免撤销窗口继续使用旧授权结果。
 

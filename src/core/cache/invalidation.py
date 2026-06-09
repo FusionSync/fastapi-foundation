@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 CacheKeyResolver = Callable[["EventEnvelope"], Sequence[str]]
 ROLE_GRANT_CHANGED_EVENT = "permissions.role_grant_changed"
+SETTING_VALUE_CHANGED_EVENT = "platform_settings.value_changed"
 TENANT_MEMBER_ACTIVATED_EVENT = "tenant.member_activated"
 TENANT_LIFECYCLE_EVENTS = (
     "tenant.created",
@@ -109,6 +110,12 @@ def default_cache_invalidation_rules() -> tuple[CacheInvalidationRule, ...]:
             keys_for_event=_tenant_membership_keys,
             reason="tenant_membership_changed",
         ),
+        CacheInvalidationRule(
+            event_type=SETTING_VALUE_CHANGED_EVENT,
+            event_version=1,
+            keys_for_event=_setting_value_keys,
+            reason="runtime_setting_changed",
+        ),
         *tenant_rules,
     )
 
@@ -155,6 +162,11 @@ def _tenant_membership_keys(envelope: EventEnvelope) -> tuple[str, ...]:
         keys.append(tenant_membership_cache_key(envelope.tenant_id, user_id))
         keys.append(permission_subject_cache_key(envelope.tenant_id, "user", user_id))
     return tuple(keys)
+
+
+def _setting_value_keys(envelope: EventEnvelope) -> tuple[str, ...]:
+    scope_id = _payload_str(envelope, "scope_id") or envelope.tenant_id
+    return (tenant_settings_cache_key(scope_id),) if scope_id else ()
 
 
 def _payload_str(envelope: EventEnvelope, key: str) -> str | None:

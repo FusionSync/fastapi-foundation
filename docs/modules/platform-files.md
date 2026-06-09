@@ -4,7 +4,11 @@
 
 - Status: `partial`
 - Done: file metadata、local/S3 storage provider、batch upload API、presigned upload API、multipart upload API、owner/authorization gate、业务资源级 authorization adapter、tenant lifecycle policy file download gate、upload quota gate、virus scan gate、delete retention cleanup、upload 幂等 mutation guard checkpoint、upload/download/delete 权限和基础 storage tests 已落地。
-- Next: _none_
+- Done: HTTP APIs now expose file list/detail, base64 download, presigned download and delete over the existing service-layer authorization and retention-aware behavior.
+- Done: file metadata includes `version`; upload starts at version 1 and status transitions increment it.
+- Done: HTTP APIs expose binary `GET /api/v1/platform/files/{file_id}/content` using `StreamingResponse`.
+- Done: list API supports status filters for `available`, `uploading`, `deleted` and `purged` metadata.
+- Next: add production virus scanner integrations and optional async scan/quarantine workflows.
 
 ## 职责
 
@@ -27,6 +31,7 @@ FileObject
   checksum
   file_type
   status
+  version
   created_at
   deleted_at
 ```
@@ -49,6 +54,12 @@ POST /api/v1/platform/files/batch
 POST /api/v1/platform/files/presigned-upload
 POST /api/v1/platform/files/multipart
 POST /api/v1/platform/files/multipart/{file_id}/complete
+GET  /api/v1/platform/files
+GET  /api/v1/platform/files/{file_id}
+GET  /api/v1/platform/files/{file_id}/download
+GET  /api/v1/platform/files/{file_id}/content
+POST /api/v1/platform/files/{file_id}/presigned-download
+DELETE /api/v1/platform/files/{file_id}
 ```
 
 ## 设计要求
@@ -67,13 +78,30 @@ POST /api/v1/platform/files/multipart/{file_id}/complete
 - `FileService.upload_batch_bytes()` 复用 `upload_bytes()`，用于一次请求上传多个 base64 文件。
 - `FileService.create_presigned_upload()` 只登记 `uploading` FileObject 并返回 provider 生成的上传 URL，不执行真实病毒扫描。
 - `FileService.initiate_multipart_upload()` 创建 `uploading` FileObject，初始化 provider multipart upload，并返回每个 part 的上传 URL。
-- `FileService.complete_multipart_upload()` 完成 provider multipart upload 后，把 FileObject 更新为 `available`。
+- `FileService.complete_multipart_upload()` 完成 provider multipart upload 后，把 FileObject 更新为 `available` 并递增 `version`。
 - `FileService.upload_bytes()` 可注入 `QuotaService` 和 upload quota rules；storage 写入前会 reserve quota，超限时不写对象、不落 metadata，部分 reserve 失败时会释放已扣用量。
 - `FileService.download_bytes()` 执行 tenant lifecycle `file_download` gate，可注入配置生成的 `TenantLifecyclePolicy` 允许 suspended/archived 文件下载，再通过 `FileResourceAuthorizationAdapter` 校验 tenant/resource 实例，并要求 `file.download` 权限后读取 storage。
-- `FileService.delete_file()` 通过 `FileResourceAuthorizationAdapter` 校验 tenant/resource 实例，并要求 `file.delete` 权限后，将 metadata 标记为 `deleted`；未配置 retention 时立即删除 storage object，配置 `delete_retention_seconds` 时保留对象到后台清理。
-- `FileService.purge_deleted_files()` 执行 tenant lifecycle `background_cleanup` gate，只清理 retention 到期的 `deleted` 文件对象，并将 metadata 标记为 `purged`。
+- `FileService.delete_file()` 通过 `FileResourceAuthorizationAdapter` 校验 tenant/resource 实例，并要求 `file.delete` 权限后，将 metadata 标记为 `deleted` 并递增 `version`；未配置 retention 时立即删除 storage object，配置 `delete_retention_seconds` 时保留对象到后台清理。
+- `FileService.purge_deleted_files()` 执行 tenant lifecycle `background_cleanup` gate，只清理 retention 到期的 `deleted` 文件对象，并将 metadata 标记为 `purged` 且递增 `version`。
+- `platform_apps.files.router` 按上传、读取/下载、删除拆分 route-level 权限，避免下载/删除 API 继承 `file.upload`。
+- 文件读取控制面包含 list/detail、base64 download、binary content、presigned download 和 delete API，全部复用 `FileService` 的 tenant/owner/resource authorization gate。
+- 当安装 `platform_settings` 时，上传 API 会读取 `files.max_file_size_mb` 作为运行时上传大小策略；未安装时使用默认 `UploadSecurityPolicy`。
 - 文件权限拒绝时复用权限模块的 `authorization.denied` 审计；缺少 `AuthorizationService` 时直接返回 `PERMISSION_DENIED`，避免服务层绕过 route 权限。
 - 上传对象 key 使用 `tenants/{tenant_id}/files/{file_id}/original.bin`，保证对象存储可按 tenant 归档和恢复。
 - `platform_apps.files.permissions.PERMISSIONS` 注册 `file.upload`、`file.download`、`file.delete` 租户权限。
 
 默认 `OwnerOnlyFileResourceAuthorizationAdapter` 保持 tenant/owner 最小门禁；业务 app 可启用 `AuthorizationServiceFileResourceAdapter`，将 `upload/download/delete` 映射到业务资源实例的 `write/read/write` 权限。
+
+## TODO
+
+- [x] Add batch upload API.
+- [x] Add presigned upload API.
+- [x] Add multipart upload API.
+- [x] Add file list/detail APIs.
+- [x] Add download API.
+- [x] Add binary content download API.
+- [x] Add presigned download API.
+- [x] Add delete API that reuses retention-aware service behavior.
+- [x] Add file metadata versioning.
+- [x] Add status-filter checkpoint tests for deleted files.
+- [x] Add API checkpoint tests for list/detail/download/content/presigned-download/delete.

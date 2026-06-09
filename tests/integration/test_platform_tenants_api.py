@@ -58,10 +58,7 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
     asyncio.run(_seed_tenant_user_access(database_url))
     create_member_response = client.post(
         "/api/v1/tenants/tenant-a/members",
-        headers={
-            "Authorization": f"Bearer {_tenant_token()}",
-            "X-Tenant-ID": "tenant-a",
-        },
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
         json={"user_id": "user-3"},
     )
 
@@ -71,12 +68,18 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
     assert managed_member["user_id"] == "user-3"
     assert managed_member["status"] == "active"
 
+    current_member_response = client.post(
+        "/api/v1/tenant/members",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+        json={"user_id": "user-4"},
+    )
+    assert current_member_response.status_code == 200
+    assert current_member_response.json()["data"]["tenant_id"] == "tenant-a"
+    assert current_member_response.json()["data"]["user_id"] == "user-4"
+
     update_member_response = client.patch(
         f"/api/v1/tenants/tenant-a/members/{managed_member['id']}",
-        headers={
-            "Authorization": f"Bearer {_tenant_token()}",
-            "X-Tenant-ID": "tenant-a",
-        },
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
         json={"status": "inactive"},
     )
 
@@ -85,10 +88,7 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
 
     revoke_issue_response = client.post(
         "/api/v1/tenants/tenant-a/invitations",
-        headers={
-            "Authorization": f"Bearer {_tenant_token()}",
-            "X-Tenant-ID": "tenant-a",
-        },
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
         json={
             "email": "revoke@example.com",
             "expires_at": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
@@ -99,10 +99,7 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
     revoke_response = client.patch(
         "/api/v1/tenants/tenant-a/invitations/"
         f"{revoke_issue_response.json()['data']['id']}/revoke",
-        headers={
-            "Authorization": f"Bearer {_tenant_token()}",
-            "X-Tenant-ID": "tenant-a",
-        },
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
     )
 
     assert revoke_response.status_code == 200
@@ -110,10 +107,7 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
 
     invite_response = client.post(
         "/api/v1/tenants/tenant-a/invitations",
-        headers={
-            "Authorization": f"Bearer {_tenant_token()}",
-            "X-Tenant-ID": "tenant-a",
-        },
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
         json={
             "email": "New.User@Example.com",
             "expires_at": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
@@ -126,6 +120,17 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
     assert issued["email"] == "new.user@example.com"
     assert issued["status"] == "pending"
     assert issued["token"]
+
+    current_invite_response = client.post(
+        "/api/v1/tenant/invitations",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+        json={
+            "email": "current@example.com",
+            "expires_at": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
+        },
+    )
+    assert current_invite_response.status_code == 200
+    assert current_invite_response.json()["data"]["tenant_id"] == "tenant-a"
 
     asyncio.run(_seed_invited_user(database_url))
     accept_response = client.post(
@@ -140,14 +145,11 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
 
     members_response = client.get(
         "/api/v1/tenants/tenant-a/members",
-        headers={
-            "Authorization": f"Bearer {_tenant_token()}",
-            "X-Tenant-ID": "tenant-a",
-        },
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
     )
 
     assert members_response.status_code == 200
-    assert members_response.json()["pagination"]["total"] == 3
+    assert members_response.json()["pagination"]["total"] == 4
     assert {
         (member["tenant_id"], member["user_id"], member["status"])
         for member in members_response.json()["list"]
@@ -155,7 +157,15 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
         ("tenant-a", "owner-1", "active"),
         ("tenant-a", "user-2", "active"),
         ("tenant-a", "user-3", "inactive"),
+        ("tenant-a", "user-4", "active"),
     }
+
+    current_members_response = client.get(
+        "/api/v1/tenant/members",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+    )
+    assert current_members_response.status_code == 200
+    assert current_members_response.json()["pagination"]["total"] == 4
 
     invitations = asyncio.run(_all(database_url, TenantInvitation))
     events = asyncio.run(_all(database_url, OutboxEvent))
@@ -163,8 +173,10 @@ def test_platform_tenants_api_provisions_invites_accepts_and_lists_members(
     assert [event.event_type for event in events] == [
         "tenant.created",
         "tenant.member_activated",
+        "tenant.member_activated",
         "tenant.invitation_issued",
         "tenant.invitation_revoked",
+        "tenant.invitation_issued",
         "tenant.invitation_issued",
         "tenant.member_activated",
         "tenant.invitation_accepted",

@@ -34,6 +34,8 @@ from core.permissions.decisions import (
     assert_platform_decision,
 )
 from core.permissions.deps import (
+    require_any_permission,
+    require_permission,
     route_authorization_decision,
     route_authorization_decision_for,
     route_authorization_decisions,
@@ -87,6 +89,8 @@ __all__ = [
     "get_current_access",
     "invalidate_permission_cache",
     "reset_current_access",
+    "require_any_permission",
+    "require_permission",
     "route_authorization_decision",
     "route_authorization_decision_for",
     "route_authorization_decisions",

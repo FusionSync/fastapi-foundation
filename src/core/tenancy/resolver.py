@@ -39,6 +39,7 @@ def resolve_current_tenant(
     tenant: TenantRecord | None = None,
     operation: TenantOperation = "read",
     policy: TenantLifecyclePolicy | None = None,
+    allow_header_tenant_id: bool = False,
 ) -> str:
     if current_user is None:
         raise AppError(
@@ -51,6 +52,7 @@ def resolve_current_tenant(
         token_tenant_id=token_tenant_id,
         header_tenant_id=header_tenant_id,
         default_tenant_id=current_user.default_tenant_id,
+        allow_header_tenant_id=allow_header_tenant_id,
     )
     if selected_tenant_id is None:
         raise AppError(
@@ -103,7 +105,15 @@ def _select_tenant_id(
     token_tenant_id: str | None,
     header_tenant_id: str | None,
     default_tenant_id: str | None,
+    allow_header_tenant_id: bool,
 ) -> str | None:
+    if header_tenant_id and not allow_header_tenant_id:
+        raise AppError(
+            "TENANT_CONTEXT_CONFLICT",
+            "Header tenant is not allowed for this request",
+            status_code=403,
+            details={"reason": "header_tenant_not_allowed"},
+        )
     if token_tenant_id and header_tenant_id and token_tenant_id != header_tenant_id:
         raise AppError(
             "TENANT_CONTEXT_CONFLICT",

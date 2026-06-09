@@ -5,7 +5,10 @@ from platform_apps.audit.services import (
     AuditExportSink,
     AuditExportSinkResult,
     AuditResult,
+    AuditRetentionResult,
+    AuditRetentionService,
     AuditService,
+    LocalSiemAuditExportSink,
     LocalWormAuditExportSink,
     audit_hash,
 )
@@ -16,8 +19,11 @@ __all__ = [
     "AuditExportService",
     "AuditExportSink",
     "AuditExportSinkResult",
+    "AuditRetentionResult",
+    "AuditRetentionService",
     "AuditResult",
     "AuditService",
+    "LocalSiemAuditExportSink",
     "LocalWormAuditExportSink",
     "audit_hash",
 ]

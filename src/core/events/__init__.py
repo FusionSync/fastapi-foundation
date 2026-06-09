@@ -1,3 +1,7 @@
+from core.events.dispatch_context import (
+    get_current_event_dispatch_session,
+    use_event_dispatch_session,
+)
 from core.events.errors import (
     EventHandlerPermanentError,
     EventHandlerTransientError,
@@ -27,6 +31,8 @@ __all__ = [
     "EventSideEffectResult",
     "RegisteredEventHandler",
     "classify_event_handler_error",
+    "get_current_event_dispatch_session",
     "run_event_side_effect",
+    "use_event_dispatch_session",
     "use_event_side_effect_context",
 ]
