@@ -63,7 +63,7 @@ class DatabaseRequestSecurityPipeline:
                 )
                 _bind_access_context()
                 return
-            _bind_authenticated_user(current_user.id)
+            _bind_authenticated_user(current_user.id, tenant_id=current_user.tenant_id)
             _bind_access_context()
 
     async def authorize(
@@ -136,11 +136,14 @@ def _requires_tenant_resolution(policy: RouteSecurityPolicy) -> bool:
     )
 
 
-def _bind_authenticated_user(user_id: str) -> None:
+def _bind_authenticated_user(user_id: str, *, tenant_id: str | None = None) -> None:
     context = get_current_context()
     if context is None:
         return
-    set_current_context(context.with_user(user_id).freeze())
+    updated = context.with_user(user_id)
+    if tenant_id is not None:
+        updated = updated.with_tenant(tenant_id)
+    set_current_context(updated.freeze())
 
 
 def _bind_access_context() -> None:

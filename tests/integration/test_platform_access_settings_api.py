@@ -22,6 +22,7 @@ from core.permissions import (
 )
 from core.permissions.services import RoleGrantService
 from core.tenancy import Tenant, TenantMember
+from platform_apps.access.models import FrontendAccessMapping, FrontendAccessMappingRevision
 from platform_apps.accounts.models import User, UserSession
 from platform_apps.audit.models import AuditLog
 from platform_apps.settings.models import SettingValue
@@ -340,6 +341,306 @@ def test_platform_access_current_tenant_routes_and_me_permissions(
             "allowed": True,
         },
         {"permission": "file:download", "resource": "file", "action": "download", "allowed": False},
+    ]
+
+
+def test_platform_access_frontend_access_mapping_evaluates_current_user_access(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'frontend-access.db'}"
+    asyncio.run(
+        _seed_frontend_access_facts(
+            database_url,
+            tenant_permissions=[("role_grant", "read")],
+        )
+    )
+    client = TestClient(
+        create_app(
+            Settings(
+                database={"url": database_url},
+                security={"jwt_secret": "test-secret"},
+                installed_apps=[
+                    "platform_apps.accounts.module",
+                    "platform_apps.access.module",
+                ],
+            )
+        )
+    )
+
+    page_response = client.post(
+        "/api/v1/platform/access/frontend-access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_key": "console.access.role_grants.page",
+            "owner_module": "platform_access",
+            "evaluation_scope": "tenant",
+            "expression": {"permission": "role_grant:read"},
+            "description": "Role grant page entry",
+            "reason": "console bootstrap",
+        },
+    )
+    grant_button_response = client.post(
+        "/api/v1/platform/access/frontend-access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_key": "console.access.role_grants.grant_button",
+            "owner_module": "platform_access",
+            "evaluation_scope": "tenant",
+            "expression": {"permission": "role_grant:grant"},
+            "description": "Role grant button",
+            "reason": "console bootstrap",
+        },
+    )
+
+    assert page_response.status_code == 200
+    assert grant_button_response.status_code == 200
+
+    access_response = client.get(
+        "/api/v1/me/access",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+        params={"client_id": "console-web"},
+    )
+    assert access_response.status_code == 200
+    assert access_response.json()["data"]["tenant_id"] == "tenant-a"
+    assert access_response.json()["data"]["permissions"] == ["role_grant:read"]
+    assert access_response.json()["data"]["access"] == {
+        "console.access.role_grants.page": True,
+        "console.access.role_grants.grant_button": False,
+    }
+
+    check_response = client.post(
+        "/api/v1/me/access/check",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_keys": [
+                "console.access.role_grants.page",
+                "console.access.role_grants.grant_button",
+                "console.unknown",
+            ],
+        },
+    )
+    assert check_response.status_code == 200
+    assert [
+        (item["access_key"], item["allowed"], item["reason"])
+        for item in check_response.json()["data"]["results"]
+    ] == [
+        ("console.access.role_grants.page", True, "matched_expression"),
+        ("console.access.role_grants.grant_button", False, "missing_permission"),
+        ("console.unknown", False, "unknown_access_key"),
+    ]
+
+
+def test_platform_access_frontend_access_cannot_authorize_backend_route(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'frontend-access-route.db'}"
+    asyncio.run(
+        _seed_frontend_access_facts(
+            database_url,
+            tenant_permissions=[("role_grant", "read")],
+        )
+    )
+    client = TestClient(
+        create_app(
+            Settings(
+                database={"url": database_url},
+                security={"jwt_secret": "test-secret"},
+                installed_apps=[
+                    "platform_apps.accounts.module",
+                    "platform_apps.access.module",
+                ],
+            )
+        )
+    )
+
+    mapping_response = client.post(
+        "/api/v1/platform/access/frontend-access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_key": "console.access.role_grants.grant_button",
+            "owner_module": "platform_access",
+            "evaluation_scope": "tenant",
+            "expression": {"permission": "role_grant:read"},
+            "description": "Misconfigured grant button mapping",
+            "reason": "route enforcement test",
+        },
+    )
+    assert mapping_response.status_code == 200
+
+    access_response = client.post(
+        "/api/v1/me/access/check",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_keys": ["console.access.role_grants.grant_button"],
+        },
+    )
+    assert access_response.status_code == 200
+    assert access_response.json()["data"]["results"][0]["allowed"] is True
+
+    grant_response = client.post(
+        "/api/v1/access/role-grants",
+        headers={"Authorization": f"Bearer {_tenant_token()}"},
+        json={
+            "subject_type": "user",
+            "subject_id": "target-1",
+            "role_template_id": "template-tenant-admin",
+            "reason": "try to bypass backend permission",
+        },
+    )
+    assert grant_response.status_code == 403
+
+
+def test_platform_access_frontend_access_patch_revalidates_scope_with_existing_expression(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'frontend-access-patch.db'}"
+    asyncio.run(
+        _seed_frontend_access_facts(
+            database_url,
+            tenant_permissions=[("role_grant", "read")],
+        )
+    )
+    client = TestClient(
+        create_app(
+            Settings(
+                database={"url": database_url},
+                security={"jwt_secret": "test-secret"},
+                installed_apps=[
+                    "platform_apps.accounts.module",
+                    "platform_apps.access.module",
+                ],
+            )
+        )
+    )
+
+    create_response = client.post(
+        "/api/v1/platform/access/frontend-access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_key": "console.access.role_grants.page",
+            "owner_module": "platform_access",
+            "evaluation_scope": "tenant",
+            "expression": {"permission": "role_grant:read"},
+            "reason": "initial mapping",
+        },
+    )
+    assert create_response.status_code == 200
+
+    patch_response = client.patch(
+        "/api/v1/platform/access/frontend-access/console.access.role_grants.page",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "evaluation_scope": "platform",
+            "reason": "invalid scope change",
+        },
+    )
+
+    assert patch_response.status_code == 400
+    assert patch_response.json()["code"] == "VALIDATION_ERROR"
+    assert patch_response.json()["details"] == {
+        "evaluation_scope": "platform",
+        "resource": "role_grant",
+        "action": "read",
+    }
+
+
+def test_platform_access_me_access_supports_platform_scope_without_tenant_context(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'frontend-access-platform.db'}"
+    asyncio.run(
+        _seed_frontend_access_facts(
+            database_url,
+            tenant_permissions=[("role_grant", "read")],
+        )
+    )
+    client = TestClient(
+        create_app(
+            Settings(
+                database={"url": database_url},
+                security={"jwt_secret": "test-secret"},
+                installed_apps=[
+                    "platform_apps.accounts.module",
+                    "platform_apps.access.module",
+                ],
+            )
+        )
+    )
+
+    platform_response = client.post(
+        "/api/v1/platform/access/frontend-access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_key": "console.platform.frontend_access.page",
+            "owner_module": "platform_access",
+            "evaluation_scope": "platform",
+            "expression": {"permission": "access.frontend_config:read"},
+            "reason": "platform console mapping",
+        },
+    )
+    tenant_response = client.post(
+        "/api/v1/platform/access/frontend-access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_key": "console.access.role_grants.page",
+            "owner_module": "platform_access",
+            "evaluation_scope": "tenant",
+            "expression": {"permission": "role_grant:read"},
+            "reason": "tenant console mapping",
+        },
+    )
+    assert platform_response.status_code == 200
+    assert tenant_response.status_code == 200
+
+    access_response = client.get(
+        "/api/v1/me/access",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        params={"client_id": "console-web"},
+    )
+
+    assert access_response.status_code == 200
+    payload = access_response.json()["data"]
+    assert payload["tenant_id"] is None
+    assert payload["policy_version"] == 1
+    assert payload["access_revision"]
+    assert payload["evaluated_at"]
+    assert {
+        "access.frontend_config:manage",
+        "access.frontend_config:read",
+    }.issubset(set(payload["permissions"]))
+    assert payload["access"] == {
+        "console.access.role_grants.page": False,
+        "console.platform.frontend_access.page": True,
+    }
+
+    check_response = client.post(
+        "/api/v1/me/access/check",
+        headers={"Authorization": f"Bearer {_platform_token()}"},
+        json={
+            "client_id": "console-web",
+            "access_keys": [
+                "console.platform.frontend_access.page",
+                "console.access.role_grants.page",
+            ],
+        },
+    )
+
+    assert check_response.status_code == 200
+    assert check_response.json()["data"]["tenant_id"] is None
+    assert [
+        (item["access_key"], item["allowed"], item["reason"])
+        for item in check_response.json()["data"]["results"]
+    ] == [
+        ("console.platform.frontend_access.page", True, "matched_expression"),
+        ("console.access.role_grants.page", False, "tenant_context_required"),
     ]
 
 
@@ -744,6 +1045,62 @@ async def _seed_platform_access_control_plane_facts(database_url: str) -> None:
                 ("role_grant", "read", "tenant-a"),
                 ("role_grant", "grant", "tenant-a"),
                 ("role_grant", "revoke", "tenant-a"),
+            ):
+                session.add(
+                    ProjectedPolicy(
+                        tenant_id=tenant_id,
+                        subject="user:admin-1",
+                        resource=resource,
+                        action=action,
+                        effect="allow",
+                        role_grant_id=f"grant-{tenant_id}-{resource}-{action}",
+                        policy_version=1,
+                    )
+                )
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _seed_frontend_access_facts(
+    database_url: str,
+    *,
+    tenant_permissions: list[tuple[str, str]],
+) -> None:
+    assert FrontendAccessMapping.__tablename__
+    assert FrontendAccessMappingRevision.__tablename__
+    await _seed_common_facts(database_url)
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            session.add(
+                UserSession(
+                    id="sess-tenant",
+                    user_id="admin-1",
+                    tenant_id="tenant-a",
+                    auth_provider="local",
+                    status="active",
+                    token_version=1,
+                )
+            )
+            session.add(TenantMember(tenant_id="tenant-a", user_id="admin-1", status="active"))
+            session.add(
+                RoleTemplate(
+                    id="template-tenant-admin",
+                    scope="tenant",
+                    name="tenant-admin",
+                    version=1,
+                    permissions=[{"resource": "role_grant", "action": "grant"}],
+                )
+            )
+            for resource, action, tenant_id in (
+                ("access.frontend_config", "read", PLATFORM_TENANT_ID),
+                ("access.frontend_config", "manage", PLATFORM_TENANT_ID),
+                *[
+                    (resource, action, "tenant-a")
+                    for resource, action in tenant_permissions
+                ],
             ):
                 session.add(
                     ProjectedPolicy(

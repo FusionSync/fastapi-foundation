@@ -3,6 +3,9 @@ from core.permissions.projector import ROLE_GRANT_CHANGED_EVENT
 from platform_apps.access.permissions import PERMISSIONS
 from platform_apps.access.router import (
     effective_access_router,
+    frontend_access_manage_router,
+    frontend_access_read_router,
+    me_access_router,
     me_permission_router,
     permission_router,
     platform_admin_router,
@@ -26,8 +29,11 @@ module = AppModule(
         role_grant_grant_router,
         role_grant_revoke_router,
         me_permission_router,
+        me_access_router,
         effective_access_router,
         projection_reconcile_router,
+        frontend_access_read_router,
+        frontend_access_manage_router,
     ],
     models=["platform_apps.access.models"],
     migrations=MigrationSpec(path="platform_apps.access.migrations"),

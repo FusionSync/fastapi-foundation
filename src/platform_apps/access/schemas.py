@@ -1,8 +1,21 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from core.base import BaseSchema, CreateSchema, UpdateSchema
+
+FrontendAccessScope = Literal["tenant", "platform"]
+FrontendAccessStatus = Literal["active", "disabled", "deprecated"]
+FrontendAccessReason = Literal[
+    "matched_expression",
+    "missing_permission",
+    "unknown_access_key",
+    "disabled_mapping",
+    "invalid_mapping",
+    "tenant_context_required",
+]
 
 
 class PermissionRead(BaseSchema):
@@ -95,3 +108,93 @@ class ProjectionReconcileRead(BaseSchema):
     repaired: bool
     missing: list[EffectivePermissionRead]
     stale: list[EffectivePermissionRead]
+
+
+class FrontendAccessMappingCreateRequest(CreateSchema):
+    client_id: str = Field(min_length=1, max_length=64)
+    access_key: str = Field(min_length=1, max_length=160)
+    owner_module: str = Field(min_length=1, max_length=64)
+    evaluation_scope: FrontendAccessScope
+    expression: dict[str, object]
+    description: str | None = Field(default=None, max_length=512)
+    reason: str | None = None
+
+
+class FrontendAccessMappingUpdateRequest(UpdateSchema):
+    owner_module: str | None = Field(default=None, min_length=1, max_length=64)
+    evaluation_scope: FrontendAccessScope | None = None
+    expression: dict[str, object] | None = None
+    description: str | None = Field(default=None, max_length=512)
+    status: FrontendAccessStatus | None = None
+    reason: str | None = None
+
+
+class FrontendAccessMappingRead(BaseSchema):
+    id: str
+    client_id: str
+    access_key: str
+    owner_module: str
+    evaluation_scope: FrontendAccessScope
+    expression: dict[str, object]
+    description: str | None
+    status: FrontendAccessStatus
+    version: int
+    updated_by: str | None
+    reason: str | None
+
+
+class FrontendAccessMappingRevisionRead(BaseSchema):
+    id: str
+    mapping_id: str
+    client_id: str
+    access_key: str
+    old_expression: dict[str, object] | None
+    new_expression: dict[str, object] | None
+    old_status: str | None
+    new_status: str | None
+    version: int
+    changed_by: str
+    reason: str
+
+
+class FrontendAccessValidateRequest(CreateSchema):
+    evaluation_scope: FrontendAccessScope
+    expression: dict[str, object]
+    reason: str | None = None
+
+
+class FrontendAccessValidateRead(BaseSchema):
+    ok: bool
+    permissions: list[str]
+
+
+class FrontendAccessCheckRequest(CreateSchema):
+    client_id: str = Field(default="console-web", min_length=1, max_length=64)
+    access_keys: list[str] = Field(min_length=1, max_length=100)
+
+
+class FrontendAccessCheckItemRead(BaseSchema):
+    access_key: str
+    allowed: bool
+    reason: FrontendAccessReason
+    version: int | None = None
+
+
+class FrontendAccessCheckRead(BaseSchema):
+    client_id: str
+    tenant_id: str | None
+    policy_version: int
+    access_revision: str
+    evaluated_at: str
+    results: list[FrontendAccessCheckItemRead]
+
+
+class FrontendAccessRead(BaseSchema):
+    client_id: str
+    tenant_id: str | None
+    version: int
+    policy_version: int
+    access_revision: str
+    evaluated_at: str
+    permissions: list[str]
+    access: dict[str, bool]

@@ -71,4 +71,18 @@ PERMISSIONS = [
         description="Validate and repair IAM role-grant projections.",
         risk_level="critical",
     ),
+    PermissionSpec(
+        resource="access.frontend_config",
+        action="read",
+        scope="platform",
+        description="Read frontend access key to permission-expression mappings.",
+        risk_level="normal",
+    ),
+    PermissionSpec(
+        resource="access.frontend_config",
+        action="manage",
+        scope="platform",
+        description="Manage frontend access key to permission-expression mappings.",
+        risk_level="high",
+    ),
 ]

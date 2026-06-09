@@ -14,6 +14,8 @@
 - Done: `permissions.role_grant_changed` handler is registered by the app module so outbox dispatch projects grants without manual test wiring.
 - Done: high-risk IAM mutations require `reason`, reject duplicate tenant grants, and write audit logs when `platform_audit` is installed.
 - Done: first platform admin can be bootstrapped with `core permissions bootstrap-platform-admin` without adding user flags.
+- Done: frontend access mappings provide `access_key -> permission expression` storage and `/me/access` evaluation without owning frontend menu layout.
+- Done: frontend access keys are explicitly kept out of backend route authorization; backend APIs still enforce `resource:action` permissions.
 - Next: expand access management to external identities, service-account administration and user-facing permission explanations.
 
 ## Design Notes
@@ -42,6 +44,47 @@ The command only runs while the `__platform__` domain has no platform `RoleGrant
 It creates a default `platform-admin` role template from registered platform permissions,
 grants it to the global user id, and immediately writes `ProjectedPolicy` rows.
 
+## Frontend Access
+
+`platform_access` stores optional frontend access mappings for console clients:
+
+```text
+frontend access_key -> backend permission expression -> allowed/denied result
+```
+
+The frontend still owns menu trees, route paths, icons, ordering, component names and button placement. The backend only stores stable `access_key` mappings and evaluates them against the current user's projected backend permissions.
+
+`/me/access` supports both current-tenant console sessions and no-tenant platform bootstrap sessions. No-tenant platform sessions evaluate platform-scope mappings and deny tenant-scope mappings with `tenant_context_required`.
+
+The response includes `version`, `policy_version`, `access_revision` and `evaluated_at`. Frontend caches should not use `version` alone because it only represents frontend mapping versions; role grants can change without changing mappings.
+
+Current-user APIs:
+
+```text
+GET  /api/v1/me/access?client_id=console-web
+POST /api/v1/me/access/check
+```
+
+Platform management APIs:
+
+```text
+GET    /api/v1/platform/access/frontend-access
+POST   /api/v1/platform/access/frontend-access
+GET    /api/v1/platform/access/frontend-access/{access_key}
+PATCH  /api/v1/platform/access/frontend-access/{access_key}
+DELETE /api/v1/platform/access/frontend-access/{access_key}
+GET    /api/v1/platform/access/frontend-access/{access_key}/history
+POST   /api/v1/platform/access/frontend-access/validate
+```
+
+Backend security rule:
+
+```text
+access_key is never accepted by route authorization.
+```
+
+Routes and services continue to enforce backend permissions such as `role_grant:grant`, `tenant_member:manage` or `settings.tenant:manage`.
+
 ## TODO
 
 - [x] Register `platform_access` as a standard AppModule.
@@ -59,3 +102,5 @@ grants it to the global user id, and immediately writes `ProjectedPolicy` rows.
 - [x] Add first platform admin bootstrap CLI.
 - [x] Add IAM checkpoint tests for projection and tenant route authorization.
 - [x] Add IAM checkpoint tests for outbox projection and duplicate grants.
+- [x] Add frontend access mapping storage and current-user evaluation APIs.
+- [x] Add tests proving frontend access keys cannot bypass backend route authorization.
